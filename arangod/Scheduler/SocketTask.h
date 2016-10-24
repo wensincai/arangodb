@@ -45,9 +45,19 @@ class SocketTask : virtual public Task, public ConnectionStatisticsAgent {
 
  public:
   SocketTask(EventLoop, std::unique_ptr<Socket>, ConnectionInfo&&,
-             double keepAliveTimeout);
+             double keepAliveTimeout, bool skipInit);
 
   virtual ~SocketTask();
+
+  std::unique_ptr<Socket> releasePeer(){
+    _abandoned = true;
+    return std::move(_peer);
+  }
+
+  ConnectionInfo&& releaseConnectionInfo(){
+    _abandoned = true;
+    return std::move(_connectionInfo);
+  }
 
  public:
   void start();
@@ -89,6 +99,7 @@ class SocketTask : virtual public Task, public ConnectionStatisticsAgent {
   boost::asio::deadline_timer _keepAliveTimer;
 
   bool _closeRequested = false;
+  bool _abandoned = false;
 
  private:
   bool reserveMemory();

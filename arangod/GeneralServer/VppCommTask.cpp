@@ -58,10 +58,10 @@ using namespace arangodb::rest;
 
 VppCommTask::VppCommTask(EventLoop loop, GeneralServer* server,
                          std::unique_ptr<Socket> socket, ConnectionInfo&& info,
-                         double timeout)
+                         double timeout, bool skipInit)
     : Task(loop, "VppCommTask"),
       GeneralCommTask(loop, server, std::move(socket), std::move(info),
-                      timeout),
+                      timeout, skipInit),
       _authenticatedUser(),
       _authentication(nullptr) {
   _authentication = application_features::ApplicationServer::getFeature<AuthenticationFeature>(
@@ -194,7 +194,7 @@ void VppCommTask::handleAuthentication(VPackSlice const& header, uint64_t messag
     auto auth = basics::StringUtils::encodeBase64(user + ":" + pass);
     AuthResult result = _authentication->authInfo()->checkAuthentication(
         AuthInfo::AuthType::BASIC, auth);
-    
+
     authOk = result._authorized;
   }
 

@@ -41,7 +41,7 @@ using namespace arangodb::rest;
 SocketTask::SocketTask(arangodb::EventLoop loop,
                        std::unique_ptr<arangodb::Socket> socket,
                        arangodb::ConnectionInfo&& connectionInfo,
-                       double keepAliveTimeout)
+                       double keepAliveTimeout, bool skipInit=false)
     : Task(loop, "SocketTask"),
       _connectionInfo(connectionInfo),
       _readBuffer(TRI_UNKNOWN_MEM_ZONE, READ_BLOCK_SIZE + 1, false),
@@ -52,11 +52,12 @@ SocketTask::SocketTask(arangodb::EventLoop loop,
   ConnectionStatisticsAgent::acquire();
   connectionStatisticsAgentSetStart();
 
-  _peer->setNonBlocking(true);
-
-  if (!_peer->handshake()) {
-    _closedSend = true;
-    _closedReceive = true;
+  if(!skipInit){
+    _peer->setNonBlocking(true);
+    if (!_peer->handshake()) {
+      _closedSend = true;
+      _closedReceive = true;
+    }
   }
 }
 
@@ -308,7 +309,7 @@ bool SocketTask::reserveMemory() {
 
 bool SocketTask::trySyncRead() {
   boost::system::error_code err;
-  
+
   if (0 == _peer->available(err)) {
     return false;
   }
@@ -321,7 +322,7 @@ bool SocketTask::trySyncRead() {
   }
 
   size_t bytesRead = 0;
-  
+
   bytesRead = _peer->read(
       boost::asio::buffer(_readBuffer.end(), READ_BLOCK_SIZE), err);
 
@@ -371,6 +372,9 @@ void SocketTask::asyncReadSome() {
       }
 
       while (processRead()) {
+        if (_abandoned){
+          return;
+        }
         if (_closeRequested) {
           break;
         }

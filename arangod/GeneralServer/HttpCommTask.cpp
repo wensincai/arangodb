@@ -33,6 +33,8 @@
 #include "Rest/HttpRequest.h"
 #include "VocBase/ticks.h"
 
+#include "VppCommTask.h"
+
 using namespace arangodb;
 using namespace arangodb::basics;
 using namespace arangodb::rest;
@@ -376,6 +378,19 @@ bool HttpCommTask::processRead() {
           break;
         }
 
+        case rest::RequestType::VSTREAM_SWITCH:{
+          std::shared_ptr<GeneralCommTask> commTask;
+          _abandoned = true;
+          cancelKeepAlive();
+          commTask = std::make_shared<VppCommTask>(_loop
+                                                  ,_server
+                                                  ,std::move(_peer)
+                                                  ,std::move(_connectionInfo)
+                                                  ,GeneralServerFeature::keepAliveTimeout()
+                                                  ,/*skipSocketInit*/ true);
+          commTask->start();
+        }
+
         default: {
           size_t l = _readPosition - _startPosition;
 
@@ -531,9 +546,7 @@ bool HttpCommTask::processRead() {
   else if (authResult == rest::ResponseCode::FORBIDDEN) {
     handleSimpleError(authResult, TRI_ERROR_USER_CHANGE_PASSWORD,
                       "change password", 1);
-  }
-  // not authenticated
-  else {
+  } else { // not authenticated
     HttpResponse response(rest::ResponseCode::UNAUTHORIZED);
     std::string realm = "Bearer token_type=\"JWT\", realm=\"ArangoDB\"";
 
