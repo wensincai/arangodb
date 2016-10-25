@@ -347,7 +347,6 @@ void Communicator::createRequestInProgress(NewRequest const& newRequest) {
     case RequestType::VSTREAM_CRED:
     case RequestType::VSTREAM_REGISTER:
     case RequestType::VSTREAM_STATUS:
-    case RequestType::VSTREAM_SWITCH:
     case RequestType::ILLEGAL:
       throw std::runtime_error(
           "Invalid request type " +

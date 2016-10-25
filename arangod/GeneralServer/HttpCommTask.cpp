@@ -256,6 +256,18 @@ bool HttpCommTask::processRead() {
       return false;
     }
 
+    if (std::strcmp(_readBuffer.c_str(), "VST/1.0\r\n\r\n") == 0) {
+      std::shared_ptr<GeneralCommTask> commTask;
+      _abandoned = true;
+      cancelKeepAlive();
+      commTask = std::make_shared<VppCommTask>(
+          _loop, _server, std::move(_peer), std::move(_connectionInfo),
+          GeneralServerFeature::keepAliveTimeout(), /*skipSocketInit*/ true);
+      commTask->start();
+      //statistics?!
+      return false;
+    }
+
     // header is complete
     if (ptr < end) {
       _readPosition = ptr - _readBuffer.c_str() + 4;
@@ -376,19 +388,6 @@ bool HttpCommTask::processRead() {
           }
 
           break;
-        }
-
-        case rest::RequestType::VSTREAM_SWITCH:{
-          std::shared_ptr<GeneralCommTask> commTask;
-          _abandoned = true;
-          cancelKeepAlive();
-          commTask = std::make_shared<VppCommTask>(_loop
-                                                  ,_server
-                                                  ,std::move(_peer)
-                                                  ,std::move(_connectionInfo)
-                                                  ,GeneralServerFeature::keepAliveTimeout()
-                                                  ,/*skipSocketInit*/ true);
-          commTask->start();
         }
 
         default: {

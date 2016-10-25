@@ -132,9 +132,6 @@ rest::RequestType GeneralRequest::findRequestType(
       if (ptr[0] == 'p' && ptr[1] == 'u' && ptr[2] == 't') {
         return RequestType::PUT;
       }
-      if (ptr[0] == 'v' && ptr[1] == 's' && ptr[2] == 't') {
-        return RequestType::VSTREAM_SWITCH;
-      }
       break;
 
     case 4:
@@ -171,10 +168,6 @@ rest::RequestType GeneralRequest::findRequestType(
       if (ptr[0] == 'o' && ptr[1] == 'p' && ptr[2] == 't' && ptr[3] == 'i' &&
           ptr[4] == 'o' && ptr[5] == 'n' && ptr[6] == 's') {
         return RequestType::OPTIONS;
-      }
-      if (ptr[0] == 'v' && ptr[1] == 's' && ptr[2] == 't' && ptr[3] == '/' &&
-          ptr[4] == '1' && ptr[5] == '.' && ptr[6] == '0') {
-        return RequestType::VSTREAM_SWITCH;
       }
       break;
 

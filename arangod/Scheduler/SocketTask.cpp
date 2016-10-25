@@ -348,6 +348,8 @@ bool SocketTask::trySyncRead() {
 
 void SocketTask::asyncReadSome() {
   try {
+    if(_abandoned){ return; }
+
     JobGuard guard(_loop);
     guard.busy();
 

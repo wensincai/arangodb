@@ -46,7 +46,6 @@ enum class RequestType {
   VSTREAM_CRED,
   VSTREAM_REGISTER,
   VSTREAM_STATUS,
-  VSTREAM_SWITCH,
   ILLEGAL  // must be last
 };
 
