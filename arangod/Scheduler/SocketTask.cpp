@@ -48,7 +48,8 @@ SocketTask::SocketTask(arangodb::EventLoop loop,
       _peer(std::move(socket)),
       _keepAliveTimeout(static_cast<long>(keepAliveTimeout * 1000)),
       _useKeepAliveTimeout(static_cast<long>(keepAliveTimeout * 1000) > 0),
-      _keepAliveTimer(_peer->_ioService, _keepAliveTimeout) {
+      _keepAliveTimer(_peer->_ioService, _keepAliveTimeout),
+      _abandoned(false) {
   ConnectionStatisticsAgent::acquire();
   connectionStatisticsAgentSetStart();
 
@@ -309,6 +310,14 @@ bool SocketTask::reserveMemory() {
 
 bool SocketTask::trySyncRead() {
   boost::system::error_code err;
+  if( _abandoned){
+    return false;
+  }
+
+  if(!_peer){
+    LOG_TOPIC(DEBUG, Logger::COMMUNICATION) << "SocketTask::trySyncRead "
+                                            << "- peer disappeared ";
+  }
 
   if (0 == _peer->available(err)) {
     return false;
@@ -435,14 +444,18 @@ void SocketTask::asyncReadSome() {
             << "close requested, closing receive stream";
 
         closeReceiveStream();
+      } else if (_abandoned){
+        return;
       } else {
         asyncReadSome();
       }
     }
   };
 
-  _peer->asyncRead(
+  if(! _abandoned && _peer){
+    _peer->asyncRead(
       boost::asio::buffer(_readBuffer.end(), READ_BLOCK_SIZE), handler);
+  }
 }
 
 void SocketTask::closeReceiveStream() {

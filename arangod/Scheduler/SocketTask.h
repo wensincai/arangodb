@@ -99,7 +99,7 @@ class SocketTask : virtual public Task, public ConnectionStatisticsAgent {
   boost::asio::deadline_timer _keepAliveTimer;
 
   bool _closeRequested = false;
-  bool _abandoned = false;
+  std::atomic_bool _abandoned;
 
  private:
   bool reserveMemory();
