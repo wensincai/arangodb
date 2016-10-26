@@ -265,6 +265,10 @@ void SocketTask::closeStream() {
 // -----------------------------------------------------------------------------
 // --SECTION--                                                   private methods
 // -----------------------------------------------------------------------------
+void SocketTask::addToReadBuffer(char const* data, std::size_t len) {
+  LOG_TOPIC(DEBUG, Logger::COMMUNICATION) << std::string(data, len);
+  _readBuffer.appendText(data, len);
+}
 
 void SocketTask::resetKeepAlive() {
   if (_useKeepAliveTimeout) {

@@ -69,9 +69,7 @@ class SocketTask : virtual public Task, public ConnectionStatisticsAgent {
   // This function is used during the protocol switch from http
   // to VelocyStream. This way we no not require additional
   // constructor arguments. It should not be used otherwise.
-  void addToReadBuffer(char const* data, std::size_t len) {
-    _readBuffer.appendText(data, len);
-  }
+  void addToReadBuffer(char const* data, std::size_t len);
 
  protected:
   void addWriteBuffer(std::unique_ptr<basics::StringBuffer> buffer) {
