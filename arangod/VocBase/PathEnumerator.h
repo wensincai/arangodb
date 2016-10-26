@@ -244,11 +244,6 @@ class BreadthFirstEnumerator final : public PathEnumerator {
 
   bool next() override;
 
-  //////////////////////////////////////////////////////////////////////////////
-  /// @brief Prunes the current path prefix, the next function should not return
-  ///        any path having this prefix anymore.
-  //////////////////////////////////////////////////////////////////////////////
-
   aql::AqlValue lastVertexToAqlValue() override;
 
   aql::AqlValue lastEdgeToAqlValue() override;
@@ -272,6 +267,56 @@ class BreadthFirstEnumerator final : public PathEnumerator {
   //////////////////////////////////////////////////////////////////////////////
 
   void computeEnumeratedPath(size_t index);
+};
+
+// @brief Enumerator optimized for neighbors. Does not allow edge access
+
+class NeighborsEnumerator final : public PathEnumerator {
+  std::unordered_set<arangodb::velocypack::Slice,
+                     arangodb::basics::VelocyPackHelper::VPackStringHash,
+                     arangodb::basics::VelocyPackHelper::VPackStringEqual>
+      _allFound;
+
+  std::unordered_set<arangodb::velocypack::Slice,
+                     arangodb::basics::VelocyPackHelper::VPackStringHash,
+                     arangodb::basics::VelocyPackHelper::VPackStringEqual>
+      _currentDepth;
+
+  std::unordered_set<arangodb::velocypack::Slice,
+                     arangodb::basics::VelocyPackHelper::VPackStringHash,
+                     arangodb::basics::VelocyPackHelper::VPackStringEqual>
+      _lastDepth;
+
+  std::unordered_set<VPackSlice, arangodb::basics::VelocyPackHelper::VPackStringHash, arangodb::basics::VelocyPackHelper::VPackStringEqual>::iterator _iterator;
+  size_t _searchDepth;
+ 
+  //////////////////////////////////////////////////////////////////////////////
+  /// @brief Vector storing the position at current search depth
+  //////////////////////////////////////////////////////////////////////////////
+
+   std::unordered_set<arangodb::velocypack::Slice> _tmpEdges;
+
+
+ public:
+   NeighborsEnumerator(Traverser* traverser,
+                       arangodb::velocypack::Slice startVertex,
+                       TraverserOptions const* opts);
+
+   ~NeighborsEnumerator() {
+   }
+
+  //////////////////////////////////////////////////////////////////////////////
+  /// @brief Get the next Path element from the traversal.
+  //////////////////////////////////////////////////////////////////////////////
+
+  bool next() override;
+
+  aql::AqlValue lastVertexToAqlValue() override;
+
+  aql::AqlValue lastEdgeToAqlValue() override;
+
+  aql::AqlValue pathToAqlValue(arangodb::velocypack::Builder& result) override;
+
 };
 
 

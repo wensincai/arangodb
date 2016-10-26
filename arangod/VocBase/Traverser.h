@@ -213,6 +213,7 @@ class TraversalPath {
 class Traverser {
   friend class BreadthFirstEnumerator;
   friend class DepthFirstEnumerator;
+  friend class NeighborsEnumerator;
 
  protected:
 
@@ -380,6 +381,8 @@ class Traverser {
 
   bool vertexMatchesConditions(arangodb::velocypack::Slice, size_t);
 
+  void allowOptimizedNeighbors();
+
  protected:
 
   /// @brief Outer top level transaction
@@ -411,6 +414,8 @@ class Traverser {
   /// @brief options for traversal
   TraverserOptions* _opts;
 
+  bool _canUseOptimizedNeighbors;
+
   /// @brief Function to fetch the real data of a vertex into an AQLValue
   virtual aql::AqlValue fetchVertexData(arangodb::velocypack::Slice) = 0;
 
@@ -424,6 +429,7 @@ class Traverser {
   /// @brief Function to add the real data of an edge into a velocypack builder
   virtual void addEdgeToVelocyPack(arangodb::velocypack::Slice,
                                    arangodb::velocypack::Builder&) = 0;
+ 
 };
 }  // traverser
 }  // arangodb

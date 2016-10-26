@@ -54,7 +54,7 @@
 #include "Utils/StandaloneTransactionContext.h"
 #include "VocBase/CollectionRevisionsCache.h"
 #include "VocBase/DatafileStatisticsContainer.h"
-#include "VocBase/IndexPoolFeature.h"
+#include "VocBase/IndexThreadFeature.h"
 #include "VocBase/KeyGenerator.h"
 #include "VocBase/ManagedDocumentResult.h"
 #include "VocBase/PhysicalCollection.h"
@@ -1326,6 +1326,8 @@ void LogicalCollection::open(bool ignoreErrors) {
     StorageEngine* engine = EngineSelectorFeature::ENGINE;
     engine->changeCollection(_vocbase, _cid, this, doSync);
   }
+  
+  TRI_UpdateTickServer(_cid);
 }
 
 /// @brief opens an existing collection
@@ -1468,7 +1470,6 @@ int LogicalCollection::restoreIndex(Transaction* trx, VPackSlice const& info,
   }
   TRI_ASSERT(newIdx != nullptr);
 
-  // FIXME New style. Update tick after successful creation of index.
   TRI_UpdateTickServer(newIdx->id());
 
   TRI_ASSERT(newIdx.get()->type() != Index::IndexType::TRI_IDX_TYPE_PRIMARY_INDEX); 
@@ -1711,7 +1712,7 @@ int LogicalCollection::fillIndexes(arangodb::Transaction* trx) {
   {
     arangodb::basics::Barrier barrier(n - 1);
 
-    auto indexPool = application_features::ApplicationServer::getFeature<IndexPoolFeature>("IndexPool")->getThreadPool();
+    auto indexPool = application_features::ApplicationServer::getFeature<IndexThreadFeature>("IndexThread")->getThreadPool();
 
     auto callback = [&barrier, &result](int res) -> void {
       // update the error code
@@ -2600,7 +2601,7 @@ int LogicalCollection::fillIndex(arangodb::Transaction* trx,
 
   try {
     size_t nrUsed = primaryIndex()->size();
-    auto indexPool = application_features::ApplicationServer::getFeature<IndexPoolFeature>("IndexPool")->getThreadPool();
+    auto indexPool = application_features::ApplicationServer::getFeature<IndexThreadFeature>("IndexThread")->getThreadPool();
 
     int res;
 
@@ -2632,7 +2633,7 @@ int LogicalCollection::fillIndex(arangodb::Transaction* trx,
 int LogicalCollection::fillIndexBatch(arangodb::Transaction* trx,
                                       arangodb::Index* idx) {
   TRI_ASSERT(!ServerState::instance()->isCoordinator());
-  auto indexPool = application_features::ApplicationServer::getFeature<IndexPoolFeature>("IndexPool")->getThreadPool();
+  auto indexPool = application_features::ApplicationServer::getFeature<IndexThreadFeature>("IndexThread")->getThreadPool();
 
   double start = TRI_microtime();
 
