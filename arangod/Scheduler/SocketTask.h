@@ -29,8 +29,8 @@
 
 #include <boost/asio/ssl.hpp>
 
-#include "Basics/asio-helper.h"
 #include "Basics/StringBuffer.h"
+#include "Basics/asio-helper.h"
 #include "Scheduler/Socket.h"
 #include "Statistics/StatisticsAgent.h"
 
@@ -50,12 +50,12 @@ class SocketTask : virtual public Task, public ConnectionStatisticsAgent {
 
   virtual ~SocketTask();
 
-  std::unique_ptr<Socket> releasePeer(){
+  std::unique_ptr<Socket> releasePeer() {
     _abandoned = true;
     return std::move(_peer);
   }
 
-  ConnectionInfo&& releaseConnectionInfo(){
+  ConnectionInfo&& releaseConnectionInfo() {
     _abandoned = true;
     return std::move(_connectionInfo);
   }
@@ -69,9 +69,7 @@ class SocketTask : virtual public Task, public ConnectionStatisticsAgent {
   // This function is used during the protocol switch from http
   // to VelocyStream. This way we no not require additional
   // constructor arguments. It should not be used otherwise.
-  void addToReadBuffer(char const* data, std::size_t len){
-    LOG(ERR) << "adding bytes: " << len;
-    LOG(ERR) << "content: " << std::string(data,len);
+  void addToReadBuffer(char const* data, std::size_t len) {
     _readBuffer.appendText(data, len);
   }
 

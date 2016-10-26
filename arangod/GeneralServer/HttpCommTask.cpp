@@ -256,19 +256,20 @@ bool HttpCommTask::processRead() {
       return false;
     }
 
-    LOG_TOPIC(WARN, Logger::COMMUNICATION) << std::string(_readBuffer.c_str(),_readBuffer.length());
+    LOG_TOPIC(WARN, Logger::COMMUNICATION)
+        << std::string(_readBuffer.c_str(), _readBuffer.length());
     if (std::strncmp(_readBuffer.c_str(), "VST/1.0\r\n\r\n", 11) == 0) {
-      LOG_TOPIC(WARN, Logger::COMMUNICATION) << "Switching from Http to Vst";
+      LOG_TOPIC(INFO, Logger::COMMUNICATION) << "Switching from Http to Vst";
       std::shared_ptr<GeneralCommTask> commTask;
       _abandoned = true;
       cancelKeepAlive();
       commTask = std::make_shared<VppCommTask>(
           _loop, _server, std::move(_peer), std::move(_connectionInfo),
           GeneralServerFeature::keepAliveTimeout(), /*skipSocketInit*/ true);
-      commTask->addToReadBuffer(_readBuffer.c_str()+11,_readBuffer.length()-11);
-      LOG(ERR) << "processRead result: "  << commTask->processRead();
+      commTask->addToReadBuffer(_readBuffer.c_str() + 11,
+                                _readBuffer.length() - 11);
       commTask->start();
-      //statistics?!
+      // statistics?!
       return false;
     }
     // header is complete
@@ -548,7 +549,7 @@ bool HttpCommTask::processRead() {
   else if (authResult == rest::ResponseCode::FORBIDDEN) {
     handleSimpleError(authResult, TRI_ERROR_USER_CHANGE_PASSWORD,
                       "change password", 1);
-  } else { // not authenticated
+  } else {  // not authenticated
     HttpResponse response(rest::ResponseCode::UNAUTHORIZED);
     std::string realm = "Bearer token_type=\"JWT\", realm=\"ArangoDB\"";
 
