@@ -356,6 +356,7 @@ bool SocketTask::trySyncRead() {
 }
 
 void SocketTask::asyncReadSome() {
+  LOG_TOPIC(WARN, Logger::COMMUNICATION) << "asyncReadSome from " << name();
   try {
     if(_abandoned){ return; }
 

@@ -37,6 +37,7 @@
 namespace arangodb {
 namespace rest {
 class SocketTask : virtual public Task, public ConnectionStatisticsAgent {
+  friend class HttpCommTask;
   explicit SocketTask(SocketTask const&) = delete;
   SocketTask& operator=(SocketTask const&) = delete;
 
@@ -64,6 +65,15 @@ class SocketTask : virtual public Task, public ConnectionStatisticsAgent {
 
  protected:
   virtual bool processRead() = 0;
+
+  // This function is used during the protocol switch from http
+  // to VelocyStream. This way we no not require additional
+  // constructor arguments. It should not be used otherwise.
+  void addToReadBuffer(char const* data, std::size_t len){
+    LOG(ERR) << "adding bytes: " << len;
+    LOG(ERR) << "content: " << std::string(data,len);
+    _readBuffer.appendText(data, len);
+  }
 
  protected:
   void addWriteBuffer(std::unique_ptr<basics::StringBuffer> buffer) {

@@ -256,18 +256,21 @@ bool HttpCommTask::processRead() {
       return false;
     }
 
-    if (std::strcmp(_readBuffer.c_str(), "VST/1.0\r\n\r\n") == 0) {
+    LOG_TOPIC(WARN, Logger::COMMUNICATION) << std::string(_readBuffer.c_str(),_readBuffer.length());
+    if (std::strncmp(_readBuffer.c_str(), "VST/1.0\r\n\r\n", 11) == 0) {
+      LOG_TOPIC(WARN, Logger::COMMUNICATION) << "Switching from Http to Vst";
       std::shared_ptr<GeneralCommTask> commTask;
       _abandoned = true;
       cancelKeepAlive();
       commTask = std::make_shared<VppCommTask>(
           _loop, _server, std::move(_peer), std::move(_connectionInfo),
           GeneralServerFeature::keepAliveTimeout(), /*skipSocketInit*/ true);
+      commTask->addToReadBuffer(_readBuffer.c_str()+11,_readBuffer.length()-11);
+      LOG(ERR) << "processRead result: "  << commTask->processRead();
       commTask->start();
       //statistics?!
       return false;
     }
-
     // header is complete
     if (ptr < end) {
       _readPosition = ptr - _readBuffer.c_str() + 4;
