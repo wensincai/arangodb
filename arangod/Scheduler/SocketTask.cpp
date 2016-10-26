@@ -191,16 +191,20 @@ void SocketTask::completedWriteBuffer() {
   _writeBuffer = nullptr;
 
   if (_writeBufferStatistics != nullptr) {
+#ifdef DEBUG_STATISTICS
     LOG_TOPIC(TRACE, Logger::REQUESTS)
         << "SocketTask::addWriteBuffer - Statistics release: "
         << _writeBufferStatistics->to_string();
+#endif
     _writeBufferStatistics->_writeEnd = TRI_StatisticsTime();
     TRI_ReleaseRequestStatistics(_writeBufferStatistics);
     _writeBufferStatistics = nullptr;
   } else {
+#ifdef DEBUG_STATISTICS
     LOG_TOPIC(TRACE, Logger::REQUESTS) << "SocketTask::addWriteBuffer - "
                                           "Statistics release: nullptr - "
                                           "nothing to realease";
+#endif
   }
 
   if (_writeBuffers.empty()) {
