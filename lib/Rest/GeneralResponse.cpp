@@ -65,28 +65,6 @@ void GeneralResponse::addPayload(VPackSlice const& slice,
   addPayloadPostHook(slice, options, resolveExternals, skipBody);
 }
 
-void GeneralResponse::addPayload(VPackBuffer<uint8_t>&& buffer,
-                                 arangodb::velocypack::Options const* options,
-                                 bool resolveExternals) {
-  addPayloadPreconditions();
-  _numPayloads++;
-  options = detail::getOptions(options);
-
-  bool skipBody = false;
-  addPayloadPreHook(true, resolveExternals, skipBody);
-  if (!skipBody) {
-    if (resolveExternals) {
-      auto tmpBuffer = basics::VelocyPackHelper::sanitizeExternalsChecked(
-          VPackSlice(buffer.data()), options);
-      _vpackPayloads.push_back(std::move(tmpBuffer));
-    } else {
-      _vpackPayloads.push_back(std::move(buffer));
-    }
-  }
-  addPayloadPostHook(VPackSlice(buffer.data()), options, resolveExternals,
-                     skipBody);
-}
-
 std::string GeneralResponse::responseString(ResponseCode code) {
   switch (code) {
     //  Informational 1xx

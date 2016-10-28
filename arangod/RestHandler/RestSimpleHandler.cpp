@@ -357,8 +357,7 @@ void RestSimpleHandler::lookupByKeys(VPackSlice const& slice) {
       resultSize = static_cast<size_t>(qResult.length());
     }
 
-    VPackBuffer<uint8_t> resultBuffer;
-    VPackBuilder result(resultBuffer);
+    VPackBuilder result;
     {
       VPackObjectBuilder guard(&result);
       resetResponse(rest::ResponseCode::OK);
@@ -445,8 +444,7 @@ void RestSimpleHandler::lookupByKeys(VPackSlice const& slice) {
       }
     }
 
-    generateResult(rest::ResponseCode::OK, std::move(resultBuffer),
-                   queryResult.context);
+    generateResult(rest::ResponseCode::OK, result.slice(), queryResult.context);
   } catch (...) {
     unregisterQuery();
     throw;

@@ -135,17 +135,8 @@ class GeneralResponse {
     _generateBody = generateBody;
     addPayload(slice, &options, resolveExternals);
   }
-  // Payload needs to be of type: VPackSlice const&
-  // or VPackBuffer<uint8_t>&&
-  template <typename Payload>
-  void setPayload(Payload&& payload, bool generateBody,
-                  VPackOptions const& options = VPackOptions::Options::Defaults,
-                  bool resolveExternals = true) {
-    _generateBody = generateBody;
-    addPayload(std::forward<Payload>(payload), &options, resolveExternals);
-  }
 
-  void addPayloadPreconditions() { 
+  void addPayloadPreconditions() {
     if (_vpackPayloads.size() != 0) {
       LOG(ERR) << "Payload set twice";
       TRI_ASSERT(_vpackPayloads.size() == 0);
@@ -156,9 +147,7 @@ class GeneralResponse {
   void addPayload(VPackSlice const&,
                   arangodb::velocypack::Options const* = nullptr,
                   bool resolve_externals = true);
-  void addPayload(VPackBuffer<uint8_t>&&,
-                  arangodb::velocypack::Options const* = nullptr,
-                  bool resolve_externals = true);
+
   virtual void addPayloadPostHook(VPackSlice const&,
                                   arangodb::velocypack::Options const*,
                                   bool resolveExternals, bool bodySkipped) {}

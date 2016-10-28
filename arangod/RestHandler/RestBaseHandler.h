@@ -45,16 +45,13 @@ class RestBaseHandler : public rest::RestHandler {
 
  public:
   // generates a result from VelocyPack
-  template <typename Payload>
-  void generateResult(rest::ResponseCode, Payload&&);
+  void generateResult(rest::ResponseCode, VPackSlice const&);
 
   // generates a result from VelocyPack
-  template <typename Payload>
-  void generateResult(rest::ResponseCode, Payload&&, VPackOptions const*);
+  void generateResult(rest::ResponseCode, VPackSlice const&, VPackOptions const*);
 
   // generates a result from VelocyPack
-  template <typename Payload>
-  void generateResult(rest::ResponseCode, Payload&&,
+  void generateResult(rest::ResponseCode, VPackSlice const&,
                       std::shared_ptr<arangodb::TransactionContext> context);
 
   // generates an error
@@ -70,8 +67,7 @@ class RestBaseHandler : public rest::RestHandler {
   /// @brief parses the body as VelocyPack
   std::shared_ptr<arangodb::velocypack::Builder> parseVelocyPackBody(arangodb::velocypack::Options const*, bool&);
 
-  template <typename Payload>
-  void writeResult(Payload&&, arangodb::velocypack::Options const& options);
+  void writeResult(VPackSlice const&, arangodb::velocypack::Options const& options);
 };
 }
 

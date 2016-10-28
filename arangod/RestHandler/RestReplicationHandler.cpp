@@ -1006,7 +1006,7 @@ void RestReplicationHandler::handleCommandLoggerFollow() {
     if (length > 0) {
       if (useVpp) {
         for (auto message : dump._slices) {
-          _response->addPayload(std::move(message), &dump._vpackOptions, true);
+          _response->addPayload(VPackSlice(message.data()), &dump._vpackOptions, true);
         }
       } else {
         HttpResponse* httpResponse =
@@ -3486,7 +3486,7 @@ void RestReplicationHandler::handleCommandApplierSetConfig() {
   if (password.isString()) {
     config._password = password.copyString();
   }
-  
+
   VPackSlice const jwt = body.get("jwt");
   if (jwt.isString()) {
     config._jwt = jwt.copyString();
