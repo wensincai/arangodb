@@ -2220,7 +2220,7 @@ std::string TRI_GetTempPath() {
 /// @brief get a temporary file name
 ////////////////////////////////////////////////////////////////////////////////
 
-int TRI_GetTempName(char const* directory, char** result, bool const createFile,
+int TRI_GetTempName(char const* directory, char** result, bool createFile,
                     long& systemError, std::string& errorMessage) {
   char* dir;
   int tries;
@@ -2399,6 +2399,98 @@ char* TRI_GetNullBufferFiles() { return &NullBuffer[0]; }
 
 size_t TRI_GetNullBufferSizeFiles() { return sizeof(NullBuffer); }
 
+int TRI_CreateDatafile(std::string const& filename, size_t maximalSize) {
+  TRI_ERRORBUF;
+
+  // open the file
+  int fd = TRI_CREATE(filename.c_str(), O_CREAT | O_EXCL | O_RDWR | TRI_O_CLOEXEC,
+                      S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP);
+
+  TRI_IF_FAILURE("CreateDatafile1") {
+    // intentionally fail
+    TRI_CLOSE(fd);
+    fd = -1;
+    errno = ENOSPC;
+  }
+
+  if (fd < 0) {
+    if (errno == ENOSPC) {
+      TRI_set_errno(TRI_ERROR_ARANGO_FILESYSTEM_FULL);
+      LOG(ERR) << "cannot create datafile '" << filename << "': " << TRI_last_error();
+    } else {
+      TRI_SYSTEM_ERROR();
+
+      TRI_set_errno(TRI_ERROR_SYS_ERROR);
+      LOG(ERR) << "cannot create datafile '" << filename << "': " << TRI_GET_ERRORBUF;
+    }
+    return -1;
+  }
+
+  // fill file with zeros from FileNullBuffer
+  size_t writeSize = TRI_GetNullBufferSizeFiles();
+  size_t written = 0;
+  while (written < maximalSize) {
+    if (writeSize + written > maximalSize) {
+      writeSize = maximalSize - written;
+    }
+
+    ssize_t writeResult =
+        TRI_WRITE(fd, TRI_GetNullBufferFiles(), static_cast<TRI_write_t>(writeSize));
+
+    TRI_IF_FAILURE("CreateDatafile2") {
+      // intentionally fail
+      writeResult = -1;
+      errno = ENOSPC;
+    }
+
+    if (writeResult < 0) {
+      if (errno == ENOSPC) {
+        TRI_set_errno(TRI_ERROR_ARANGO_FILESYSTEM_FULL);
+        LOG(ERR) << "cannot create datafile '" << filename << "': " << TRI_last_error();
+      } else {
+        TRI_SYSTEM_ERROR();
+        TRI_set_errno(TRI_ERROR_SYS_ERROR);
+        LOG(ERR) << "cannot create datafile '" << filename << "': " << TRI_GET_ERRORBUF;
+      }
+
+      TRI_CLOSE(fd);
+      TRI_UnlinkFile(filename.c_str());
+
+      return -1;
+    }
+
+    written += static_cast<size_t>(writeResult);
+  }
+
+  // go back to offset 0
+  TRI_lseek_t offset = TRI_LSEEK(fd, (TRI_lseek_t)0, SEEK_SET);
+
+  if (offset == (TRI_lseek_t)-1) {
+    TRI_SYSTEM_ERROR();
+    TRI_set_errno(TRI_ERROR_SYS_ERROR);
+    TRI_CLOSE(fd);
+
+    // remove empty file
+    TRI_UnlinkFile(filename.c_str());
+
+    LOG(ERR) << "cannot seek in datafile '" << filename << "': '" << TRI_GET_ERRORBUF << "'";
+    return -1;
+  }
+
+  return fd;
+}
+
+#if _WIN32
+bool TRI_PathIsAbsolute(std::string const& path) {
+  return !PathIsRelative(path.c_str());
+}
+
+#else  
+bool TRI_PathIsAbsolute(std::string const& path) {
+  return path.c_str()[0] == '/';
+}
+#endif
+
 ////////////////////////////////////////////////////////////////////////////////
 /// @brief initialize the files subsystem
 ////////////////////////////////////////////////////////////////////////////////
@@ -2414,15 +2506,3 @@ void TRI_InitializeFiles() {
 
 void TRI_ShutdownFiles() {}
 
-
-
-#if _WIN32
-bool TRI_PathIsAbsolute(const std::string &path) {
-  return !PathIsRelative(path.c_str());
-}
-
-#else  
-bool TRI_PathIsAbsolute(const std::string &path) {
-  return path.c_str()[0] == '/';
-}
-#endif

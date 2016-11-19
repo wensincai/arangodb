@@ -33,6 +33,7 @@
 #include <velocypack/velocypack-aliases.h>
 
 #include "Basics/MutexLocker.h"
+#include "Basics/files.h"
 #include "Basics/gcd.h"
 #include "Basics/memory-map.h"
 #include "Basics/prime-numbers.h"
@@ -80,10 +81,161 @@ class AssocUnique {
 
  private:
   struct Bucket {
-    uint64_t _nrAlloc;  // the size of the table
-    uint64_t _nrUsed;   // the number of used entries
+    uint64_t _nrAlloc;        // the size of the table
+    uint64_t _nrUsed;         // the number of used entries
+    Element* _table;          // the table itself
+    int _file;                // file descriptor for memory mapped file (-1 = no file)
+    char* _filename;          // name of memory mapped file (nullptr = no file)
 
-    Element* _table;  // the table itself, aligned to a cache line boundary
+    Bucket() : _nrAlloc(0), _nrUsed(0), _table(nullptr), _file(-1), _filename(nullptr) {}
+    Bucket(Bucket const&) = delete;
+    Bucket& operator=(Bucket const&) = delete;
+
+    // move ctor. this takes over responsibility for the resources from other
+    Bucket(Bucket&& other) 
+        : _nrAlloc(other._nrAlloc), _nrUsed(other._nrUsed), _table(other._table), _file(other._file), _filename(other._filename) {
+      other._nrAlloc = 0;
+      other._nrUsed = 0;
+      other._table = nullptr;
+      other._file = -1;
+      other._filename = nullptr;
+    }
+
+    Bucket& operator=(Bucket&& other) {
+      deallocate(); // free own resources first
+        
+      _nrAlloc = other._nrAlloc;
+      _nrUsed = other._nrUsed;
+      _table = other._table;
+      _file = other._file;
+      _filename = other._filename;
+
+      other._nrAlloc = 0;
+      other._nrUsed = 0;
+      other._table = nullptr;
+      other._file = -1;
+      other._filename = nullptr;
+
+      return *this;
+    }
+
+    ~Bucket() {
+      deallocate();
+    }
+
+   public:
+    void allocate(size_t numberElements) {
+      TRI_ASSERT(_nrAlloc == 0);
+      TRI_ASSERT(_nrUsed == 0);
+      TRI_ASSERT(_table == nullptr);
+      TRI_ASSERT(_file == -1);
+      TRI_ASSERT(_filename == nullptr);
+
+      _file = allocateTempfile(_filename, numberElements * sizeof(Element));
+
+      try {
+        _table = allocateMemory(numberElements);
+        _nrAlloc = numberElements;
+      } catch (...) {
+        TRI_ASSERT(_file != -1);
+        deallocateTempfile();
+        TRI_ASSERT(_file == -1);
+        throw;
+      }
+    }
+
+    void deallocate() {
+      deallocateMemory();
+      deallocateTempfile();
+    }
+
+   private:
+    Element* allocateMemory(size_t numberElements) {
+      TRI_ASSERT(numberElements > 0);
+
+      if (_file == -1) {
+        return new Element[numberElements]();
+      }
+   
+      // initialize the file 
+      size_t const totalSize = numberElements * sizeof(Element);
+      TRI_ASSERT(_file > 0);
+      
+      void* data = mmap(nullptr, totalSize, PROT_WRITE | PROT_READ, MAP_SHARED | MAP_POPULATE, _file, 0);
+      
+      if (data == nullptr || data == MAP_FAILED) {
+        THROW_ARANGO_EXCEPTION(TRI_ERROR_OUT_OF_MEMORY);
+      }
+
+      try {
+        // call placement new constructor
+        (void) new (data) Element[numberElements]();
+      
+        return static_cast<Element*>(data);
+      } catch (...) {
+        munmap(data, totalSize);
+        throw;
+      }
+    }
+
+    void deallocateMemory() {
+      if (_table == nullptr) {
+        return;
+      } 
+      if (_file == -1) {
+        delete[] _table;
+      } else {
+        if (munmap(_table, _nrAlloc * sizeof(Element)) != 0) {
+          // unmapping failed
+          LOG(WARN) << "munmap failed";
+        }
+      }
+      _table = nullptr;
+      _nrAlloc = 0;
+      _nrUsed = 0;
+    }
+
+    int allocateTempfile(char*& filename, size_t filesize) {
+      TRI_ASSERT(filename == nullptr);
+
+      if (filesize < 8192) {
+        // use new/malloc
+        return -1;
+      }
+
+      // create a temporary file
+      long errorCode;
+      std::string errorMessage;
+
+      if (TRI_GetTempName(nullptr, &filename, false, errorCode, errorMessage) != TRI_ERROR_NO_ERROR) {
+        // go on without file, but with regular new/malloc
+        return -1;
+      } 
+
+      TRI_ASSERT(filename != nullptr);
+      
+      int fd = TRI_CreateDatafile(filename, filesize);
+      if (fd < 0) {
+        TRI_Free(TRI_CORE_MEM_ZONE, filename);
+        filename = nullptr;
+      } 
+     
+      return fd;
+    }
+
+    void deallocateTempfile() {
+      if (_file >= 0) {
+        // close file pointer and reset fd
+        TRI_CLOSE(_file);
+        _file = -1;
+      }
+      if (_filename != nullptr) {
+        TRI_UnlinkFile(_filename);
+        TRI_Free(TRI_CORE_MEM_ZONE, _filename);
+        _filename = nullptr;
+      }
+    }
+  
   };
 
   std::vector<Bucket> _buckets;
@@ -123,30 +275,20 @@ class AssocUnique {
     numberBuckets = nr;
     _bucketsMask = nr - 1;
 
+    _buckets.resize(numberBuckets);
+
     try {
       for (size_t j = 0; j < numberBuckets; j++) {
-        _buckets.emplace_back();
-        Bucket& b = _buckets.back();
-        b._nrAlloc = initialSize();
-        b._table = nullptr;
-
-        // may fail...
-        b._table = new Element[static_cast<size_t>(b._nrAlloc)]();
+        _buckets[j].allocate(initialSize());
       }
     } catch (...) {
-      for (auto& b : _buckets) {
-        delete[] b._table;
-        b._table = nullptr;
-        b._nrAlloc = 0;
-      }
+      _buckets.clear();
       throw;
     }
   }
 
   ~AssocUnique() {
-    for (auto& b : _buckets) {
-      delete[] b._table;
-    }
+    _buckets.clear();
   }
 
   //////////////////////////////////////////////////////////////////////////////
@@ -192,31 +334,30 @@ class AssocUnique {
           "hash-resize " << cb << ", target size: " << targetSize;
     }
 
-    Element* oldTable = b._table;
-    uint64_t oldAlloc = b._nrAlloc;
-
     TRI_ASSERT(targetSize > 0);
 
     targetSize = TRI_NearPrime(targetSize);
 
-    // This might throw, is catched outside
-    b._table = new Element[static_cast<size_t>(targetSize)]();
-
-    b._nrAlloc = targetSize;
+    Bucket copy;
+    copy.allocate(targetSize);
 
 #ifdef __linux__
-    if (b._nrAlloc > 1000000) {
-      uintptr_t mem = reinterpret_cast<uintptr_t>(b._table);
+    if (copy._nrAlloc > 1000000) {
+      uintptr_t mem = reinterpret_cast<uintptr_t>(copy._table);
       uintptr_t pageSize = getpagesize();
       mem = (mem / pageSize) * pageSize;
       void* memptr = reinterpret_cast<void*>(mem);
-      TRI_MMFileAdvise(memptr, b._nrAlloc * sizeof(Element*),
+      TRI_MMFileAdvise(memptr, copy._nrAlloc * sizeof(Element),
                        TRI_MADVISE_RANDOM);
     }
 #endif
 
     if (b._nrUsed > 0) {
-      uint64_t const n = b._nrAlloc;
+      Element* oldTable = b._table;
+      uint64_t const oldAlloc = b._nrAlloc;
+      TRI_ASSERT(oldAlloc > 0);
+
+      uint64_t const n = copy._nrAlloc;
       TRI_ASSERT(n > 0);
 
       for (uint64_t j = 0; j < oldAlloc; j++) {
@@ -226,19 +367,20 @@ class AssocUnique {
           uint64_t i, k;
           i = k = _hashElement(userData, element) % n;
 
-          for (; i < n && b._table[i]; ++i)
+          for (; i < n && copy._table[i]; ++i)
             ;
           if (i == n) {
-            for (i = 0; i < k && b._table[i]; ++i)
+            for (i = 0; i < k && copy._table[i]; ++i)
               ;
           }
 
-          b._table[i] = element;
+          copy._table[i] = element;
+          ++copy._nrUsed;
         }
       }
     }
 
-    delete[] oldTable;
+    b = std::move(copy);
 
     LOG(TRACE) << "resizing hash " << cb << " done";
 
@@ -269,14 +411,14 @@ class AssocUnique {
       UserData* userData, BucketPosition& position, uint64_t const step,
       BucketPosition const& initial) const {
     Element found;
-    Bucket b = _buckets[position.bucketId];
+    Bucket const* b = &_buckets[position.bucketId];
     do {
-      found = b._table[position.position];
+      found = b->_table[position.position];
       position.position += step;
-      while (position.position >= b._nrAlloc) {
-        position.position -= b._nrAlloc;
+      while (position.position >= b->_nrAlloc) {
+        position.position -= b->_nrAlloc;
         position.bucketId = (position.bucketId + 1) % _buckets.size();
-        b = _buckets[position.bucketId];
+        b = &_buckets[position.bucketId];
       }
       if (position == initial) {
         // We are done. Return the last element we have in hand
@@ -322,42 +464,10 @@ class AssocUnique {
 
  public:
   void truncate(CallbackElementFuncType callback) {
-    std::vector<Element*> empty;
-    empty.reserve(_buckets.size());
-   
-    try {
-      uint64_t const nrAlloc = initialSize(); 
-
-      for (size_t i = 0; i < _buckets.size(); ++i) {
-        auto newBucket = new Element[static_cast<size_t>(nrAlloc)]();
-        try {
-          // shouldn't fail as enough space was reserved above, but let's be paranoid
-          empty.emplace_back(newBucket);
-        } catch (...) {
-          delete[] newBucket;
-          throw;
-        }
-      }
-
-      size_t i = 0;
-      for (auto& b : _buckets) {
-        invokeOnAllElements(callback, b);
-
-        // now bucket is empty
-        delete[] b._table;
-        b._table = empty[i];
-        b._nrAlloc = initialSize();
-        b._nrUsed = 0;
-        
-        empty[i] = nullptr; // pass ownership
-        ++i;
-      }
-    } catch (...) {
-      // prevent leaks
-      for (auto& it : empty) {
-        delete[] it;
-      }
-      throw;
+    for (auto& b : _buckets) {
+      invokeOnAllElements(callback, b);
+      b.deallocate();
+      b.allocate(initialSize());
     }
   }
 
@@ -915,15 +1025,17 @@ class AssocUnique {
   /// @brief a method to iterate over all elements in a bucket. this method
   /// can NOT be used for deleting elements
   bool invokeOnAllElements(CallbackElementFuncType const& callback, Bucket& b) {
-    for (size_t i = 0; i < b._nrAlloc; ++i) {
-      if (!b._table[i] || b._nrUsed == 0) {
-        continue;
-      }
-      if (!b._table[i]) {
-        continue;
-      }
-      if (!callback(b._table[i])) {
-        return false;
+    if (b._nrUsed > 0) {
+      for (size_t i = 0; i < b._nrAlloc; ++i) {
+        if (!b._table[i]) {
+          continue;
+        }
+        if (!callback(b._table[i])) {
+          return false;
+        }
+        if (b._nrUsed == 0) {
+          break;
+        }
       }
     }
     return true;
@@ -1047,10 +1159,10 @@ class AssocUnique {
       position.position = _buckets[position.bucketId]._nrAlloc - 1;
     }
 
-    Bucket b = _buckets[position.bucketId];
+    Bucket const* b = &_buckets[position.bucketId];
     Element found;
     do {
-      found = b._table[position.position];
+      found = b->_table[position.position];
 
       if (position.position == 0) {
         if (position.bucketId == 0) {
@@ -1060,8 +1172,8 @@ class AssocUnique {
         }
 
         --position.bucketId;
-        b = _buckets[position.bucketId];
-        position.position = b._nrAlloc - 1;
+        b = &_buckets[position.bucketId];
+        position.position = b->_nrAlloc - 1;
       } else {
         --position.position;
       }
