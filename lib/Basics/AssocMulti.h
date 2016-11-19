@@ -30,10 +30,9 @@
 // #define TRI_CHECK_MULTI_POINTER_HASH 1
 
 #include "Basics/Common.h"
+#include "Basics/IndexBucket.h"
 #include "Basics/Mutex.h"
 #include "Basics/MutexLocker.h"
-#include "Basics/files.h"
-#include "Basics/memory-map.h"
 #include "Basics/prime-numbers.h"
 #include "Logger/Logger.h"
 
@@ -103,7 +102,7 @@ struct Entry {
                    // list of all items with the same key
   IndexType prev;  // index of the data preceding in the linked
                    // list of all items with the same key
-  uint64_t readHashCache() { return hashCache; }
+  uint64_t readHashCache() const { return hashCache; }
   void writeHashCache(uint64_t v) { hashCache = v; }
 
   Entry() : hashCache(0), value(), next(INVALID_INDEX), prev(INVALID_INDEX) {}
@@ -119,7 +118,7 @@ struct Entry<Element, IndexType, false> {
                    // list of all items with the same key
   IndexType prev;  // index of the data preceding in the linked
                    // list of all items with the same key
-  uint64_t readHashCache() { return 0; }
+  uint64_t readHashCache() const { return 0; }
   void writeHashCache(uint64_t v) { TRI_ASSERT(false); }
   
   Entry() : value(), next(INVALID_INDEX), prev(INVALID_INDEX) {}
@@ -145,187 +144,12 @@ class AssocMulti {
   typedef std::function<bool(UserData*, Element const&, Element const&)>
       IsEqualElementElementFuncType;
   typedef std::function<bool(Element&)> CallbackElementFuncType;
-
+  
  private:
   typedef Entry<Element, IndexType, useHashCache> EntryType;
-
-  struct Bucket {
-    IndexType _nrAlloc;       // the size of the table
-    IndexType _nrUsed;        // the number of used entries
-    IndexType _nrCollisions;  // the number of entries that have
-                              // a key that was previously in the table
-    EntryType* _table;        // the table itself
-    int _file;                // file descriptor for memory mapped file (-1 = no file)
-    char* _filename;          // name of memory mapped file (nullptr = no file)
-
-    Bucket() : _nrAlloc(0), _nrUsed(0), _nrCollisions(0), _table(nullptr), _file(-1), _filename(nullptr) {}
-    Bucket(Bucket const&) = delete;
-    Bucket& operator=(Bucket const&) = delete;
-    
-    // move ctor. this takes over responsibility for the resources from other
-    Bucket(Bucket&& other) 
-        : _nrAlloc(other._nrAlloc), _nrUsed(other._nrUsed), _nrCollisions(other._nrCollisions), _table(other._table), _file(other._file), _filename(other._filename) {
-      other._nrAlloc = 0;
-      other._nrUsed = 0;
-      other._nrCollisions = 0;
-      other._table = nullptr;
-      other._file = -1;
-      other._filename = nullptr;
-    }
-
-    Bucket& operator=(Bucket&& other) {
-      deallocate(); // free own resources first
-        
-      _nrAlloc = other._nrAlloc;
-      _nrUsed = other._nrUsed;
-      _nrCollisions = other._nrCollisions;
-      _table = other._table;
-      _file = other._file;
-      _filename = other._filename;
-
-      other._nrAlloc = 0;
-      other._nrUsed = 0;
-      other._nrCollisions = 0;
-      other._table = nullptr;
-      other._file = -1;
-      other._filename = nullptr;
-
-      return *this;
-    }
-
-    ~Bucket() {
-      deallocate();
-    }
-
-   public:
-    size_t memoryUsage() const {
-      return _nrAlloc * sizeof(EntryType);
-    }
-
-    void allocate(size_t numberElements) {
-      TRI_ASSERT(_nrAlloc == 0);
-      TRI_ASSERT(_nrUsed == 0);
-      TRI_ASSERT(_table == nullptr);
-      TRI_ASSERT(_file == -1);
-      TRI_ASSERT(_filename == nullptr);
-
-      _file = allocateTempfile(_filename, numberElements * sizeof(EntryType));
-
-      try {
-        _table = allocateMemory(numberElements);
-        TRI_ASSERT(_table != nullptr);
-
-        // properly initialize table
-        for (IndexType j = 0; j < numberElements; ++j) {
-          _table[j].next = INVALID_INDEX;
-          _table[j].prev = INVALID_INDEX;
-          if (useHashCache) {
-            _table[j].writeHashCache(0);
-          }
-        }
-
-        _nrAlloc = numberElements;
-      } catch (...) {
-        TRI_ASSERT(_file != -1);
-        deallocateTempfile();
-        TRI_ASSERT(_file == -1);
-        throw;
-      }
-    }
-
-    void deallocate() {
-      deallocateMemory();
-      deallocateTempfile();
-    }
-
-   private:
-    EntryType* allocateMemory(size_t numberElements) {
-      TRI_ASSERT(numberElements > 0);
-
-      if (_file == -1) {
-        return new EntryType[numberElements]();
-      }
-   
-      // initialize the file 
-      size_t const totalSize = numberElements * sizeof(EntryType);
-      TRI_ASSERT(_file > 0);
-      
-      void* data = mmap(nullptr, totalSize, PROT_WRITE | PROT_READ, MAP_SHARED | MAP_POPULATE, _file, 0);
-      
-      if (data == nullptr || data == MAP_FAILED) {
-        THROW_ARANGO_EXCEPTION(TRI_ERROR_OUT_OF_MEMORY);
-      }
-
-      try {
-        // call placement new constructor
-        (void) new (data) EntryType[numberElements]();
-      
-        return static_cast<EntryType*>(data);
-      } catch (...) {
-        munmap(data, totalSize);
-        throw;
-      }
-    }
-
-    void deallocateMemory() {
-      if (_table == nullptr) {
-        return;
-      } 
-      if (_file == -1) {
-        delete[] _table;
-      } else {
-        if (munmap(_table, _nrAlloc * sizeof(EntryType)) != 0) {
-          // unmapping failed
-          LOG(WARN) << "munmap failed";
-        }
-      }
-      _table = nullptr;
-      _nrAlloc = 0;
-      _nrUsed = 0;
-    }
-
-    int allocateTempfile(char*& filename, size_t filesize) {
-      TRI_ASSERT(filename == nullptr);
-
-      if (filesize < 8192) {
-        // use new/malloc
-        return -1;
-      }
-
-      // create a temporary file
-      long errorCode;
-      std::string errorMessage;
-
-      if (TRI_GetTempName(nullptr, &filename, false, errorCode, errorMessage) != TRI_ERROR_NO_ERROR) {
-        // go on without file, but with regular new/malloc
-        return -1;
-      } 
-
-      TRI_ASSERT(filename != nullptr);
-      
-      int fd = TRI_CreateDatafile(filename, filesize);
-      if (fd < 0) {
-        TRI_Free(TRI_CORE_MEM_ZONE, filename);
-        filename = nullptr;
-      } 
-     
-      return fd;
-    }
-
-    void deallocateTempfile() {
-      if (_file >= 0) {
-        // close file pointer and reset fd
-        TRI_CLOSE(_file);
-        _file = -1;
-      }
-      if (_filename != nullptr) {
-        TRI_UnlinkFile(_filename);
-        TRI_Free(TRI_CORE_MEM_ZONE, _filename);
-        _filename = nullptr;
-      }
-    }
-  };
-
+  
+  typedef arangodb::basics::IndexBucket<EntryType, IndexType> Bucket;
+  
   std::vector<Bucket> _buckets;
   size_t _bucketsMask;
 
@@ -411,11 +235,8 @@ class AssocMulti {
 
   size_t memoryUsage() const {
     size_t res = 0;
-    // size_t count = 0;
     for (auto& b : _buckets) {
       res += b.memoryUsage();
-      // std::cout << "Bucket: " << count++ << " _nrAlloc=" << b._nrAlloc
-      //          << " _nrUsed=" << b._nrUsed << std::endl;
     }
     return res;
   }
@@ -677,7 +498,7 @@ class AssocMulti {
     }
     return res.load();
   }
-  
+
   void truncate(CallbackElementFuncType callback) {
     for (auto& b : _buckets) {
       invokeOnAllElements(callback, b);
@@ -1339,17 +1160,6 @@ class AssocMulti {
 
 #ifdef TRI_INTERNAL_STATS
     _nrResizes++;
-#endif
-
-#ifdef __linux__
-    if (copy._nrAlloc > 1000000) {
-      uintptr_t mem = reinterpret_cast<uintptr_t>(copy._table);
-      uintptr_t pageSize = getpagesize();
-      mem = (mem / pageSize) * pageSize;
-      void* memptr = reinterpret_cast<void*>(mem);
-      TRI_MMFileAdvise(memptr, copy._nrAlloc * sizeof(EntryType),
-                       TRI_MADVISE_RANDOM);
-    }
 #endif
 
     // table is already clear by allocate, copy old data
