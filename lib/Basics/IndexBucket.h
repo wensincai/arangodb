@@ -97,6 +97,10 @@ struct IndexBucket {
   size_t memoryUsage() const {
     return _nrAlloc * sizeof(EntryType);
   }
+    
+  size_t requiredSize(size_t numberElements) const {
+    return numberElements * sizeof(EntryType);
+  }
 
   void allocate(size_t numberElements) {
     TRI_ASSERT(_nrAlloc == 0);
@@ -105,7 +109,9 @@ struct IndexBucket {
     TRI_ASSERT(_file == -1);
     TRI_ASSERT(_filename == nullptr);
 
-    _file = allocateTempfile(_filename, numberElements * sizeof(EntryType));
+    size_t const totalSize = requiredSize(numberElements);
+
+    _file = allocateTempfile(_filename, totalSize);
 
     try {
       _table = allocateMemory(numberElements);
@@ -117,8 +123,7 @@ struct IndexBucket {
         uintptr_t pageSize = getpagesize();
         mem = (mem / pageSize) * pageSize;
         void* memptr = reinterpret_cast<void*>(mem);
-        TRI_MMFileAdvise(memptr, numberElements * sizeof(EntryType),
-                         TRI_MADVISE_RANDOM);
+        TRI_MMFileAdvise(memptr, totalSize, TRI_MADVISE_RANDOM);
       }
 #endif
 
@@ -139,16 +144,17 @@ struct IndexBucket {
  private:
   EntryType* allocateMemory(size_t numberElements) {
     TRI_ASSERT(numberElements > 0);
-
+    
     if (_file == -1) {
       return new EntryType[numberElements]();
     }
+    
+    size_t const totalSize = requiredSize(numberElements);
   
     // initialize the file 
-    size_t const totalSize = numberElements * sizeof(EntryType);
     TRI_ASSERT(_file > 0);
     
-    void* data = mmap(nullptr, totalSize, PROT_WRITE | PROT_READ, MAP_SHARED | MAP_POPULATE, _file, 0);
+    void* data = mmap(nullptr, totalSize, PROT_WRITE | PROT_READ, MAP_PRIVATE | MAP_POPULATE, _file, 0);
     
     if (data == nullptr || data == MAP_FAILED) {
       THROW_ARANGO_EXCEPTION(TRI_ERROR_OUT_OF_MEMORY);
@@ -172,7 +178,7 @@ struct IndexBucket {
     if (_file == -1) {
       delete[] _table;
     } else {
-      if (munmap(_table, _nrAlloc * sizeof(EntryType)) != 0) {
+      if (munmap(_table, requiredSize(_nrAlloc)) != 0) {
         // unmapping failed
         LOG(WARN) << "munmap failed";
       }
@@ -185,7 +191,7 @@ struct IndexBucket {
   int allocateTempfile(char*& filename, size_t filesize) {
     TRI_ASSERT(filename == nullptr);
 
-    if (filesize < 8192) {
+    if (filesize < 16384) {
       // use new/malloc
       return -1;
     }

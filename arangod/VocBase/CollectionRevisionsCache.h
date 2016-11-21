@@ -87,11 +87,13 @@ class CollectionRevisionsCache {
 
  private:
   arangodb::basics::ReadWriteLock _lock; 
+  
+  std::string const _name;
 
   arangodb::basics::AssocUnique<TRI_voc_rid_t, RevisionCacheEntry> _revisions;
   
   LogicalCollection* _collection;
-
+  
   ReadCache _readCache;
 
   std::atomic<bool> _allowInvalidation;

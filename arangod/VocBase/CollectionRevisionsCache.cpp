@@ -56,7 +56,8 @@ static bool IsEqualElementElement(void*, RevisionCacheEntry const& left,
 } // namespace
 
 CollectionRevisionsCache::CollectionRevisionsCache(LogicalCollection* collection, RevisionCacheChunkAllocator* allocator) 
-    : _revisions(HashKey, HashElement, IsEqualKeyElement, IsEqualElementElement, IsEqualElementElement, 8, [this]() -> std::string { return std::string("revisions for ") + this->_collection->name(); }), 
+    : _name(collection->name()),
+      _revisions(HashKey, HashElement, IsEqualKeyElement, IsEqualElementElement, IsEqualElementElement, 8, [this]() -> std::string { return std::string("revisions for ") + _name; }), 
        _collection(collection), 
        _readCache(allocator, this),
        _allowInvalidation(true) {}
