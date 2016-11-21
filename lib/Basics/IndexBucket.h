@@ -95,7 +95,7 @@ struct IndexBucket {
 
  public:
   size_t memoryUsage() const {
-    return _nrAlloc * sizeof(EntryType);
+    return requiredSize(_nrAlloc);
   }
     
   size_t requiredSize(size_t numberElements) const {
@@ -129,7 +129,6 @@ struct IndexBucket {
 
       _nrAlloc = numberElements;
     } catch (...) {
-      TRI_ASSERT(_file != -1);
       deallocateTempfile();
       TRI_ASSERT(_file == -1);
       throw;
@@ -139,6 +138,10 @@ struct IndexBucket {
   void deallocate() {
     deallocateMemory();
     deallocateTempfile();
+
+    TRI_ASSERT(_file == -1);
+    TRI_ASSERT(_filename == nullptr);
+    TRI_ASSERT(_table == nullptr);
   }
 
  private:
@@ -173,8 +176,11 @@ struct IndexBucket {
 
   void deallocateMemory() {
     if (_table == nullptr) {
+      TRI_ASSERT(_nrAlloc == 0);
+      TRI_ASSERT(_nrUsed == 0);
       return;
     } 
+
     if (_file == -1) {
       delete[] _table;
     } else {
