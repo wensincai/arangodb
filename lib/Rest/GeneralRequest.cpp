@@ -214,11 +214,6 @@ void GeneralRequest::setFullUrl(char const* begin, char const* end) {
   _fullUrl = std::string(begin, end - begin);
 }
 
-void GeneralRequest::setFullUrl(std::string url) {
-  TRI_ASSERT(!url.empty());
-  _fullUrl = std::move(url);
-}
-
 void GeneralRequest::addSuffix(std::string&& part) {
   _suffix.emplace_back(StringUtils::urlDecode(part));
 }

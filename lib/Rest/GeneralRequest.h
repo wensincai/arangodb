@@ -120,7 +120,6 @@ class GeneralRequest {
 
   std::string const& fullUrl() const { return _fullUrl; }
   void setFullUrl(char const* begin, char const* end);
-  void setFullUrl(std::string url);
 
   // consists of the URL without the host and without any parameters.
   std::string const& requestPath() const { return _requestPath; }
@@ -170,9 +169,7 @@ class GeneralRequest {
 
   std::shared_ptr<VPackBuilder> toVelocyPackBuilderPtr(
       arangodb::velocypack::Options const* options) {
-    auto rv = std::make_shared<VPackBuilder>();
-    rv->add(payload(options));
-    return rv;
+    return std::make_shared<VPackBuilder>(payload(options), options);
   };
 
   ContentType contentType() const { return _contentType; }
