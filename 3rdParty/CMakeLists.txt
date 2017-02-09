@@ -109,11 +109,31 @@ if (${JEMALLOC_FOUND})
 endif()
 set(SKIP_INSTALL_ALL ON)
 add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/snappy/google-snappy-d53de18)
-add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/rocksdb/rocksdb)
 
-set(ROCKSDB_LIBS rocksdb PARENT_SCOPE)
+add_custom_target(rocksdb)
 
-set(LINK_DIRECTORIES "${LINK_DIRECTORIES};${CMAKE_CURRENT_BINARY_DIR}/rocksdb/rocksdb")
+if (CMAKE_GENERATOR STREQUAL "Unix Makefiles")
+  # we do this as an extra case, so make can utilize its jobserver.
+  ExternalProject_Add(rocksdbbuild
+      BINARY_DIR        ${CMAKE_CURRENT_BINARY_DIR}/rocksdb/
+      SOURCE_DIR        ${CMAKE_CURRENT_SOURCE_DIR}/rocksdb/rocksdb
+      CONFIGURE_COMMAND ${CMAKE_COMMAND} ${CMAKE_CURRENT_SOURCE_DIR}/rocksdb/rocksdb -DCMAKE_SKIP_RPATH=${CMAKE_SKIP_RPATH} -DCMAKE_C_COMPILER=${CMAKE_C_COMPILER} -DCMAKE_CXX_COMPILER=${CMAKE_CXX_COMPILER}
+      INSTALL_COMMAND   ""
+      BUILD_COMMAND     $(MAKE) rocksdblib
+      )
+else ()
+  ExternalProject_Add(rocksdbbuild
+      BINARY_DIR        ${CMAKE_CURRENT_BINARY_DIR}/rocksdb/
+      SOURCE_DIR        ${CMAKE_CURRENT_SOURCE_DIR}/rocksdb/rocksdb
+      CONFIGURE_COMMAND ${CMAKE_COMMAND} ${CMAKE_CURRENT_SOURCE_DIR}/rocksdb/rocksdb -DCMAKE_SKIP_RPATH=${CMAKE_SKIP_RPATH} -DCMAKE_C_COMPILER=${CMAKE_C_COMPILER} -DCMAKE_CXX_COMPILER=${CMAKE_CXX_COMPILER}
+      INSTALL_COMMAND   ""
+      BUILD_COMMAND     ${CMAKE_COMMAND} --build . --config $<CONFIG> --target rocksdblib
+    )
+endif()
+add_dependencies(rocksdb rocksdbbuild)
+set(ROCKSDB_LIBS rocksdblib PARENT_SCOPE)
+
+set(LINK_DIRECTORIES "${LINK_DIRECTORIES};${CMAKE_CURRENT_BINARY_DIR}/rocksdb")
 
 ################################################################################
 ## LINK_DIRECTORIES
