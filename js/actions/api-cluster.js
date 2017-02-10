@@ -489,7 +489,7 @@ actions.defineHttp({
       global.ArangoAgency.write([[operations, preconditions]]);
     } catch (e) {
       if (e.code === 412) {
-        oldValue = ArangoAgency.get('Plan/DBServers/' + body.primary);
+        let oldValue = ArangoAgency.get('Plan/DBServers/' + body.primary);
         actions.resultError(req, res, actions.HTTP_PRECONDITION_FAILED, 0,
           'Primary does not have the given oldSecondary as ' +
           'its secondary, current value: ' + JSON.stringify(oldValue));
@@ -624,7 +624,7 @@ actions.defineHttp({
       global.ArangoAgency.write([[operations, preconditions]]);
     } catch (e) {
       if (e.code === 412) {
-        oldValue = ArangoAgency.get('Plan/DBServers/' + body.primary);
+        let oldValue = ArangoAgency.get('Plan/DBServers/' + body.primary);
         actions.resultError(req, res, actions.HTTP_PRECONDITION_FAILED, 0,
           'Primary does not have the given oldSecondary as ' +
           'its secondary, current value: ' + oldValue);
