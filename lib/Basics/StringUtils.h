@@ -150,14 +150,14 @@ std::string escapeHex(std::string const& name, std::string const& specials,
 std::string escapeC(std::string const& name);
 
 ////////////////////////////////////////////////////////////////////////////////
-/// @brief splits a string
+/// @brief splits a string. set quote to '\0' to disable quoting
 ////////////////////////////////////////////////////////////////////////////////
 
 std::vector<std::string> split(std::string const& source, char delim = ',',
                                char quote = '\\');
 
 ////////////////////////////////////////////////////////////////////////////////
-/// @brief splits a string
+/// @brief splits a string. set quote to '\0' to disable quoting
 ////////////////////////////////////////////////////////////////////////////////
 
 std::vector<std::string> split(std::string const& source,
