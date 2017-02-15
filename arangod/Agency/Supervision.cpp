@@ -701,9 +701,9 @@ void Supervision::enforceReplication() {
               }
             }
 
-            AddFollower(
-              _snapshot, _agent, std::to_string(_jobId++), "supervision",
-              _agencyPrefix, db_.first, col_.first, shard_.first, newFollowers);
+            //AddFollower(
+            //  _snapshot, _agent, std::to_string(_jobId++), "supervision",
+            //  _agencyPrefix, db_.first, col_.first, shard_.first, newFollowers);
 
           }
         }

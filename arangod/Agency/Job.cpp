@@ -48,7 +48,7 @@ bool arangodb::consensus::compareServerLists(Slice plan, Slice current) {
   return equalLeader && currv == planv;
 }
 
-Job::Job(Node const& snapshot, Agent* agent, std::string const& jobId,
+Job::Job(Node const& snapshot, AgentInterface* agent, std::string const& jobId,
          std::string const& creator, std::string const& agencyPrefix) :
   _snapshot(snapshot),
   _agent(agent),
@@ -60,7 +60,7 @@ Job::Job(Node const& snapshot, Agent* agent, std::string const& jobId,
 Job::~Job() {}
 
 JOB_STATUS Job::exists() const {
-
+  
   Node const& target = _snapshot("/Target");
   
   if (target.exists(std::string("/ToDo/") + _jobId).size() == 2) {

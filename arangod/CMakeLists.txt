@@ -290,7 +290,6 @@ SET(ARANGOD_SOURCES
   RestServer/UpgradeFeature.cpp
   RestServer/VocbaseContext.cpp
   RestServer/WorkMonitorFeature.cpp
-  RestServer/arangod.cpp
   Scheduler/Acceptor.cpp
   Scheduler/AcceptorTcp.cpp
   Scheduler/Job.cpp
@@ -367,7 +366,35 @@ if (NOT MSVC)
   set(ARANGOD_SOURCES ${ARANGOD_SOURCES} Scheduler/AcceptorUnixDomain.cpp Scheduler/SocketUnixDomain.cpp)
 endif()
 
-add_executable(${BIN_ARANGOD} ${ARANGOD_SOURCES})
+add_executable(
+  ${BIN_ARANGOD}
+  ${ARANGOD_SOURCES}
+  RestServer/arangod.cpp
+)
+add_executable(catch_tests
+  ../catch_tests/main.cpp
+  ../catch_tests/tests/FailedLeaderTest.cpp
+  ../catch_tests/tests/AddFollowerTest.cpp
+  ${ARANGOD_SOURCES}
+)
+
+target_include_directories(catch_tests
+  PRIVATE
+  ../catch_tests
+)
+
+target_link_libraries(catch_tests
+  ${LIB_ARANGO_FE}
+  ${LIB_ARANGO_V8}
+  ${LIB_ARANGO}
+  ${LINENOISE_LIBS}
+  ${MSVC_LIBS}
+  ${V8_LIBS}
+  ${ROCKSDB_LIBS}
+  ${SYSTEM_LIBRARIES}
+  boost_boost
+  boost_system
+)
 
 if (USE_SSL)
   target_compile_definitions(${BIN_ARANGOD} PUBLIC "ARANGODB_SSL_ENABLED=1")

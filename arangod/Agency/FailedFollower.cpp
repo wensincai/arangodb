@@ -29,7 +29,7 @@
 using namespace arangodb::consensus;
 using namespace arangodb::velocypack;
 
-FailedFollower::FailedFollower(Node const& snapshot, Agent* agent,
+FailedFollower::FailedFollower(Node const& snapshot, AgentInterface* agent,
                                std::string const& jobId,
                                std::string const& creator,
                                std::string const& agencyPrefix,

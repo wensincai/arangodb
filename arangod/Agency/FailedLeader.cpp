@@ -32,7 +32,7 @@
 using namespace arangodb::consensus;
 using namespace arangodb::velocypack;
 
-FailedLeader::FailedLeader(Node const& snapshot, Agent* agent,
+FailedLeader::FailedLeader(Node const& snapshot, AgentInterface* agent,
                            std::string const& jobId, std::string const& creator,
                            std::string const& agencyPrefix,
                            std::string const& database,
@@ -227,6 +227,8 @@ bool FailedLeader::start() {
 
   // Preconditions end
   pending.close();
+
+  LOG_TOPIC(WARN, Logger::AGENCY) << "PENDING " << pending.toJson();
 
   // Transact
   write_ret_t res = transact(_agent, pending);

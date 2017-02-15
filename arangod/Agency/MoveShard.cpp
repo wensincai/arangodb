@@ -31,7 +31,7 @@ static std::string const DBServer = "DBServer";
 using namespace arangodb::consensus;
 using namespace arangodb::velocypack;
 
-MoveShard::MoveShard(Node const& snapshot, Agent* agent,
+MoveShard::MoveShard(Node const& snapshot, AgentInterface* agent,
                      std::string const& jobId, std::string const& creator,
                      std::string const& prefix, std::string const& database,
                      std::string const& collection, std::string const& shard,

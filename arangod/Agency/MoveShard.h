@@ -31,7 +31,7 @@ namespace arangodb {
 namespace consensus {
 
 struct MoveShard : public Job {
-  MoveShard(Node const& snapshot, Agent* agent, std::string const& jobId,
+  MoveShard(Node const& snapshot, AgentInterface* agent, std::string const& jobId,
             std::string const& creator, std::string const& prefix,
             std::string const& database = std::string(),
             std::string const& collection = std::string(),

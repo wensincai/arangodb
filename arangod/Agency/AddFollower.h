@@ -33,7 +33,7 @@ namespace consensus {
 struct AddFollower : public Job {
   
   AddFollower (Node const& snapshot,
-               Agent* agent,
+               AgentInterface* agent,
                std::string const& jobId,
                std::string const& creator,
                std::string const& prefix,
@@ -44,7 +44,7 @@ struct AddFollower : public Job {
 
   
   AddFollower (Node const& snapshot,
-               Agent* agent,
+               AgentInterface* agent,
                std::string const& jobId,
                std::string const& creator,
                std::string const& prefix,

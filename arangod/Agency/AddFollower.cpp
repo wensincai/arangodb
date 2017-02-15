@@ -33,7 +33,7 @@
 using namespace arangodb::consensus;
 using namespace arangodb::velocypack;
 
-AddFollower::AddFollower(Node const& snapshot, Agent* agent,
+AddFollower::AddFollower(Node const& snapshot, AgentInterface* agent,
                          std::string const& jobId, std::string const& creator,
                          std::string const& prefix, std::string const& database,
                          std::string const& collection,
@@ -60,7 +60,7 @@ AddFollower::AddFollower(Node const& snapshot, Agent* agent,
   }
 }
 
-AddFollower::AddFollower(Node const& snapshot, Agent* agent,
+AddFollower::AddFollower(Node const& snapshot, AgentInterface* agent,
                          std::string const& jobId, std::string const& creator,
                          std::string const& prefix, std::string const& database,
                          std::string const& collection,
@@ -103,7 +103,6 @@ bool AddFollower::create() {
   Slice current = _snapshot(curPath).slice();
 
   TRI_ASSERT(current.isArray());
-  TRI_ASSERT(current[0].isString());
 #endif
 
   auto const& myClones = clones(_snapshot, _database, _collection, _shard);
