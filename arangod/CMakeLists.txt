@@ -102,6 +102,7 @@ SET(ARANGOD_SOURCES
   Aql/AqlFunctionFeature.cpp
   Aql/AqlItemBlock.cpp
   Aql/AqlItemBlockManager.cpp
+  Aql/AqlTransaction.cpp
   Aql/AqlValue.cpp
   Aql/Ast.cpp
   Aql/AstNode.cpp
@@ -307,11 +308,10 @@ SET(ARANGOD_SOURCES
   Statistics/ServerStatistics.cpp
   Statistics/StatisticsFeature.cpp
   StorageEngine/EngineSelectorFeature.cpp
-  #StorageEngine/RocksDBEngine.cpp
-  #StorageEngine/RocksDBIndexFactory.cpp
   StorageEngine/TransactionCollection.cpp
   StorageEngine/TransactionState.cpp
-  Utils/AqlTransaction.cpp
+  Transaction/Helpers.cpp
+  Transaction/Methods.cpp
   Utils/CollectionExport.cpp
   Utils/CollectionKeys.cpp
   Utils/CollectionKeysRepository.cpp
@@ -321,7 +321,6 @@ SET(ARANGOD_SOURCES
   Utils/OperationCursor.cpp
   Utils/SingleCollectionTransaction.cpp
   Utils/StandaloneTransactionContext.cpp
-  Utils/Transaction.cpp
   Utils/TransactionContext.cpp
   Utils/V8TransactionContext.cpp
   Utils/WorkMonitorArangod.cpp
@@ -349,6 +348,7 @@ SET(ARANGOD_SOURCES
   VocBase/KeyGenerator.cpp
   VocBase/LogicalCollection.cpp
   VocBase/PathEnumerator.cpp
+  VocBase/PhysicalCollection.cpp
   VocBase/SingleServerTraverser.cpp
   VocBase/TransactionManager.cpp
   VocBase/Traverser.cpp

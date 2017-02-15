@@ -94,6 +94,11 @@ MMFiles are known to the following files:
 - Implement new IndexIterator API nextExtra(callback, limit)
   - Geo
 
+- OperationOptions
+  - revoryMarker
+
+- re-enable RocksDB storage engine (e.g arangod.cpp)
+- implement RocksDB storage engine
 
 Questions
 ---------

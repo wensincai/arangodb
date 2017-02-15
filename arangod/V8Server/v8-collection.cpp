@@ -43,7 +43,7 @@
 #include "Utils/OperationOptions.h"
 #include "Utils/OperationResult.h"
 #include "Utils/SingleCollectionTransaction.h"
-#include "Utils/TransactionHints.h"
+#include "Transaction/Hints.h"
 #include "Utils/V8TransactionContext.h"
 #include "V8/v8-conv.h"
 #include "V8/v8-utils.h"
@@ -331,7 +331,7 @@ static void ExistsVocbaseVPack(
   TRI_ASSERT(search.isObject());
 
   SingleCollectionTransaction trx(transactionContext, collectionName, AccessMode::Type::READ);
-  trx.addHint(TransactionHints::Hint::SINGLE_OPERATION, false);
+  trx.addHint(transaction::Hints::Hint::SINGLE_OPERATION, false);
 
   res = trx.begin();
 
@@ -431,7 +431,7 @@ static void DocumentVocbaseCol(
   SingleCollectionTransaction trx(transactionContext, collectionName, 
                                   AccessMode::Type::READ);
   if (!args[0]->IsArray()) {
-    trx.addHint(TransactionHints::Hint::SINGLE_OPERATION, false);
+    trx.addHint(transaction::Hints::Hint::SINGLE_OPERATION, false);
   }
   
   TIMER_STOP(JS_DOCUMENT_CREATE_TRX);
@@ -517,7 +517,7 @@ static void DocumentVocbase(
 
   SingleCollectionTransaction trx(transactionContext, collectionName,
                                   AccessMode::Type::READ);
-  trx.addHint(TransactionHints::Hint::SINGLE_OPERATION, false);
+  trx.addHint(transaction::Hints::Hint::SINGLE_OPERATION, false);
 
   int res = trx.begin();
 
@@ -609,7 +609,7 @@ static void RemoveVocbaseCol(v8::FunctionCallbackInfo<v8::Value> const& args) {
 
   SingleCollectionTransaction trx(transactionContext, collectionName, AccessMode::Type::WRITE);
   if (!args[0]->IsArray()) {
-    trx.addHint(TransactionHints::Hint::SINGLE_OPERATION, false);
+    trx.addHint(transaction::Hints::Hint::SINGLE_OPERATION, false);
   }
 
   int res = trx.begin();
@@ -752,7 +752,7 @@ static void RemoveVocbase(v8::FunctionCallbackInfo<v8::Value> const& args) {
 
   SingleCollectionTransaction trx(transactionContext, collectionName,
                                   AccessMode::Type::WRITE);
-  trx.addHint(TransactionHints::Hint::SINGLE_OPERATION, false);
+  trx.addHint(transaction::Hints::Hint::SINGLE_OPERATION, false);
 
   int res = trx.begin();
 
@@ -1213,7 +1213,7 @@ static void JS_PathVocbaseCol(v8::FunctionCallbackInfo<v8::Value> const& args) {
     TRI_V8_THROW_EXCEPTION_INTERNAL("cannot extract collection");
   }
 
-  std::string const path(collection->path());
+  std::string const path(collection->getPhysical()->path());
   v8::Handle<v8::Value> result = TRI_V8_STD_STRING(path);
 
   TRI_V8_RETURN(result);
@@ -1310,7 +1310,7 @@ static void JS_PropertiesVocbaseCol(
               "indexBuckets must be a two-power between 1 and 1024");
         }
 
-        int res = info->update(slice, false);
+        int res = info->updateProperties(slice, false);
 
         if (res != TRI_ERROR_NO_ERROR) {
           TRI_V8_THROW_EXCEPTION(res);
@@ -1390,7 +1390,7 @@ static void JS_PropertiesVocbaseCol(
       isModification ? AccessMode::Type::WRITE : AccessMode::Type::READ);
 
   if (!isModification) {
-    trx.addHint(TransactionHints::Hint::NO_USAGE_LOCK, false);
+    trx.addHint(transaction::Hints::Hint::NO_USAGE_LOCK, false);
   }
   
   int res = trx.begin();
@@ -1415,7 +1415,7 @@ static void JS_PropertiesVocbaseCol(
 
       // try to write new parameter to file
       bool doSync = application_features::ApplicationServer::getFeature<DatabaseFeature>("Database")->forceSyncProperties();
-      res = collection->update(slice, doSync);
+      res = collection->updateProperties(slice, doSync);
 
       if (res != TRI_ERROR_NO_ERROR) {
         TRI_V8_THROW_EXCEPTION(res);
@@ -1801,7 +1801,7 @@ static void ModifyVocbaseCol(TRI_voc_document_operation_e operation,
   SingleCollectionTransaction trx(transactionContext, collectionName,
                                   AccessMode::Type::WRITE);
   if (!args[0]->IsArray()) {
-    trx.addHint(TransactionHints::Hint::SINGLE_OPERATION, false);
+    trx.addHint(transaction::Hints::Hint::SINGLE_OPERATION, false);
   }
 
   int res = trx.begin();
@@ -1928,7 +1928,7 @@ static void ModifyVocbase(TRI_voc_document_operation_e operation,
 
   SingleCollectionTransaction trx(transactionContext, collectionName,
                                   AccessMode::Type::WRITE);
-  trx.addHint(TransactionHints::Hint::SINGLE_OPERATION, false);
+  trx.addHint(transaction::Hints::Hint::SINGLE_OPERATION, false);
 
   int res = trx.begin();
   if (res != TRI_ERROR_NO_ERROR) {
@@ -2173,7 +2173,7 @@ static void JS_SaveVocbase(v8::FunctionCallbackInfo<v8::Value> const& args) {
   auto transactionContext(V8TransactionContext::Create(vocbase, true));
   SingleCollectionTransaction trx(transactionContext,
                                   collectionName, AccessMode::Type::WRITE);
-  trx.addHint(TransactionHints::Hint::SINGLE_OPERATION, false);
+  trx.addHint(transaction::Hints::Hint::SINGLE_OPERATION, false);
 
   res = trx.begin();
 
@@ -2336,7 +2336,7 @@ static void JS_InsertVocbaseCol(
   SingleCollectionTransaction trx(transactionContext, collection->cid(),
                                   AccessMode::Type::WRITE);
   if (!payloadIsArray) {
-    trx.addHint(TransactionHints::Hint::SINGLE_OPERATION, false);
+    trx.addHint(transaction::Hints::Hint::SINGLE_OPERATION, false);
   }
   TIMER_STOP(JS_INSERT_CREATE_TRX);
 
@@ -2992,7 +2992,7 @@ static void JS_DatafilesVocbaseCol(
     TRI_V8_THROW_EXCEPTION(TRI_ERROR_ARANGO_COLLECTION_NOT_UNLOADED);
   }
 
-  MMFilesEngineCollectionFiles structure = dynamic_cast<MMFilesEngine*>(engine)->scanCollectionDirectory(collection->path());
+  MMFilesEngineCollectionFiles structure = dynamic_cast<MMFilesEngine*>(engine)->scanCollectionDirectory(collection->getPhysical()->path());
 
   // build result
   v8::Handle<v8::Object> result = v8::Object::New(isolate);
