@@ -101,7 +101,7 @@ Node createRootNode() {
   return root;
 }
 
-TEST_CASE( "A failed leaFailedServers should be filled with failed shards", "[agency, supervision]" ) {
+TEST_CASE( "FailedLeader should fill FailedServers with failed shards", "[agency, supervision]" ) {
   Node root = createRootNode();
   auto prefixRoot = root.children().find("arango")->second;
 
@@ -143,7 +143,7 @@ TEST_CASE( "A failed leaFailedServers should be filled with failed shards", "[ag
   );
 }
 
-TEST_CASE("A FailedLeader job should be queued") {
+TEST_CASE("A FailedLeader job should be queued", "[agency, supervision]") {
   Node root = createRootNode();
   write_ret_t fakeWriteResult {true, "", std::vector<bool> {true}, std::vector<index_t> {1}};
 
@@ -183,7 +183,7 @@ TEST_CASE("A FailedLeader job should be queued") {
   );
 }
 
-TEST_CASE("FailedLeader should set a new leader and set the new one as a follower") {
+TEST_CASE("FailedLeader should set a new leader and set the new one as a follower", "[agency, supervision]") {
   write_ret_t fakeWriteResult {true, "", std::vector<bool> {true}, std::vector<index_t> {1}};
   Node root = createRootNode();
   {

@@ -373,8 +373,10 @@ add_executable(
 )
 add_executable(catch_tests
   ../catch_tests/main.cpp
+  ../UnitTests/Basics/icu-helper.cpp
   ../catch_tests/tests/FailedLeaderTest.cpp
   ../catch_tests/tests/AddFollowerTest.cpp
+  ../catch_tests/tests/Basics/StringUtilsTest.cpp
   ${ARANGOD_SOURCES}
 )
 
