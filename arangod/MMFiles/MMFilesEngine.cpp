@@ -718,8 +718,9 @@ void MMFilesEngine::prepareDropCollection(TRI_vocbase_t*, arangodb::LogicalColle
 
 // perform a physical deletion of the collection
 void MMFilesEngine::dropCollection(TRI_vocbase_t* vocbase, arangodb::LogicalCollection* collection) {
-  auto physical = logicalToMMFiles(collection);
   std::string const name(collection->name());
+  auto physical = static_cast<MMFilesCollection*>(collection->getPhysical());
+  TRI_ASSERT(physical != nullptr);
   unregisterCollectionPath(vocbase->id(), collection->cid());
   
   // delete persistent indexes    
@@ -1294,7 +1295,9 @@ TRI_vocbase_t* MMFilesEngine::openExistingDatabase(TRI_voc_tick_t id, std::strin
       TRI_ASSERT(!it.get("id").isNone() || !it.get("cid").isNone());
       arangodb::LogicalCollection* collection = StorageEngine::registerCollection(vocbase.get(), it);
 
-      auto physical = logicalToMMFiles(collection);
+      auto physical = static_cast<MMFilesCollection*>(collection->getPhysical());
+      TRI_ASSERT(physical != nullptr);
+
       registerCollectionPath(vocbase->id(), collection->cid(), physical->path());
 
       if (!wasCleanShutdown) {
@@ -1611,7 +1614,7 @@ int MMFilesEngine::insertCompactionBlocker(TRI_vocbase_t* vocbase, double ttl,
   CompactionBlocker blocker(TRI_NewTickServer(), TRI_microtime() + ttl);
 
   {
-    WRITE_LOCKER_EVENTUAL(locker, _compactionBlockersLock, 1000); 
+    WRITE_LOCKER_EVENTUAL(locker, _compactionBlockersLock); 
 
     auto it = _compactionBlockers.find(vocbase);
 
@@ -1634,7 +1637,7 @@ int MMFilesEngine::extendCompactionBlocker(TRI_vocbase_t* vocbase, TRI_voc_tick_
     return TRI_ERROR_BAD_PARAMETER;
   }
 
-  WRITE_LOCKER_EVENTUAL(locker, _compactionBlockersLock, 1000); 
+  WRITE_LOCKER_EVENTUAL(locker, _compactionBlockersLock); 
 
   auto it = _compactionBlockers.find(vocbase);
 
@@ -1655,7 +1658,7 @@ int MMFilesEngine::extendCompactionBlocker(TRI_vocbase_t* vocbase, TRI_voc_tick_
 /// @brief remove an existing compaction blocker
 int MMFilesEngine::removeCompactionBlocker(TRI_vocbase_t* vocbase,
                                            TRI_voc_tick_t id) {
-  WRITE_LOCKER_EVENTUAL(locker, _compactionBlockersLock, 1000); 
+  WRITE_LOCKER_EVENTUAL(locker, _compactionBlockersLock); 
   
   auto it = _compactionBlockers.find(vocbase);
 
@@ -1683,7 +1686,7 @@ int MMFilesEngine::removeCompactionBlocker(TRI_vocbase_t* vocbase,
 
 void MMFilesEngine::preventCompaction(TRI_vocbase_t* vocbase,
                                       std::function<void(TRI_vocbase_t*)> const& callback) {
-  WRITE_LOCKER_EVENTUAL(locker, _compactionBlockersLock, 5000);
+  WRITE_LOCKER_EVENTUAL(locker, _compactionBlockersLock);
   callback(vocbase);
 }
 
@@ -1889,7 +1892,8 @@ bool MMFilesEngine::checkDatafileHeader(MMFilesDatafile* datafile, std::string c
 
 /// @brief checks a collection
 int MMFilesEngine::openCollection(TRI_vocbase_t* vocbase, LogicalCollection* collection, bool ignoreErrors) {
-  auto physical = logicalToMMFiles(collection);
+  auto physical = static_cast<MMFilesCollection*>(collection->getPhysical());
+  TRI_ASSERT(physical != nullptr);
   LOG_TOPIC(TRACE, Logger::DATAFILES) << "check collection directory '"
                                       << physical->path() << "'";
 

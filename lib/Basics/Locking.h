@@ -21,34 +21,25 @@
 /// @author Jan Steemann
 ////////////////////////////////////////////////////////////////////////////////
 
-#ifndef ARANGOD_AQL_QUERY_RESULT_V8_H
-#define ARANGOD_AQL_QUERY_RESULT_V8_H 1
+#ifndef ARANGODB_BASICS_LOCKING_H
+#define ARANGODB_BASICS_LOCKING_H 1
 
 #include "Basics/Common.h"
-#include "Aql/QueryResult.h"
-
-#include <v8.h>
 
 namespace arangodb {
-namespace aql {
+namespace basics {
 
-struct QueryResultV8 : public QueryResult {
-  QueryResultV8& operator=(QueryResultV8 const& other) = delete;
-
-  QueryResultV8(QueryResultV8&& other)
-      : QueryResult((QueryResult && )other), result(other.result) {}
-
-  QueryResultV8(QueryResult&& other)
-      : QueryResult((QueryResult && )other), result() {}
-
-  QueryResultV8(int code, std::string const& details)
-      : QueryResult(code, details), result() {}
-
-  QueryResultV8() : QueryResult(TRI_ERROR_NO_ERROR) {}
-  explicit QueryResultV8(int code) : QueryResult(code, ""), result() {}
-
-  v8::Handle<v8::Array> result;
+enum class LockerType {
+  BLOCKING,      // always lock, blocking if the lock cannot be acquired instantly
+  EVENTUAL,      // always lock, sleeping while the lock is not acquired
+  TRY            // try to acquire the lock and give up instantly if it cannot be acquired 
 };
+
+namespace ConditionalLocking {
+  static constexpr bool DoLock = true;
+  static constexpr bool DoNotLock = false;
+}
+
 }
 }
 

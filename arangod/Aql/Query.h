@@ -59,7 +59,6 @@ class Ast;
 class ExecutionEngine;
 class ExecutionPlan;
 class Executor;
-class Parser;
 class Query;
 class QueryRegistry;
 
@@ -238,12 +237,8 @@ class Query {
 
   /// @brief register a warning
   void registerWarning(int, char const* = nullptr);
-
-  /// @brief prepare an AQL query, this is a preparation for execute, but
-  /// execute calls it internally. The purpose of this separate method is
-  /// to be able to only prepare a query from VelocyPack and then store it in the
-  /// QueryRegistry.
-  QueryResult prepare(QueryRegistry*);
+  
+  void prepare(QueryRegistry*);
 
   /// @brief execute an AQL query
   QueryResult execute(QueryRegistry*);
@@ -333,6 +328,12 @@ class Query {
   /// @brief initializes the query
   void init();
   
+  /// @brief prepare an AQL query, this is a preparation for execute, but
+  /// execute calls it internally. The purpose of this separate method is
+  /// to be able to only prepare a query from VelocyPack and then store it in the
+  /// QueryRegistry.
+  std::unique_ptr<ExecutionPlan> prepare();
+
   void setExecutionTime();
 
   /// @brief log a query
@@ -371,8 +372,8 @@ class Query {
   /// @brief read the "optimizer.rules" section from the options
   std::vector<std::string> getRulesFromOptions() const;
 
-  /// @brief neatly format transaction errors to the user.
-  QueryResult transactionError(int errorCode) const;
+  /// @brief neatly format exception messages for the users
+  std::string buildErrorMessage(int errorCode) const;
 
   /// @brief enter a new state
   void enterState(ExecutionState);
@@ -439,9 +440,6 @@ class Query {
 
   /// @brief the ExecutionPlan object, if the query is prepared
   std::unique_ptr<ExecutionPlan> _plan;
-
-  /// @brief the Parser object, if the query is prepared
-  Parser* _parser;
 
   /// @brief the transaction object, in a distributed query every part of
   /// the query has its own transaction object. The transaction object is
