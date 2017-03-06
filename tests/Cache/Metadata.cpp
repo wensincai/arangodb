@@ -5,7 +5,7 @@
 ///
 /// DISCLAIMER
 ///
-/// Copyright 2017 triagens GmbH, Cologne, Germany
+/// Copyright 2017 ArangoDB GmbH, Cologne, Germany
 ///
 /// Licensed under the Apache License, Version 2.0 (the "License");
 /// you may not use this file except in compliance with the License.
@@ -19,161 +19,124 @@
 /// See the License for the specific language governing permissions and
 /// limitations under the License.
 ///
-/// Copyright holder is triAGENS GmbH, Cologne, Germany
+/// Copyright holder is ArangoDB GmbH, Cologne, Germany
 ///
 /// @author Daniel H. Larkin
-/// @author Copyright 2017, triAGENS GmbH, Cologne, Germany
+/// @author Copyright 2017, ArangoDB GmbH, Cologne, Germany
 ////////////////////////////////////////////////////////////////////////////////
 
+#include "Cache/Metadata.h"
 #include "Basics/Common.h"
 
 #include "catch.hpp"
-
-#include "Cache/Metadata.h"
 
 #include <stdint.h>
 #include <memory>
 
 using namespace arangodb::cache;
 
-// -----------------------------------------------------------------------------
-// --SECTION--                                                        test suite
-// -----------------------------------------------------------------------------
+TEST_CASE("cache::Metadata", "[cache]") {
+  SECTION("test basic constructor") {
+    uint64_t limit = 1024;
+    Metadata metadata(limit);
+  }
 
-////////////////////////////////////////////////////////////////////////////////
-/// @brief setup
-////////////////////////////////////////////////////////////////////////////////
+  SECTION("test various getters") {
+    uint64_t dummy;
+    std::shared_ptr<Cache> dummyCache(reinterpret_cast<Cache*>(&dummy),
+                                      [](Cache* p) -> void {});
+    uint64_t limit = 1024;
 
-TEST_CASE("CCacheMetadataTest", "[cache]") {
+    Metadata metadata(limit);
+    metadata.link(dummyCache);
 
-////////////////////////////////////////////////////////////////////////////////
-/// @brief test constructor with valid data
-////////////////////////////////////////////////////////////////////////////////
+    metadata.lock();
 
-SECTION("tst_constructor") {
-  uint64_t limit = 1024;
-  Metadata metadata(limit);
+    REQUIRE(dummyCache == metadata.cache());
+
+    REQUIRE(limit == metadata.softLimit());
+    REQUIRE(limit == metadata.hardLimit());
+    REQUIRE(0UL == metadata.usage());
+
+    metadata.unlock();
+  }
+
+  SECTION("verify usage limits are adjusted and enforced correctly") {
+    bool success;
+
+    Metadata metadata(1024ULL);
+
+    metadata.lock();
+
+    success = metadata.adjustUsageIfAllowed(512LL);
+    REQUIRE(success);
+    success = metadata.adjustUsageIfAllowed(512LL);
+    REQUIRE(success);
+    success = metadata.adjustUsageIfAllowed(512LL);
+    REQUIRE(!success);
+
+    success = metadata.adjustLimits(2048ULL, 2048ULL);
+    REQUIRE(success);
+
+    success = metadata.adjustUsageIfAllowed(1024LL);
+    REQUIRE(success);
+
+    success = metadata.adjustLimits(1024ULL, 2048ULL);
+    REQUIRE(success);
+
+    success = metadata.adjustUsageIfAllowed(512LL);
+    REQUIRE(!success);
+    success = metadata.adjustUsageIfAllowed(-512LL);
+    REQUIRE(success);
+    success = metadata.adjustUsageIfAllowed(512LL);
+    REQUIRE(success);
+    success = metadata.adjustUsageIfAllowed(-1024LL);
+    REQUIRE(success);
+    success = metadata.adjustUsageIfAllowed(512LL);
+    REQUIRE(!success);
+
+    success = metadata.adjustLimits(1024ULL, 1024ULL);
+    REQUIRE(success);
+    success = metadata.adjustLimits(512ULL, 512ULL);
+    REQUIRE(!success);
+
+    metadata.unlock();
+  }
+
+  SECTION("test migration-related methods") {
+    uint8_t dummyTable;
+    uint8_t dummyAuxiliaryTable;
+    uint32_t logSize = 1;
+    uint32_t auxiliaryLogSize = 2;
+    uint64_t limit = 1024;
+
+    Metadata metadata(limit);
+
+    metadata.lock();
+
+    metadata.grantAuxiliaryTable(&dummyTable, logSize);
+    metadata.swapTables();
+
+    metadata.grantAuxiliaryTable(&dummyAuxiliaryTable, auxiliaryLogSize);
+    REQUIRE(auxiliaryLogSize == metadata.auxiliaryLogSize());
+    REQUIRE(&dummyAuxiliaryTable == metadata.auxiliaryTable());
+
+    metadata.swapTables();
+    REQUIRE(logSize == metadata.auxiliaryLogSize());
+    REQUIRE(auxiliaryLogSize == metadata.logSize());
+    REQUIRE(&dummyTable == metadata.auxiliaryTable());
+    REQUIRE(&dummyAuxiliaryTable == metadata.table());
+
+    uint8_t* result = metadata.releaseAuxiliaryTable();
+    REQUIRE(0UL == metadata.auxiliaryLogSize());
+    REQUIRE(nullptr == metadata.auxiliaryTable());
+    REQUIRE(result == &dummyTable);
+
+    result = metadata.releaseTable();
+    REQUIRE(0UL == metadata.logSize());
+    REQUIRE(nullptr == metadata.table());
+    REQUIRE(result == &dummyAuxiliaryTable);
+
+    metadata.unlock();
+  }
 }
-
-////////////////////////////////////////////////////////////////////////////////
-/// @brief test getters
-////////////////////////////////////////////////////////////////////////////////
-
-SECTION("tst_getters") {
-  uint64_t dummy;
-  std::shared_ptr<Cache> dummyCache(reinterpret_cast<Cache*>(&dummy),
-                                    [](Cache* p) -> void {});
-  uint64_t limit = 1024;
-
-  Metadata metadata(limit);
-  metadata.link(dummyCache);
-
-  metadata.lock();
-
-  CHECK(dummyCache == metadata.cache());
-
-  CHECK(limit == metadata.softLimit());
-  CHECK(limit == metadata.hardLimit());
-  CHECK(0UL == metadata.usage());
-
-  metadata.unlock();
-}
-
-////////////////////////////////////////////////////////////////////////////////
-/// @brief test usage limits
-////////////////////////////////////////////////////////////////////////////////
-
-SECTION("tst_usage_limits") {
-  bool success;
-
-  Metadata metadata(1024ULL);
-
-  metadata.lock();
-
-  success = metadata.adjustUsageIfAllowed(512LL);
-  CHECK(success);
-  success = metadata.adjustUsageIfAllowed(512LL);
-  CHECK(success);
-  success = metadata.adjustUsageIfAllowed(512LL);
-  CHECK(!success);
-
-  success = metadata.adjustLimits(2048ULL, 2048ULL);
-  CHECK(success);
-
-  success = metadata.adjustUsageIfAllowed(1024LL);
-  CHECK(success);
-
-  success = metadata.adjustLimits(1024ULL, 2048ULL);
-  CHECK(success);
-
-  success = metadata.adjustUsageIfAllowed(512LL);
-  CHECK(!success);
-  success = metadata.adjustUsageIfAllowed(-512LL);
-  CHECK(success);
-  success = metadata.adjustUsageIfAllowed(512LL);
-  CHECK(success);
-  success = metadata.adjustUsageIfAllowed(-1024LL);
-  CHECK(success);
-  success = metadata.adjustUsageIfAllowed(512LL);
-  CHECK(!success);
-
-  success = metadata.adjustLimits(1024ULL, 1024ULL);
-  CHECK(success);
-  success = metadata.adjustLimits(512ULL, 512ULL);
-  CHECK(!success);
-
-  metadata.unlock();
-}
-
-////////////////////////////////////////////////////////////////////////////////
-/// @brief test migration methods
-////////////////////////////////////////////////////////////////////////////////
-
-SECTION("tst_migration") {
-  uint8_t dummyTable;
-  uint8_t dummyAuxiliaryTable;
-  uint32_t logSize = 1;
-  uint32_t auxiliaryLogSize = 2;
-  uint64_t limit = 1024;
-
-  Metadata metadata(limit);
-
-  metadata.lock();
-
-  metadata.grantAuxiliaryTable(&dummyTable, logSize);
-  metadata.swapTables();
-
-  metadata.grantAuxiliaryTable(&dummyAuxiliaryTable, auxiliaryLogSize);
-  CHECK(auxiliaryLogSize == metadata.auxiliaryLogSize());
-  CHECK(&dummyAuxiliaryTable == metadata.auxiliaryTable());
-
-  metadata.swapTables();
-  CHECK(logSize == metadata.auxiliaryLogSize());
-  CHECK(auxiliaryLogSize == metadata.logSize());
-  CHECK(&dummyTable == metadata.auxiliaryTable());
-  CHECK(&dummyAuxiliaryTable == metadata.table());
-
-  uint8_t* result = metadata.releaseAuxiliaryTable();
-  CHECK(0UL == metadata.auxiliaryLogSize());
-  CHECK(nullptr == metadata.auxiliaryTable());
-  CHECK(result == &dummyTable);
-
-  result = metadata.releaseTable();
-  CHECK(0UL == metadata.logSize());
-  CHECK(nullptr == metadata.table());
-  CHECK(result == &dummyAuxiliaryTable);
-
-  metadata.unlock();
-}
-
-////////////////////////////////////////////////////////////////////////////////
-/// @brief generate tests
-////////////////////////////////////////////////////////////////////////////////
-
-}
-
-// Local Variables:
-// mode: outline-minor
-// outline-regexp: "^\\(/// @brief\\|/// {@inheritDoc}\\|/// @addtogroup\\|//
-// --SECTION--\\|/// @\\}\\)"
-// End:

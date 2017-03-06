@@ -34,6 +34,7 @@ add_executable(
   Cache/Metadata.cpp
   Cache/MockScheduler.cpp
   Cache/PlainBucket.cpp
+  Cache/PlainCache.cpp
   Cache/Rebalancer.cpp
   Cache/State.cpp
   Cache/TransactionalBucket.cpp
