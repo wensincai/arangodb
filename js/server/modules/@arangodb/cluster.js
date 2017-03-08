@@ -1827,7 +1827,8 @@ function moveShard (info) {
       'toServer': info.toServer,
       'jobId': id,
       'timeCreated': (new Date()).toISOString(),
-    'creator': ArangoServerState.id() };
+      'creator': ArangoServerState.id(),
+      'isLeader': isLeader };
     global.ArangoAgency.set('Target/ToDo/' + id, todo);
   } catch (e1) {
     return {error: true, errorMessage: 'Cannot write to agency.'};
