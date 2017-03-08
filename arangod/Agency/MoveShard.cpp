@@ -409,7 +409,7 @@ JOB_STATUS MoveShard::pendingLeader() {
             { VPackArrayBuilder guard(&trx);
               for (auto const& srv : VPackArrayIterator(plan)) {
                 if (srv.copyString() == _from) {
-                  trx.add(VPackValue("/" + srv.copyString()));
+                  trx.add(VPackValue("_" + srv.copyString()));
                 } else {
                   trx.add(srv);
                 }
