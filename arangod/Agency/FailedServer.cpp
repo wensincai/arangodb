@@ -243,8 +243,6 @@ bool FailedServer::create(std::shared_ptr<VPackBuilder> envelope) {
     _jb = envelope;
   }
 
-  LOG_TOPIC(INFO, Logger::SUPERVISION) << __FILE__ << __LINE__;
-  
   { VPackArrayBuilder a(_jb.get());
 
     // Operations

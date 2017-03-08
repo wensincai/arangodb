@@ -74,8 +74,8 @@ void Supervision::upgradeAgency() {
       Builder builder;
       builder.openArray();
       builder.openObject();
-      builder.add(
-        _agencyPrefix + failedServersPrefix, VPackValue(VPackValueType::Object));
+      builder.add(_agencyPrefix + failedServersPrefix,
+                  VPackValue(VPackValueType::Object));
       for (auto const& failed :
              VPackArrayIterator(_snapshot(failedServersPrefix).slice())) {
         builder.add(failed.copyString(), VPackValue(VPackValueType::Object));
@@ -594,17 +594,15 @@ bool Supervision::handleJobs() {
 
 // Guarded by caller
 void Supervision::workJobs() {
-  Node::Children const& todos = _snapshot(toDoPrefix).children();
-  Node::Children const& pends = _snapshot(pendingPrefix).children();
 
-  for (auto const& todoEnt : todos) {
-    auto const& job = *todoEnt.second;
-    JobContext(TODO, job("jobId").getString(), _snapshot, _agent).run();
+  for (auto const& todoEnt : _snapshot(toDoPrefix).children()) {
+    JobContext(
+      TODO, (*todoEnt.second)("jobId").getString(), _snapshot, _agent).run();
   }
 
-  for (auto const& pendEnt : pends) {
-    auto const& job = *pendEnt.second;
-    JobContext(PENDING, job("jobId").getString(), _snapshot, _agent).run();
+  for (auto const& pendEnt : _snapshot(pendingPrefix).children()) {
+    JobContext(
+      PENDING, (*pendEnt.second)("jobId").getString(), _snapshot, _agent).run();
   }
   
 }

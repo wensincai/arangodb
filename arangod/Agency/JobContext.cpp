@@ -37,9 +37,9 @@ using namespace arangodb::consensus;
 JobContext::JobContext (JOB_STATUS status, std::string id, Node const& snapshot,
                         AgentInterface* agent) : _job(nullptr) {
 
-  std::string path = Job::agencyPrefix + pos[status] + id;
-  auto const& job     = snapshot(path);
-  auto const& type    = job("type").getString();
+  std::string path = pos[status] + id;
+  auto const& job  = snapshot(path);
+  auto const& type = job("type").getString();
   
   if        (type == "failedLeader") {
     _job =
