@@ -452,6 +452,24 @@ bool Supervision::doChecks() {
 
 
 void Supervision::run() {
+  // First wait until somebody has initialized the ArangoDB data, before
+  // that running the supervision does not make sense and will indeed
+  // lead to horrible errors:
+  LOG_TOPIC(DEBUG, Logger::SUPERVISION) << "_agencyPrefix is " << _agencyPrefix;
+  while (!this->isStopping()) {
+    std::this_thread::sleep_for(std::chrono::duration<double>(5.0));
+    MUTEX_LOCKER(locker, _lock);
+    try {
+      _snapshot = _agent->readDB().get(_agencyPrefix);
+      if (_snapshot.children().size() > 0) {
+        break;
+      }
+    } catch (...) {
+    }
+    LOG_TOPIC(DEBUG, Logger::SUPERVISION) << "Waiting for ArangoDB to "
+      "initialize its data.";
+  }
+
   bool shutdown = false;
   {
     CONDITION_LOCKER(guard, _cv);
@@ -830,9 +848,10 @@ void Supervision::getUniqueIds() {
   while (!this->isStopping()) {
     try {
       MUTEX_LOCKER(locker, _lock);
-      latestId = std::stoul(
-        _agent->readDB().get(_agencyPrefix + "/Sync/LatestID").getString());
-    } catch (...) {
+      latestId = _agent->readDB().get(_agencyPrefix + "/Sync/LatestID").getUInt();
+    } catch (std::exception const& e) {
+      LOG_TOPIC(ERR, Logger::SUPERVISION) << "/Sync/LatestID is no integer, "
+        << e.what();
       std::this_thread::sleep_for(std::chrono::seconds(1));
       continue;
     }
