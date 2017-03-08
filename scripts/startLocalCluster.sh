@@ -12,6 +12,7 @@ function help() {
   echo "  -j/--jwt-secret         JWT-Secret          (string           default: )"
   echo "     --log-level-agency   Log level (agency)  (string           default: )"
   echo "     --log-level-cluster  Log level (cluster) (string           default: )"
+  echo "     --log-level-supervision  Log level       (string           default: )"
   echo "  -i/--interactive        Interactive mode    (C|D|R            default: '')"
   echo "  -x/--xterm              XTerm command       (default: xterm)"
   echo "  -o/--xterm-options      XTerm options       (default: --geometry=80x43)"
@@ -33,6 +34,7 @@ TRANSPORT="tcp"
 LOG_LEVEL="INFO"
 LOG_LEVEL_AGENCY=""
 LOG_LEVEL_CLUSTER=""
+LOG_LEVEL_SUPERVISION=""
 if [ -z "$XTERM" ] ; then
     XTERM="x-terminal-emulator"
 fi
@@ -72,6 +74,10 @@ while [[ ${1} ]]; do
       ;;
     --log-level-cluster)
       LOG_LEVEL_CLUSTER=${2}
+      shift
+      ;;
+    --log-level-supervision)
+      LOG_LEVEL_SUPERVISION=${2}
       shift
       ;;
     -i|--interactive)
@@ -214,6 +220,7 @@ for aid in `seq 0 $(( $NRAGENTS - 1 ))`; do
         --log.file cluster/$port.log \
         --log.force-direct true \
         --log.level agency=$LOG_LEVEL_AGENCY \
+        --log.level supervision=$LOG_LEVEL_SUPERVISION \
         $AUTHENTICATION \
         $SSLKEYFILE \
         | tee cluster/$PORT.stdout 2>&1 &
