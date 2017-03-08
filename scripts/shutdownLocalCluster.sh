@@ -88,7 +88,7 @@ i=0
 PORTTOPCO=`expr $CO_BASE + $NRCOORDINATORS - 1`
 for p in `seq $CO_BASE $PORTTOPCO` ; do
     pid=`ps -eaf|grep data${p}|grep arangod|awk '{print $2}'`
-    if [ z$pid != "z" ]; then
+    if [ ! -z "$pid" ]; then
         pids[$i]=$pid
         let i=i+1
     fi
@@ -99,7 +99,7 @@ echo -n "Shutting down DBServers... "
 PORTTOPDB=`expr $DB_BASE + $NRDBSERVERS - 1`
 for p in `seq $DB_BASE $PORTTOPDB` ; do
     pid=`ps -eaf|grep data${p}|grep arangod|awk '{print $2}'`
-    if [ z$pid != "z" ]; then
+    if [ ! -z "$pid" ]; then
         pids[$i]=$pid
         let i=i+1
     fi
@@ -126,7 +126,7 @@ i=0;
 for aid in `seq 0 $(( $NRAGENTS - 1 ))`; do
     PORT=`expr $AG_BASE + $aid`
     pid=`ps -eaf|grep data${PORT}|grep arangod|awk '{print $2}'`
-    if [ z$pid != "z" ]; then
+    if [ ! -z "$pid" ]; then
         apids[$i]=$pid
         let i=i+1
     fi
