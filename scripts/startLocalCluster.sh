@@ -13,7 +13,7 @@ function help() {
   echo "     --log-level-agency   Log level (agency)  (string           default: )"
   echo "     --log-level-cluster  Log level (cluster) (string           default: )"
   echo "     --log-level-supervision  Log level       (string           default: )"
-  echo "  -i/--interactive        Interactive mode    (C|D|R            default: '')"
+  echo "  -i/--interactive        Interactive mode    (C|R              default: '')"
   echo "  -x/--xterm              XTerm command       (default: xterm)"
   echo "  -o/--xterm-options      XTerm options       (default: --geometry=80x43)"
   echo "  -b/--offset-ports       Offset ports        (default: 0, i.e. A:4001, C:8530, D:8629)"
@@ -22,7 +22,6 @@ function help() {
   echo "  scripts/startLocalCluster.sh"
   echo "  scripts/startLocalCluster.sh -a 1 -c 1 -d 3 -t ssl"
   echo "  scripts/startLocalCluster.sh -a 3 -c 1 -d 2 -t tcp -i C"
-  
 }
 
 # defaults

@@ -24,7 +24,7 @@
 #include "FailedServer.h"
 #include "JobContext.h"
 
-#include "Agency/Agent.h"
+#include "Agency/AgentInterface.h"
 #include "Agency/FailedLeader.h"
 #include "Agency/FailedFollower.h"
 #include "Agency/Job.h"
@@ -32,12 +32,12 @@
 
 using namespace arangodb::consensus;
 
-FailedServer::FailedServer(Node const& snapshot, Agent* agent,
+FailedServer::FailedServer(Node const& snapshot, AgentInterface* agent,
                            std::string const& jobId, std::string const& creator,
                            std::string const& server)
     : Job(NOTFOUND, snapshot, agent, jobId, creator), _server(server) {}
 
-FailedServer::FailedServer(Node const& snapshot, Agent* agent,
+FailedServer::FailedServer(Node const& snapshot, AgentInterface* agent,
                            JOB_STATUS status, std::string const& jobId)
     : Job(status, snapshot, agent, jobId) {
   // Get job details from jobId:

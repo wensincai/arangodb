@@ -23,19 +23,19 @@
 
 #include "CleanOutServer.h"
 
-#include "Agency/Agent.h"
+#include "Agency/AgentInterface.h"
 #include "Agency/Job.h"
 #include "Agency/MoveShard.h"
 
 using namespace arangodb::consensus;
 
-CleanOutServer::CleanOutServer(Node const& snapshot, Agent* agent,
+CleanOutServer::CleanOutServer(Node const& snapshot, AgentInterface* agent,
                                std::string const& jobId,
                                std::string const& creator,
                                std::string const& server)
     : Job(NOTFOUND, snapshot, agent, jobId, creator), _server(id(server)) {}
 
-CleanOutServer::CleanOutServer(Node const& snapshot, Agent* agent,
+CleanOutServer::CleanOutServer(Node const& snapshot, AgentInterface* agent,
                                JOB_STATUS status, std::string const& jobId)
     : Job(status, snapshot, agent, jobId) {
   // Get job details from agency:

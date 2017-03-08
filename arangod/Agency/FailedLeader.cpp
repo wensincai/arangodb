@@ -31,7 +31,7 @@
 
 using namespace arangodb::consensus;
 
-FailedLeader::FailedLeader(Node const& snapshot, Agent* agent,
+FailedLeader::FailedLeader(Node const& snapshot, AgentInterface* agent,
                            std::string const& jobId, std::string const& creator,
                            std::string const& database,
                            std::string const& collection,
@@ -44,7 +44,7 @@ FailedLeader::FailedLeader(Node const& snapshot, Agent* agent,
       _from(from),
       _to(to) {}
 
-FailedLeader::FailedLeader(Node const& snapshot, Agent* agent,
+FailedLeader::FailedLeader(Node const& snapshot, AgentInterface* agent,
                            JOB_STATUS status, std::string const& jobId)
     : Job(status, snapshot, agent, jobId) {
   // Get job details from agency:

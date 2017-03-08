@@ -42,7 +42,7 @@ public:
 
   /// @brief Contextualize arbitrary Job
   JobContext(JOB_STATUS status, std::string id, Node const& snapshot,
-             Agent* agent);
+             AgentInterface* agent);
 
   /// @brief Create job
   void create(std::shared_ptr<VPackBuilder> b = nullptr);

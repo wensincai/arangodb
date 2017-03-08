@@ -28,6 +28,7 @@
 #include "Agency/AgentActivator.h"
 #include "Agency/AgentCallback.h"
 #include "Agency/AgentConfiguration.h"
+#include "Agency/AgentInterface.h"
 #include "Agency/Compactor.h"
 #include "Agency/Constituent.h"
 #include "Agency/Inception.h"
@@ -39,12 +40,10 @@ struct TRI_vocbase_t;
 
 namespace arangodb {
 namespace consensus {
-class Agent : public arangodb::Thread {
+class Agent : public arangodb::Thread,
+              public AgentInterface {
 
  public:
-  /// @brief Possible outcome of write process
-  enum raft_commit_t {OK, UNKNOWN, TIMEOUT};
-  
   /// @brief Construct with program options
   explicit Agent(config_t const&);
 
@@ -98,7 +97,7 @@ class Agent : public arangodb::Thread {
   trans_ret_t transient(query_t const&);
 
   /// @brief Attempt write
-  write_ret_t write(query_t const&);
+  write_ret_t write(query_t const&) override;
 
   /// @brief Read from agency
   read_ret_t read(query_t const&);
@@ -148,7 +147,7 @@ class Agent : public arangodb::Thread {
   void reportIn(std::string const&, index_t, size_t = 0);
 
   /// @brief Wait for slaves to confirm appended entries
-  raft_commit_t waitFor(index_t last_entry, double timeout = 2.0);
+  AgentInterface::raft_commit_t waitFor(index_t last_entry, double timeout = 2.0) override;
 
   /// @brief Convencience size of agency
   size_t size() const;

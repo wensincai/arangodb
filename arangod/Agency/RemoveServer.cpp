@@ -28,12 +28,12 @@
 
 using namespace arangodb::consensus;
 
-RemoveServer::RemoveServer(Node const& snapshot, Agent* agent,
+RemoveServer::RemoveServer(Node const& snapshot, AgentInterface* agent,
                            std::string const& jobId, std::string const& creator,
                            std::string const& server)
     : Job(NOTFOUND, snapshot, agent, jobId, creator), _server(server) {}
 
-RemoveServer::RemoveServer(Node const& snapshot, Agent* agent,
+RemoveServer::RemoveServer(Node const& snapshot, AgentInterface* agent,
                            JOB_STATUS status, std::string const& jobId)
     : Job(status, snapshot, agent, jobId) {
   // Get job details from agency:

@@ -31,7 +31,7 @@ namespace arangodb {
 namespace consensus {
 
 struct FailedLeader : public Job {
-  FailedLeader(Node const& snapshot, Agent* agent, std::string const& jobId,
+  FailedLeader(Node const& snapshot, AgentInterface* agent, std::string const& jobId,
                std::string const& creator = std::string(),
                std::string const& database = std::string(),
                std::string const& collection = std::string(),
@@ -39,7 +39,7 @@ struct FailedLeader : public Job {
                std::string const& from = std::string(),
                std::string const& to = std::string());
 
-  FailedLeader(Node const& snapshot, Agent* agent,
+  FailedLeader(Node const& snapshot, AgentInterface* agent,
                JOB_STATUS status, std::string const& jobId);
 
   virtual ~FailedLeader();
