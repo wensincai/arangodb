@@ -455,7 +455,6 @@ void Supervision::run() {
   // First wait until somebody has initialized the ArangoDB data, before
   // that running the supervision does not make sense and will indeed
   // lead to horrible errors:
-  LOG_TOPIC(DEBUG, Logger::SUPERVISION) << "_agencyPrefix is " << _agencyPrefix;
   while (!this->isStopping()) {
     std::this_thread::sleep_for(std::chrono::duration<double>(5.0));
     MUTEX_LOCKER(locker, _lock);

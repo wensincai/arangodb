@@ -1786,6 +1786,20 @@ function moveShard (info) {
   var isLeader;
   var collInfo;
   try {
+    // First translate server names from short names to long names:
+    var servers = global.ArangoClusterInfo.getDBServers();
+    for (let i = 0; i < servers.length; i++) {
+      if (servers[i].serverId != info.fromServer) {
+        if (servers[i].serverName == info.fromServer) {
+          info.fromServer = servers[i].serverId;
+        }
+      }
+      if (servers[i].serverId != info.toServer) {
+        if (servers[i].serverName == info.toServer) {
+          info.toServer = servers[i].serverId;
+        }
+      }
+    }
     collInfo = global.ArangoClusterInfo.getCollectionInfo(info.database,
       info.collection);
     var shards = collInfo.shards;
@@ -1807,8 +1821,8 @@ function moveShard (info) {
     id = global.ArangoClusterInfo.uniqid();
     var todo = { 'type': 'moveShard',
       'database': info.database,
-      'collections': [collInfo.id],
-      'shards': [info.shard],
+      'collection': collInfo.id,
+      'shard': info.shard,
       'fromServer': info.fromServer,
       'toServer': info.toServer,
       'jobId': id,
