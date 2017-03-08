@@ -167,7 +167,7 @@ void Agent::startConstituent() {
 }
 
 // Waits here for confirmation of log's commits up to index. Timeout in seconds.
-Agent::raft_commit_t Agent::waitFor(index_t index, double timeout) {
+AgentInterface::raft_commit_t Agent::waitFor(index_t index, double timeout) {
 
   if (size() == 1) {  // single host agency
     return Agent::raft_commit_t::OK;

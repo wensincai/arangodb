@@ -31,11 +31,11 @@ namespace arangodb {
 namespace consensus {
 
 struct CleanOutServer : public Job {
-  CleanOutServer(Node const& snapshot, Agent* agent, std::string const& jobId,
+  CleanOutServer(Node const& snapshot, AgentInterface* agent, std::string const& jobId,
                  std::string const& creator = std::string(),
                  std::string const& server = std::string());
 
-  CleanOutServer(Node const& snapshot, Agent* agent,
+  CleanOutServer(Node const& snapshot, AgentInterface* agent,
                  JOB_STATUS status, std::string const& jobId);
 
   virtual ~CleanOutServer();

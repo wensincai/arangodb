@@ -30,8 +30,10 @@
 namespace arangodb {
 namespace consensus {
 
+class AgentInterface;
+
 struct UnassumedLeadership : public Job {
-  UnassumedLeadership(Node const& snapshot, Agent* agent,
+  UnassumedLeadership(Node const& snapshot, AgentInterface* agent,
                       std::string const& jobId,
                       std::string const& creator = std::string(),
                       std::string const& database = std::string(),
@@ -39,7 +41,7 @@ struct UnassumedLeadership : public Job {
                       std::string const& shard = std::string(),
                       std::string const& server = std::string());
 
-  UnassumedLeadership(Node const& snapshot, Agent* agent,
+  UnassumedLeadership(Node const& snapshot, AgentInterface* agent,
                       JOB_STATUS status, std::string const& jobId);
 
   virtual ~UnassumedLeadership();

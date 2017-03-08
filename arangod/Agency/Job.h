@@ -24,7 +24,7 @@
 #ifndef ARANGOD_CONSENSUS_JOB_H
 #define ARANGOD_CONSENSUS_JOB_H 1
 
-#include "Agent.h"
+#include "AgentInterface.h"
 #include "Node.h"
 #include "Supervision.h"
 
@@ -62,7 +62,7 @@ static std::string const planVersion = "/Plan/Version";
 static std::string const plannedServers = "/Plan/DBServers";
 static std::string const healthPrefix = "/Supervision/Health/";
 
-inline arangodb::consensus::write_ret_t transact(Agent* _agent,
+inline arangodb::consensus::write_ret_t transact(AgentInterface* _agent,
                                                  Builder const& transaction,
                                                  bool waitForCommit = true) {
   query_t envelope = std::make_shared<Builder>();
@@ -106,7 +106,7 @@ struct Job {
       collection(c), shard(s) {}
   };
   
-  Job(JOB_STATUS status, Node const& snapshot, Agent* agent,
+  Job(JOB_STATUS status, Node const& snapshot, AgentInterface* agent,
       std::string const& jobId, std::string const& creator = std::string());
 
   virtual ~Job();
@@ -155,7 +155,7 @@ struct Job {
 
   JOB_STATUS _status;
   Node const _snapshot;
-  Agent* _agent;
+  AgentInterface* _agent;
   std::string _jobId;
   std::string _creator;
   static std::string agencyPrefix;  // will be initialized in AgencyFeature

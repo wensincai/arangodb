@@ -1,7 +1,7 @@
 ////////////////////////////////////////////////////////////////////////////////
 /// DISCLAIMER
 ///
-/// Copyright 2014-2016 ArangoDB GmbH, Cologne, Germany
+/// Copyright 2014-2017 ArangoDB GmbH, Cologne, Germany
 /// Copyright 2004-2014 triAGENS GmbH, Cologne, Germany
 ///
 /// Licensed under the Apache License, Version 2.0 (the "License");
@@ -18,37 +18,27 @@
 ///
 /// Copyright holder is ArangoDB GmbH, Cologne, Germany
 ///
-/// @author Kaveh Vahedipour
+/// @author Andreas Streichardt
 ////////////////////////////////////////////////////////////////////////////////
 
-#ifndef ARANGOD_CONSENSUS_FAILED_SERVER_H
-#define ARANGOD_CONSENSUS_FAILED_SERVER_H 1
+#ifndef ARANGOD_CONSENSUS_AGENT_INTERFACE_H
+#define ARANGOD_CONSENSUS_AGENT_INTERFACE_H 1
 
-#include "Job.h"
-#include "Supervision.h"
+#include "Agency/AgencyCommon.h"
 
 namespace arangodb {
 namespace consensus {
+class AgentInterface {
+ public:
+  /// @brief Possible outcome of write process
+  enum raft_commit_t {OK, UNKNOWN, TIMEOUT};
+ 
+  /// @brief Attempt write
+  virtual write_ret_t write(query_t const&) = 0;
 
-struct FailedServer : public Job {
-  FailedServer(Node const& snapshot, AgentInterface* agent, std::string const& jobId,
-               std::string const& creator = std::string(),
-               std::string const& failed = std::string());
-
-  FailedServer(Node const& snapshot, AgentInterface* agent,
-               JOB_STATUS status, std::string const& jobId);
-
-  virtual ~FailedServer();
-
-  virtual bool start() override final;
-  virtual bool create(std::shared_ptr<VPackBuilder> b = nullptr) override final;
-  virtual JOB_STATUS status() override final;
-  virtual void run() override final;
-  virtual void abort() override final;
-
-  std::string _server;
+  /// @brief Wait for slaves to confirm appended entries
+  virtual raft_commit_t waitFor(index_t last_entry, double timeout = 2.0) = 0;
 };
 }
 }
-
 #endif

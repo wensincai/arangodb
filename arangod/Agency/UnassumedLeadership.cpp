@@ -23,13 +23,13 @@
 
 #include "UnassumedLeadership.h"
 
-#include "Agency/Agent.h"
+#include "Agency/AgentInterface.h"
 #include "Agency/Job.h"
 
 using namespace arangodb::consensus;
 
 UnassumedLeadership::UnassumedLeadership(
-    Node const& snapshot, Agent* agent, std::string const& jobId,
+    Node const& snapshot, AgentInterface* agent, std::string const& jobId,
     std::string const& creator,
     std::string const& database, std::string const& collection,
     std::string const& shard, std::string const& server)
@@ -37,7 +37,7 @@ UnassumedLeadership::UnassumedLeadership(
       _collection(collection), _shard(shard), _from(server) {}
 
 UnassumedLeadership::UnassumedLeadership(
-    Node const& snapshot, Agent* agent,
+    Node const& snapshot, AgentInterface* agent,
     JOB_STATUS status, std::string const& jobId)
     : Job(status, snapshot, agent, jobId) {
   // Get job details from agency:

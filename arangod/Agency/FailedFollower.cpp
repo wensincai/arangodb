@@ -28,7 +28,7 @@
 
 using namespace arangodb::consensus;
 
-FailedFollower::FailedFollower(Node const& snapshot, Agent* agent,
+FailedFollower::FailedFollower(Node const& snapshot, AgentInterface* agent,
                                std::string const& jobId,
                                std::string const& creator,
                                std::string const& database,
@@ -43,7 +43,7 @@ FailedFollower::FailedFollower(Node const& snapshot, Agent* agent,
       _from(from),
       _to(to) {}
 
-FailedFollower::FailedFollower(Node const& snapshot, Agent* agent,
+FailedFollower::FailedFollower(Node const& snapshot, AgentInterface* agent,
                                JOB_STATUS status, std::string const& jobId)
     : Job(status, snapshot, agent, jobId) {
 

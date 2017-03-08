@@ -23,12 +23,12 @@
 
 #include "MoveShard.h"
 
-#include "Agency/Agent.h"
+#include "Agency/AgentInterface.h"
 #include "Agency/Job.h"
 
 using namespace arangodb::consensus;
 
-MoveShard::MoveShard(Node const& snapshot, Agent* agent,
+MoveShard::MoveShard(Node const& snapshot, AgentInterface* agent,
                      std::string const& jobId, std::string const& creator,
                      std::string const& database,
                      std::string const& collection, std::string const& shard,
@@ -43,7 +43,7 @@ MoveShard::MoveShard(Node const& snapshot, Agent* agent,
       _isLeader(isLeader) // will be initialized properly when information known
 { }
 
-MoveShard::MoveShard(Node const& snapshot, Agent* agent,
+MoveShard::MoveShard(Node const& snapshot, AgentInterface* agent,
                      JOB_STATUS status, std::string const& jobId)
     : Job(status, snapshot, agent, jobId) {
   // Get job details from agency:

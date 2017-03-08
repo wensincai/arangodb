@@ -49,7 +49,7 @@ bool arangodb::consensus::compareServerLists(Slice plan, Slice current) {
   return equalLeader && currv == planv;
 }
 
-Job::Job(JOB_STATUS status, Node const& snapshot, Agent* agent,
+Job::Job(JOB_STATUS status, Node const& snapshot, AgentInterface* agent,
          std::string const& jobId, std::string const& creator)
   : _status(status),
     _snapshot(snapshot),
