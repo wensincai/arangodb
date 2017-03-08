@@ -310,13 +310,18 @@ void Job::addRemoveJobFromSomewhere(Builder& trx, std::string where,
 
 void Job::addPutJobIntoSomewhere(Builder& trx, std::string where, Slice job,
     std::string reason) {
-  Slice jobIdSlice = job.get("id");
+  Slice jobIdSlice = job.get("jobId");
   TRI_ASSERT(jobIdSlice.isString());
   std::string jobId = jobIdSlice.copyString();
   trx.add(VPackValue(agencyPrefix + "/Target/" + where + "/" + jobId));
   { VPackObjectBuilder guard(&trx);
-    trx.add("timeFinished",
-      VPackValue(timepointToString(std::chrono::system_clock::now())));
+    if (where == "Pending") {
+      trx.add("timeStarted",
+        VPackValue(timepointToString(std::chrono::system_clock::now())));
+    } else {
+      trx.add("timeFinished",
+        VPackValue(timepointToString(std::chrono::system_clock::now())));
+    }
     for (auto const& obj : VPackObjectIterator(job)) {
       trx.add(obj.key.copyString(), obj.value);
     }

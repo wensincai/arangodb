@@ -138,9 +138,7 @@ bool MoveShard::start() {
            "collection has been dropped in the meantime");
     return false;
   }
-  std::string distributeShardsLike
-      = collection("distributeShardsLike").getString();
-  if (!distributeShardsLike.empty()) {
+  if (collection.exists("distributeShardsLike").size() == 1) {
     finish("Shards/" + _shard, false,
            "collection must not have 'distributeShardsLike' attribute");
     return false;
@@ -197,18 +195,16 @@ bool MoveShard::start() {
   catch (...) {
     // ignore this check
     failedServersBuilder.clear();
-    {
-      VPackArrayBuilder guard(&failedServersBuilder); 
+    { VPackObjectBuilder guard(&failedServersBuilder); 
     }
   }
   VPackSlice failedServers = failedServersBuilder.slice();
-  if (failedServers.isArray()) {
-    for (auto const& x : VPackArrayIterator(failedServers)) {
-      if (x.isString() && x.copyString() == _to) {
-        finish("Shards/" + _shard, false,
-               "toServer must not be in `Target/FailedServers`");
-        return false;
-      }
+  if (failedServers.isObject()) {
+    Slice found = failedServers.get(_to);
+    if (!found.isNone()) {
+      finish("Shards/" + _shard, false,
+             "toServer must not be in `Target/FailedServers`");
+      return false;
     }
   }
 

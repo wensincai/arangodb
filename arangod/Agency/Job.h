@@ -114,19 +114,20 @@ struct Job {
   virtual void run() = 0;
 
   void runHelper(std::string const& removePlace) {
-		try {
-			if (_status == TODO) {
-				start();
-			} else if (_status == NOTFOUND) {
-				if (create(nullptr)) {
-					start();
-				}
-			}
-		} catch (std::exception const& e) {
-			LOG_TOPIC(WARN, Logger::AGENCY) << e.what() << ": " << __FILE__
+    status();   // This runs everything to to with state PENDING if needed!
+    try {
+      if (_status == TODO) {
+        start();
+      } else if (_status == NOTFOUND) {
+        if (create(nullptr)) {
+          start();
+        }
+      }
+    } catch (std::exception const& e) {
+      LOG_TOPIC(WARN, Logger::AGENCY) << e.what() << ": " << __FILE__
         << ":" << __LINE__;
-			finish(removePlace, false, e.what());
-		}
+      finish(removePlace, false, e.what());
+    }
   }
 
   virtual void abort() = 0;
@@ -163,9 +164,9 @@ struct Job {
   std::shared_ptr<Builder> _jb;
   
   static void doForAllShards(Node const& snapshot,
-		std::string& database,
-		std::vector<shard_t>& shards,
-		std::function<void(Slice plan, Slice current, std::string& planPath)> worker);
+    std::string& database,
+    std::vector<shard_t>& shards,
+    std::function<void(Slice plan, Slice current, std::string& planPath)> worker);
 
   // The following methods adds an operation to a transaction object or
   // a condition to a precondition object. In all cases, the builder trx
