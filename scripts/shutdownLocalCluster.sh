@@ -1,7 +1,7 @@
 #!/bin/bash
 
 function help() {
-  echo "USAGE: scripts/startLocalCluster.sh [options]"
+  echo "USAGE: scripts/shutdownLocalCluster.sh [options]"
   echo ""
   echo "OPTIONS:"
   echo "  -a/--nagents            # agents            (odd integer      default: 1))"
@@ -11,8 +11,8 @@ function help() {
   echo "  -t/--transport          Protocol            (ssl|tcp          default: tcp)"
   echo ""
   echo "EXAMPLES:"
-  echo "  scripts/startLocalCluster.sh"
-  echo "  scripts/startLocalCluster.sh -a 1 -c 1 -d 3 -t ssl"
+  echo "  scripts/shutdownLocalCluster.sh"
+  echo "  scripts/shutdownLocalCluster.sh -a 1 -c 1 -d 3 -t ssl"
 }
 
 #defaults
