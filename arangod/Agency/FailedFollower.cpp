@@ -104,7 +104,6 @@ bool FailedFollower::create(std::shared_ptr<VPackBuilder> envelope) {
         _jb->add("shard", VPackValue(_shard));
         _jb->add("fromServer", VPackValue(_from));
         _jb->add("toServer", VPackValue(_to));
-        _jb->add("isLeader", VPackValue(false));
         _jb->add("jobId", VPackValue(_jobId));
         _jb->add("timeCreated",
                  VPackValue(timepointToString(system_clock::now()))); }
