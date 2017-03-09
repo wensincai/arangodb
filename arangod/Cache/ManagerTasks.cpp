@@ -31,12 +31,8 @@
 using namespace arangodb::cache;
 
 FreeMemoryTask::FreeMemoryTask(Manager::TaskEnvironment environment,
-                               Manager* manager, Manager::MetadataItr& metadata)
-    : _environment(environment), _manager(manager) {
-  metadata->lock();
-  _cache = metadata->cache();
-  metadata->unlock();
-}
+                               Manager* manager, std::shared_ptr<Cache> cache)
+    : _environment(environment), _manager(manager), _cache(cache) {}
 
 FreeMemoryTask::~FreeMemoryTask() {}
 
@@ -58,7 +54,7 @@ void FreeMemoryTask::run() {
 
   if (ran) {
     _manager->_state.lock();
-    auto metadata = _cache->metadata();
+    Metadata* metadata = _cache->metadata();
     metadata->lock();
     uint64_t reclaimed = metadata->hardLimit() - metadata->softLimit();
     metadata->adjustLimits(metadata->softLimit(), metadata->softLimit());
@@ -72,12 +68,12 @@ void FreeMemoryTask::run() {
 }
 
 MigrateTask::MigrateTask(Manager::TaskEnvironment environment, Manager* manager,
-                         Manager::MetadataItr& metadata)
-    : _environment(environment), _manager(manager) {
-  metadata->lock();
-  _cache = metadata->cache();
-  metadata->unlock();
-}
+                         std::shared_ptr<Cache> cache,
+                         std::shared_ptr<Table> table)
+    : _environment(environment),
+      _manager(manager),
+      _cache(cache),
+      _table(table) {}
 
 MigrateTask::~MigrateTask() {}
 
@@ -96,16 +92,14 @@ bool MigrateTask::dispatch() {
 
 void MigrateTask::run() {
   // do the actual migration
-  bool ran = _cache->migrate();
+  bool ran = _cache->migrate(_table);
 
-  if (ran) {
-    _manager->_state.lock();
-    auto metadata = _cache->metadata();
+  if (!ran) {
+    Metadata* metadata = _cache->metadata();
     metadata->lock();
-    _manager->reclaimTables(metadata, true);
     metadata->toggleFlag(State::Flag::migrating);
     metadata->unlock();
-    _manager->_state.unlock();
+    _manager->reclaimTable(_table);
   }
 
   _manager->unprepareTask(_environment);

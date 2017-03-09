@@ -27,6 +27,7 @@
 
 #include "Cache/TransactionalCache.h"
 #include "Basics/Common.h"
+#include "Cache/Common.h"
 #include "Cache/Manager.h"
 #include "Cache/Transaction.h"
 #include "Random/RandomGenerator.h"
@@ -45,10 +46,10 @@ using namespace arangodb::cache;
 TEST_CASE("cache::TransactionalCache", "[cache][!hide][longRunning]") {
   SECTION("test basic cache construction") {
     Manager manager(nullptr, 1024ULL * 1024ULL);
-    auto cache1 = manager.createCache(Manager::CacheType::Transactional,
-                                      256ULL * 1024ULL, false);
-    auto cache2 = manager.createCache(Manager::CacheType::Transactional,
-                                      512ULL * 1024ULL, false);
+    auto cache1 =
+        manager.createCache(CacheType::Transactional, 256ULL * 1024ULL, false);
+    auto cache2 =
+        manager.createCache(CacheType::Transactional, 512ULL * 1024ULL, false);
 
     REQUIRE(0ULL == cache1->usage());
     REQUIRE(256ULL * 1024ULL == cache1->limit());
@@ -62,8 +63,8 @@ TEST_CASE("cache::TransactionalCache", "[cache][!hide][longRunning]") {
   SECTION("verify that insertion works as expected") {
     uint64_t cacheLimit = 256ULL * 1024ULL;
     Manager manager(nullptr, 4ULL * cacheLimit);
-    auto cache = manager.createCache(Manager::CacheType::Transactional,
-                                     cacheLimit, false);
+    auto cache =
+        manager.createCache(CacheType::Transactional, cacheLimit, false);
 
     for (uint64_t i = 0; i < 1024; i++) {
       CachedValue* value =
@@ -106,8 +107,8 @@ TEST_CASE("cache::TransactionalCache", "[cache][!hide][longRunning]") {
   SECTION("verify removal works as expected") {
     uint64_t cacheLimit = 256ULL * 1024ULL;
     Manager manager(nullptr, 4ULL * cacheLimit);
-    auto cache = manager.createCache(Manager::CacheType::Transactional,
-                                     cacheLimit, false);
+    auto cache =
+        manager.createCache(CacheType::Transactional, cacheLimit, false);
 
     for (uint64_t i = 0; i < 1024; i++) {
       CachedValue* value =
@@ -147,8 +148,8 @@ TEST_CASE("cache::TransactionalCache", "[cache][!hide][longRunning]") {
   SECTION("verify blacklisting works as expected") {
     uint64_t cacheLimit = 256ULL * 1024ULL;
     Manager manager(nullptr, 4ULL * cacheLimit);
-    auto cache = manager.createCache(Manager::CacheType::Transactional,
-                                     cacheLimit, false);
+    auto cache =
+        manager.createCache(CacheType::Transactional, cacheLimit, false);
 
     Transaction* tx = manager.beginTransaction(false);
 
@@ -201,8 +202,8 @@ TEST_CASE("cache::TransactionalCache", "[cache][!hide][longRunning]") {
     uint64_t minimumSize = 64ULL * initialSize;
     MockScheduler scheduler(4);
     Manager manager(scheduler.ioService(), 1024ULL * 1024ULL * 1024ULL);
-    auto cache = manager.createCache(Manager::CacheType::Transactional,
-                                     initialSize, true);
+    auto cache =
+        manager.createCache(CacheType::Transactional, initialSize, true);
 
     for (uint64_t i = 0; i < 4ULL * 1024ULL * 1024ULL; i++) {
       CachedValue* value =
@@ -223,8 +224,8 @@ TEST_CASE("cache::TransactionalCache", "[cache][!hide][longRunning]") {
     RandomGenerator::initialize(RandomGenerator::RandomType::MERSENNE);
     MockScheduler scheduler(4);
     Manager manager(scheduler.ioService(), 1024ULL * 1024ULL * 1024ULL);
-    auto cache = manager.createCache(Manager::CacheType::Transactional,
-                                     initialSize, true);
+    auto cache =
+        manager.createCache(CacheType::Transactional, initialSize, true);
 
     for (uint64_t i = 0; i < 16ULL * 1024ULL * 1024ULL; i++) {
       CachedValue* value =
@@ -263,8 +264,8 @@ TEST_CASE("cache::TransactionalCache", "[cache][!hide][longRunning]") {
     MockScheduler scheduler(4);
     Manager manager(scheduler.ioService(), 1024ULL * 1024ULL * 1024ULL);
     size_t threadCount = 4;
-    std::shared_ptr<Cache> cache = manager.createCache(
-        Manager::CacheType::Transactional, initialSize, true);
+    std::shared_ptr<Cache> cache =
+        manager.createCache(CacheType::Transactional, initialSize, true);
 
     uint64_t chunkSize = 16 * 1024 * 1024;
     uint64_t initialInserts = 4 * 1024 * 1024;

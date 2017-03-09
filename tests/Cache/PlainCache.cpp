@@ -27,6 +27,7 @@
 
 #include "Cache/PlainCache.h"
 #include "Basics/Common.h"
+#include "Cache/Common.h"
 #include "Cache/Manager.h"
 #include "Random/RandomGenerator.h"
 
@@ -45,9 +46,10 @@ TEST_CASE("cache::PlainCache", "[cache][!hide][longRunning]") {
   SECTION("test basic cache creation") {
     Manager manager(nullptr, 1024ULL * 1024ULL);
     auto cache1 =
-        manager.createCache(Manager::CacheType::Plain, 256ULL * 1024ULL, false);
+        manager.createCache(CacheType::Plain, 256ULL * 1024ULL, false);
+    REQUIRE(true);
     auto cache2 =
-        manager.createCache(Manager::CacheType::Plain, 512ULL * 1024ULL, false);
+        manager.createCache(CacheType::Plain, 512ULL * 1024ULL, false);
 
     REQUIRE(0ULL == cache1->usage());
     REQUIRE(256ULL * 1024ULL == cache1->limit());
@@ -61,8 +63,7 @@ TEST_CASE("cache::PlainCache", "[cache][!hide][longRunning]") {
   SECTION("check that insertion works as expected") {
     uint64_t cacheLimit = 256ULL * 1024ULL;
     Manager manager(nullptr, 4ULL * cacheLimit);
-    auto cache =
-        manager.createCache(Manager::CacheType::Plain, cacheLimit, false);
+    auto cache = manager.createCache(CacheType::Plain, cacheLimit, false);
 
     for (uint64_t i = 0; i < 1024; i++) {
       CachedValue* value =
@@ -105,8 +106,7 @@ TEST_CASE("cache::PlainCache", "[cache][!hide][longRunning]") {
   SECTION("test that removal works as expected") {
     uint64_t cacheLimit = 256ULL * 1024ULL;
     Manager manager(nullptr, 4ULL * cacheLimit);
-    auto cache =
-        manager.createCache(Manager::CacheType::Plain, cacheLimit, false);
+    auto cache = manager.createCache(CacheType::Plain, cacheLimit, false);
 
     for (uint64_t i = 0; i < 1024; i++) {
       CachedValue* value =
@@ -148,8 +148,7 @@ TEST_CASE("cache::PlainCache", "[cache][!hide][longRunning]") {
     uint64_t minimumSize = 64ULL * initialSize;
     MockScheduler scheduler(4);
     Manager manager(scheduler.ioService(), 1024ULL * 1024ULL * 1024ULL);
-    auto cache =
-        manager.createCache(Manager::CacheType::Plain, initialSize, true);
+    auto cache = manager.createCache(CacheType::Plain, initialSize, true);
 
     for (uint64_t i = 0; i < 4ULL * 1024ULL * 1024ULL; i++) {
       CachedValue* value =
@@ -160,7 +159,7 @@ TEST_CASE("cache::PlainCache", "[cache][!hide][longRunning]") {
       }
     }
 
-    REQUIRE(cache->usage() > minimumSize);
+    CHECK(cache->usage() > minimumSize);
 
     manager.destroyCache(cache);
   }
@@ -170,8 +169,7 @@ TEST_CASE("cache::PlainCache", "[cache][!hide][longRunning]") {
     RandomGenerator::initialize(RandomGenerator::RandomType::MERSENNE);
     MockScheduler scheduler(4);
     Manager manager(scheduler.ioService(), 1024ULL * 1024ULL * 1024ULL);
-    auto cache =
-        manager.createCache(Manager::CacheType::Plain, initialSize, true);
+    auto cache = manager.createCache(CacheType::Plain, initialSize, true);
 
     for (uint64_t i = 0; i < 16ULL * 1024ULL * 1024ULL; i++) {
       CachedValue* value =
@@ -211,7 +209,7 @@ TEST_CASE("cache::PlainCache", "[cache][!hide][longRunning]") {
     Manager manager(scheduler.ioService(), 1024ULL * 1024ULL * 1024ULL);
     size_t threadCount = 4;
     std::shared_ptr<Cache> cache =
-        manager.createCache(Manager::CacheType::Plain, initialSize, true);
+        manager.createCache(CacheType::Plain, initialSize, true);
 
     uint64_t chunkSize = 16 * 1024 * 1024;
     uint64_t initialInserts = 4 * 1024 * 1024;
@@ -299,11 +297,11 @@ TEST_CASE("cache::PlainCache", "[cache][!hide][longRunning]") {
     uint64_t cacheLimit = 256ULL * 1024ULL;
     Manager manager(nullptr, 4ULL * cacheLimit);
     auto cacheMiss =
-        manager.createCache(Manager::CacheType::Plain, cacheLimit, false, true);
+        manager.createCache(CacheType::Plain, cacheLimit, false, true);
     auto cacheHit =
-        manager.createCache(Manager::CacheType::Plain, cacheLimit, false, true);
+        manager.createCache(CacheType::Plain, cacheLimit, false, true);
     auto cacheMixed =
-        manager.createCache(Manager::CacheType::Plain, cacheLimit, false, true);
+        manager.createCache(CacheType::Plain, cacheLimit, false, true);
 
     for (uint64_t i = 0; i < 1024; i++) {
       CachedValue* value =

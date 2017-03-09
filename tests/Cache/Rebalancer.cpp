@@ -27,6 +27,7 @@
 
 #include "Cache/Rebalancer.h"
 #include "Basics/Common.h"
+#include "Cache/Common.h"
 #include "Cache/Manager.h"
 #include "Cache/PlainCache.h"
 #include "Cache/Transaction.h"
@@ -58,7 +59,7 @@ TEST_CASE("cache::Rebalancer", "[cache][!hide][longRunning]") {
     std::vector<std::shared_ptr<Cache>> caches;
     for (size_t i = 0; i < cacheCount; i++) {
       caches.emplace_back(
-          manager.createCache(Manager::CacheType::Plain, initialSize, true));
+          manager.createCache(CacheType::Plain, initialSize, true));
     }
 
     bool doneRebalancing = false;
@@ -179,8 +180,8 @@ TEST_CASE("cache::Rebalancer", "[cache][!hide][longRunning]") {
     size_t threadCount = 4;
     std::vector<std::shared_ptr<Cache>> caches;
     for (size_t i = 0; i < cacheCount; i++) {
-      caches.emplace_back(manager.createCache(Manager::CacheType::Transactional,
-                                              initialSize, true));
+      caches.emplace_back(
+          manager.createCache(CacheType::Transactional, initialSize, true));
     }
 
     bool doneRebalancing = false;

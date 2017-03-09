@@ -42,12 +42,12 @@ TEST_CASE("cache::TransactionalBucket", "[cache]") {
 
     // check lock without contention
     REQUIRE(!bucket.isLocked());
-    success = bucket.lock(0ULL, -1LL);
+    success = bucket.lock(-1LL);
     REQUIRE(success);
     REQUIRE(bucket.isLocked());
 
     // check lock with contention
-    success = bucket.lock(0ULL, 10LL);
+    success = bucket.lock(10LL);
     REQUIRE(!success);
     REQUIRE(bucket.isLocked());
 
@@ -57,7 +57,8 @@ TEST_CASE("cache::TransactionalBucket", "[cache]") {
 
     // check that blacklist term is updated appropriately
     REQUIRE(0ULL == bucket._blacklistTerm);
-    bucket.lock(1ULL, -1LL);
+    bucket.lock(-1LL);
+    bucket.updateBlacklistTerm(1ULL);
     REQUIRE(1ULL == bucket._blacklistTerm);
     bucket.unlock();
     REQUIRE(1ULL == bucket._blacklistTerm);
@@ -78,7 +79,7 @@ TEST_CASE("cache::TransactionalBucket", "[cache]") {
                                        &(values[i]), sizeof(uint64_t));
     }
 
-    success = bucket.lock(0, -1LL);
+    success = bucket.lock(-1LL);
     REQUIRE(success);
 
     // insert three to fill
@@ -124,7 +125,7 @@ TEST_CASE("cache::TransactionalBucket", "[cache]") {
                                        &(values[i]), sizeof(uint64_t));
     }
 
-    success = bucket.lock(0, -1LL);
+    success = bucket.lock(-1LL);
     REQUIRE(success);
 
     for (size_t i = 0; i < 3; i++) {
@@ -173,7 +174,7 @@ TEST_CASE("cache::TransactionalBucket", "[cache]") {
                                        &(values[i]), sizeof(uint64_t));
     }
 
-    success = bucket.lock(0, -1LL);
+    success = bucket.lock(-1LL);
     REQUIRE(success);
 
     // insert three to fill
@@ -236,7 +237,8 @@ TEST_CASE("cache::TransactionalBucket", "[cache]") {
                                        &(values[i]), sizeof(uint64_t));
     }
 
-    success = bucket.lock(1ULL, -1LL);
+    success = bucket.lock(-1LL);
+    bucket.updateBlacklistTerm(1ULL);
     REQUIRE(success);
 
     // insert three to fill
@@ -290,7 +292,8 @@ TEST_CASE("cache::TransactionalBucket", "[cache]") {
     bucket.unlock();
 
     // check that updating blacklist term clears blacklist
-    bucket.lock(2ULL, -1LL);
+    bucket.lock(-1LL);
+    bucket.updateBlacklistTerm(2ULL);
     REQUIRE(!bucket.isFullyBlacklisted());
     for (size_t i = 0; i < 7; i++) {
       REQUIRE(!bucket.isBlacklisted(hashes[i]));

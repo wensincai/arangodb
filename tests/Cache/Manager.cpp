@@ -28,6 +28,7 @@
 #include "Cache/Manager.h"
 #include "Basics/Common.h"
 #include "Cache/CacheManagerFeatureThreads.h"
+#include "Cache/Common.h"
 #include "Cache/PlainCache.h"
 #include "Random/RandomGenerator.h"
 
@@ -72,8 +73,7 @@ TEST_CASE("cache::Manager", "[cache][!hide][longRunning]") {
     std::vector<std::shared_ptr<Cache>> caches;
     for (size_t i = 0; i < cacheCount; i++) {
       auto res = manager.createCache(
-          ((i % 2 == 0) ? Manager::CacheType::Plain
-                        : Manager::CacheType::Transactional),
+          ((i % 2 == 0) ? CacheType::Plain : CacheType::Transactional),
           initialSize, true);
       TRI_ASSERT(res);
       caches.emplace_back(res);
@@ -105,7 +105,7 @@ TEST_CASE("cache::Manager", "[cache][!hide][longRunning]") {
 
       // commence mixed workload
       for (uint64_t i = 0; i < operationCount; i++) {
-        uint32_t r = RandomGenerator::interval(static_cast<uint32_t>(99UL));
+        uint32_t r = RandomGenerator::interval(static_cast<uint32_t>(99));
 
         if (r >= 99) {  // remove something
           if (validLower == validUpper) {
@@ -185,8 +185,7 @@ TEST_CASE("cache::Manager", "[cache][!hide][longRunning]") {
         switch (r) {
           case 0: {
             auto res = manager.createCache(
-                (i % 2 == 0) ? Manager::CacheType::Plain
-                             : Manager::CacheType::Transactional,
+                (i % 2 == 0) ? CacheType::Plain : CacheType::Transactional,
                 initialSize, true);
             if (res) {
               caches.emplace(res);

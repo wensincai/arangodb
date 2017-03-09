@@ -26,11 +26,13 @@
 
 #include "Basics/Common.h"
 #include "Cache/CachedValue.h"
+#include "Cache/Common.h"
 #include "Cache/FrequencyBuffer.h"
 #include "Cache/Manager.h"
 #include "Cache/ManagerTasks.h"
 #include "Cache/Metadata.h"
 #include "Cache/State.h"
+#include "Cache/Table.h"
 
 #include <stdint.h>
 #include <list>
@@ -62,6 +64,9 @@ class Cache : public std::enable_shared_from_this<Cache> {
 
  public:
   typedef FrequencyBuffer<uint8_t> StatBuffer;
+
+  static const uint64_t minSize;
+  static const uint64_t minLogSize;
 
  public:
   //////////////////////////////////////////////////////////////////////////////
@@ -107,9 +112,9 @@ class Cache : public std::enable_shared_from_this<Cache> {
   };
 
  public:
-  Cache(ConstructionGuard guard, Manager* manager,
-        Manager::MetadataItr metadata, bool allowGrowth,
-        bool enableWindowedStats);
+  Cache(ConstructionGuard guard, Manager* manager, Metadata metadata,
+        std::shared_ptr<Table> table, bool enableWindowedStats,
+        std::function<Table::BucketClearer(Metadata*)> bucketClearer);
   virtual ~Cache() = default;
 
   // primary functionality; documented in derived classes
@@ -165,18 +170,13 @@ class Cache : public std::enable_shared_from_this<Cache> {
   bool isResizing();
 
  protected:
+  static constexpr int64_t triesFast = 50;
+  static constexpr int64_t triesSlow = 10000;
+  static constexpr int64_t triesGuarantee = -1;
+
+ protected:
   State _state;
 
-  // whether to allow the cache to resize larger when it fills
-  bool _allowGrowth;
-
-  // structures to handle statistics
-  enum class Stat : uint8_t {
-    findHit = 1,
-    findMiss = 2,
-    insertEviction = 3,
-    insertNoEviction = 4
-  };
   static uint64_t _evictionStatsCapacity;
   StatBuffer _evictionStats;
   std::atomic<uint64_t> _insertionCount;
@@ -188,7 +188,11 @@ class Cache : public std::enable_shared_from_this<Cache> {
 
   // allow communication with manager
   Manager* _manager;
-  Manager::MetadataItr _metadata;
+  Metadata _metadata;
+
+  // manage the actual table
+  std::shared_ptr<Table> _table;
+  Table::BucketClearer _bucketClearer;
 
   // keep track of number of open operations to allow clean shutdown
   std::atomic<uint32_t> _openOperations;
@@ -215,21 +219,25 @@ class Cache : public std::enable_shared_from_this<Cache> {
   bool requestResize(uint64_t requestedLimit = 0, bool internal = true);
   void requestMigrate(uint32_t requestedLogSize = 0);
 
-  void freeValue(CachedValue* value);
+  static void freeValue(CachedValue* value);
   bool reclaimMemory(uint64_t size);
-  virtual void clearTables() = 0;
 
   uint32_t hashKey(void const* key, uint32_t keySize) const;
-  void recordStat(Cache::Stat stat);
+  void recordStat(Stat stat);
 
   // management
-  Manager::MetadataItr& metadata();
+  Metadata* metadata();
+  std::shared_ptr<Table> table();
   void beginShutdown();
   void shutdown();
   bool canResize();
   bool canMigrate();
-  virtual bool freeMemory() = 0;
-  virtual bool migrate() = 0;
+  bool freeMemory();
+  bool migrate(std::shared_ptr<Table> newTable);
+
+  virtual uint64_t freeMemoryFrom(uint32_t hash) = 0;
+  virtual void migrateBucket(void* sourcePtr,
+                             std::unique_ptr<Table::Subtable> targets) = 0;
 };
 
 };  // end namespace cache

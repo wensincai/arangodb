@@ -30,32 +30,33 @@
 
 using namespace arangodb::cache;
 
-Metadata::Metadata(uint64_t limit)
+Metadata::Metadata()
+    : _state(), _usage(0), _softLimit(0), _hardLimit(0), _allowGrowth(false) {}
+
+Metadata::Metadata(uint64_t limit, bool allowGrowth)
     : _state(),
-      _cache(nullptr),
       _usage(0),
       _softLimit(limit),
       _hardLimit(limit),
-      _table(nullptr),
-      _auxiliaryTable(nullptr),
-      _logSize(0),
-      _auxiliaryLogSize(0) {}
+      _allowGrowth(allowGrowth) {}
 
 Metadata::Metadata(Metadata const& other)
     : _state(other._state),
-      _cache(other._cache),
       _usage(other._usage),
       _softLimit(other._softLimit),
       _hardLimit(other._hardLimit),
-      _table(other._table),
-      _auxiliaryTable(other._auxiliaryTable),
-      _logSize(other._logSize),
-      _auxiliaryLogSize(other._auxiliaryLogSize) {}
+      _allowGrowth(other._allowGrowth) {}
 
-void Metadata::link(std::shared_ptr<Cache> cache) {
-  lock();
-  _cache = cache;
-  unlock();
+Metadata& Metadata::operator=(Metadata const& other) {
+  if (this != &other) {
+    _state = other._state;
+    _usage = other._usage;
+    _softLimit = other._softLimit;
+    _hardLimit = other._hardLimit;
+    _allowGrowth = other._allowGrowth;
+  }
+
+  return *this;
 }
 
 void Metadata::lock() { _state.lock(); }
@@ -66,31 +67,6 @@ void Metadata::unlock() {
 }
 
 bool Metadata::isLocked() const { return _state.isLocked(); }
-
-std::shared_ptr<Cache> Metadata::cache() const {
-  TRI_ASSERT(isLocked());
-  return _cache;
-}
-
-uint32_t Metadata::logSize() const {
-  TRI_ASSERT(isLocked());
-  return _logSize;
-}
-
-uint32_t Metadata::auxiliaryLogSize() const {
-  TRI_ASSERT(isLocked());
-  return _auxiliaryLogSize;
-}
-
-uint8_t* Metadata::table() const {
-  TRI_ASSERT(isLocked());
-  return _table;
-}
-
-uint8_t* Metadata::auxiliaryTable() const {
-  TRI_ASSERT(isLocked());
-  return _auxiliaryTable;
-}
 
 uint64_t Metadata::usage() const {
   TRI_ASSERT(isLocked());
@@ -128,6 +104,10 @@ bool Metadata::adjustUsageIfAllowed(int64_t usageChange) {
 bool Metadata::adjustLimits(uint64_t softLimit, uint64_t hardLimit) {
   TRI_ASSERT(isLocked());
 
+  if (!_allowGrowth && (hardLimit > _hardLimit)) {
+    return false;
+  }
+
   if (hardLimit < _usage) {
     return false;
   }
@@ -138,32 +118,21 @@ bool Metadata::adjustLimits(uint64_t softLimit, uint64_t hardLimit) {
   return true;
 }
 
-void Metadata::grantAuxiliaryTable(uint8_t* table, uint32_t logSize) {
-  TRI_ASSERT(isLocked());
-  _auxiliaryTable = table;
-  _auxiliaryLogSize = logSize;
+void Metadata::enableGrowth() {
+  TRI_ASSERT(_state.isLocked());
+  _allowGrowth = true;
 }
 
-void Metadata::swapTables() {
-  TRI_ASSERT(isLocked());
-  std::swap(_table, _auxiliaryTable);
-  std::swap(_logSize, _auxiliaryLogSize);
+void Metadata::disableGrowth() {
+  TRI_ASSERT(_state.isLocked());
+  _allowGrowth = false;
 }
 
-uint8_t* Metadata::releaseTable() {
-  TRI_ASSERT(isLocked());
-  uint8_t* table = _table;
-  _table = nullptr;
-  _logSize = 0;
-  return table;
-}
-
-uint8_t* Metadata::releaseAuxiliaryTable() {
-  TRI_ASSERT(isLocked());
-  uint8_t* table = _auxiliaryTable;
-  _auxiliaryTable = nullptr;
-  _auxiliaryLogSize = 0;
-  return table;
+bool Metadata::canGrow() {
+  _state.lock();
+  bool allowed = _allowGrowth;
+  _state.unlock();
+  return allowed;
 }
 
 bool Metadata::isSet(State::Flag flag) const {

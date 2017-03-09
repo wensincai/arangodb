@@ -38,7 +38,7 @@ using namespace arangodb::cache;
 TEST_CASE("cache::Metadata", "[cache]") {
   SECTION("test basic constructor") {
     uint64_t limit = 1024;
-    Metadata metadata(limit);
+    Metadata metadata(limit, true);
   }
 
   SECTION("test various getters") {
@@ -47,95 +47,60 @@ TEST_CASE("cache::Metadata", "[cache]") {
                                       [](Cache* p) -> void {});
     uint64_t limit = 1024;
 
-    Metadata metadata(limit);
-    metadata.link(dummyCache);
+    Metadata metadata(limit, true);
+
+    REQUIRE(metadata.canGrow());
 
     metadata.lock();
 
-    REQUIRE(dummyCache == metadata.cache());
-
     REQUIRE(limit == metadata.softLimit());
     REQUIRE(limit == metadata.hardLimit());
-    REQUIRE(0UL == metadata.usage());
+    REQUIRE(static_cast<uint64_t>(0) == metadata.usage());
 
+    metadata.disableGrowth();
     metadata.unlock();
+
+    REQUIRE(!metadata.canGrow());
   }
 
   SECTION("verify usage limits are adjusted and enforced correctly") {
     bool success;
 
-    Metadata metadata(1024ULL);
+    Metadata metadata(1024, true);
 
     metadata.lock();
 
-    success = metadata.adjustUsageIfAllowed(512LL);
+    success = metadata.adjustUsageIfAllowed(512);
     REQUIRE(success);
-    success = metadata.adjustUsageIfAllowed(512LL);
+    success = metadata.adjustUsageIfAllowed(512);
     REQUIRE(success);
-    success = metadata.adjustUsageIfAllowed(512LL);
+    success = metadata.adjustUsageIfAllowed(512);
     REQUIRE(!success);
 
-    success = metadata.adjustLimits(2048ULL, 2048ULL);
+    success = metadata.adjustLimits(2048, 2048);
     REQUIRE(success);
 
-    success = metadata.adjustUsageIfAllowed(1024LL);
+    success = metadata.adjustUsageIfAllowed(1024);
     REQUIRE(success);
 
-    success = metadata.adjustLimits(1024ULL, 2048ULL);
+    success = metadata.adjustLimits(1024, 2048);
     REQUIRE(success);
 
-    success = metadata.adjustUsageIfAllowed(512LL);
+    success = metadata.adjustUsageIfAllowed(512);
     REQUIRE(!success);
-    success = metadata.adjustUsageIfAllowed(-512LL);
+    success = metadata.adjustUsageIfAllowed(-512);
     REQUIRE(success);
-    success = metadata.adjustUsageIfAllowed(512LL);
+    success = metadata.adjustUsageIfAllowed(512);
     REQUIRE(success);
-    success = metadata.adjustUsageIfAllowed(-1024LL);
+    success = metadata.adjustUsageIfAllowed(-1024);
     REQUIRE(success);
-    success = metadata.adjustUsageIfAllowed(512LL);
-    REQUIRE(!success);
-
-    success = metadata.adjustLimits(1024ULL, 1024ULL);
-    REQUIRE(success);
-    success = metadata.adjustLimits(512ULL, 512ULL);
+    success = metadata.adjustUsageIfAllowed(512);
     REQUIRE(!success);
 
-    metadata.unlock();
-  }
-
-  SECTION("test migration-related methods") {
-    uint8_t dummyTable;
-    uint8_t dummyAuxiliaryTable;
-    uint32_t logSize = 1;
-    uint32_t auxiliaryLogSize = 2;
-    uint64_t limit = 1024;
-
-    Metadata metadata(limit);
-
-    metadata.lock();
-
-    metadata.grantAuxiliaryTable(&dummyTable, logSize);
-    metadata.swapTables();
-
-    metadata.grantAuxiliaryTable(&dummyAuxiliaryTable, auxiliaryLogSize);
-    REQUIRE(auxiliaryLogSize == metadata.auxiliaryLogSize());
-    REQUIRE(&dummyAuxiliaryTable == metadata.auxiliaryTable());
-
-    metadata.swapTables();
-    REQUIRE(logSize == metadata.auxiliaryLogSize());
-    REQUIRE(auxiliaryLogSize == metadata.logSize());
-    REQUIRE(&dummyTable == metadata.auxiliaryTable());
-    REQUIRE(&dummyAuxiliaryTable == metadata.table());
-
-    uint8_t* result = metadata.releaseAuxiliaryTable();
-    REQUIRE(0UL == metadata.auxiliaryLogSize());
-    REQUIRE(nullptr == metadata.auxiliaryTable());
-    REQUIRE(result == &dummyTable);
-
-    result = metadata.releaseTable();
-    REQUIRE(0UL == metadata.logSize());
-    REQUIRE(nullptr == metadata.table());
-    REQUIRE(result == &dummyAuxiliaryTable);
+    success = metadata.adjustLimits(1024, 1024);
+    REQUIRE(success);
+    success = metadata.adjustLimits(512, 512);
+    REQUIRE(!success);
 
     metadata.unlock();
   }

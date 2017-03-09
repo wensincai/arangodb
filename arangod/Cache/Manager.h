@@ -27,17 +27,19 @@
 #include "Basics/Common.h"
 #include "Basics/asio-helper.h"
 #include "Cache/CachedValue.h"
+#include "Cache/Common.h"
 #include "Cache/FrequencyBuffer.h"
 #include "Cache/Metadata.h"
 #include "Cache/State.h"
+#include "Cache/Table.h"
 #include "Cache/Transaction.h"
 #include "Cache/TransactionManager.h"
 
 #include <stdint.h>
 #include <atomic>
 #include <chrono>
-#include <list>
 #include <memory>
+#include <set>
 #include <stack>
 #include <utility>
 
@@ -78,13 +80,12 @@ class Manager {
   };
 
  public:
-  static uint64_t MINIMUM_SIZE;
+  static const uint64_t minSize;
   typedef FrequencyBuffer<std::weak_ptr<Cache>, cmp_weak_ptr, hash_weak_ptr>
       AccessStatBuffer;
   typedef FrequencyBuffer<uint8_t> FindStatBuffer;
   typedef std::vector<std::shared_ptr<Cache>> PriorityList;
   typedef std::chrono::time_point<std::chrono::steady_clock> time_point;
-  typedef std::list<Metadata>::iterator MetadataItr;
 
  public:
   //////////////////////////////////////////////////////////////////////////////
@@ -93,11 +94,6 @@ class Manager {
   Manager(boost::asio::io_service* ioService, uint64_t globalLimit,
           bool enableWindowedStats = true);
   ~Manager();
-
-  //////////////////////////////////////////////////////////////////////////////
-  /// @brief Enum to specify which type of cache to create.
-  //////////////////////////////////////////////////////////////////////////////
-  enum CacheType { Plain, Transactional };
 
   //////////////////////////////////////////////////////////////////////////////
   /// @brief Creates an individual cache.
@@ -112,8 +108,7 @@ class Manager {
   /// This parameter is true by default. It should likely only be set to be
   /// false for low-priority, short-lived caches.
   //////////////////////////////////////////////////////////////////////////////
-  std::shared_ptr<Cache> createCache(Manager::CacheType type,
-                                     uint64_t requestedLimit,
+  std::shared_ptr<Cache> createCache(CacheType type, uint64_t requestedLimit,
                                      bool allowGrowth = true,
                                      bool enableWindowedStats = false);
 
@@ -169,6 +164,15 @@ class Manager {
   void endTransaction(Transaction* tx);
 
  private:
+  // use 16 for sizeof std::list node -- should be valid for most libraries
+  static constexpr uint64_t cacheRecordOverhead =
+      sizeof(Metadata) + sizeof(std::shared_ptr<Cache>) + 16;
+  // assume at most 16 slots in each stack -- TODO: check validity
+  static constexpr uint64_t tableListsOverhead =
+      32 * 16 * sizeof(std::shared_ptr<Cache>);
+  static constexpr int64_t triesFast = 100;
+  static constexpr int64_t triesSlow = 1000;
+
   // simple state variable for locking and other purposes
   State _state;
 
@@ -177,17 +181,16 @@ class Manager {
   std::atomic<uint64_t> _accessCounter;
 
   // structures to handle hit rate monitoring
-  enum class Stat : uint8_t { findHit = 1, findMiss = 2 };
   bool _enableWindowedStats;
   std::unique_ptr<Manager::FindStatBuffer> _findStats;
   std::atomic<uint64_t> _findHits;
   std::atomic<uint64_t> _findMisses;
 
-  // list of metadata objects to keep track of all the registered caches
-  std::list<Metadata> _caches;
+  // set of pointers to keep track of registered caches
+  std::set<std::shared_ptr<Cache>> _caches;
 
   // actual tables to lease out
-  std::stack<uint8_t*> _tables[32];
+  std::stack<std::shared_ptr<Table>> _tables[32];
 
   // global statistics
   uint64_t _globalSoftLimit;
@@ -215,19 +218,19 @@ class Manager {
 
  private:  // used by caches
   // register and unregister individual caches
-  std::pair<bool, Manager::MetadataItr> registerCache(uint64_t requestedLimit,
-                                                      uint64_t fixedSize);
-  void unregisterCache(Manager::MetadataItr& metadata);
+  std::tuple<bool, Metadata, std::shared_ptr<Table>> registerCache(
+      uint64_t requestedLimit, bool allowGrowth, uint64_t fixedSize);
+  void unregisterCache(std::shared_ptr<Cache> cache);
 
   // allow individual caches to request changes to their allocations
   std::pair<bool, Manager::time_point> requestResize(
-      Manager::MetadataItr& metadata, uint64_t requestedLimit);
+      std::shared_ptr<Cache> cache, uint64_t requestedLimit);
   std::pair<bool, Manager::time_point> requestMigrate(
-      Manager::MetadataItr& metadata, uint32_t requestedLogSize);
+      std::shared_ptr<Cache> cache, uint32_t requestedLogSize);
 
   // stat reporting
   void reportAccess(std::shared_ptr<Cache> cache);
-  void recordHitStat(Manager::Stat stat);
+  void reportHitStat(Stat stat);
 
  private:  // used internally and by tasks
   // check if shutdown or shutting down
@@ -257,17 +260,15 @@ class Manager {
   bool adjustGlobalLimitsIfAllowed(uint64_t newGlobalLimit);
 
   // methods to adjust individual caches
-  void resizeCache(TaskEnvironment environment, Manager::MetadataItr& metadata,
+  void resizeCache(TaskEnvironment environment, std::shared_ptr<Cache> cache,
                    uint64_t newLimit);
-  void migrateCache(TaskEnvironment environment, Manager::MetadataItr& metadata,
+  void migrateCache(TaskEnvironment environment, std::shared_ptr<Cache> cache,
                     uint32_t logSize);
-  void leaseTable(Manager::MetadataItr& metadata, uint32_t logSize);
-  void reclaimTables(Manager::MetadataItr& metadata,
-                     bool auxiliaryOnly = false);
+  std::shared_ptr<Table> leaseTable(uint32_t logSize);
+  void reclaimTable(std::shared_ptr<Table> table);
 
   // helpers for individual allocations
   bool increaseAllowed(uint64_t increase) const;
-  uint64_t tableSize(uint32_t logSize) const;
 
   // helper for lr-accessed heuristics
   std::shared_ptr<PriorityList> priorityList();

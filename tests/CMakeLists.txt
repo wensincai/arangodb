@@ -37,6 +37,7 @@ add_executable(
   Cache/PlainCache.cpp
   Cache/Rebalancer.cpp
   Cache/State.cpp
+  Cache/Table.cpp
   Cache/TransactionalBucket.cpp
   Cache/TransactionalCache.cpp
   Cache/TransactionalStore.cpp
