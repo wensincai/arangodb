@@ -196,7 +196,7 @@ inline std::string timepointToString(Supervision::TimePoint const& t) {
   struct tm tb;
   size_t const len(21);
   char buffer[len];
-  TRI_localtime(tt, &tb);
+  TRI_gmtime(tt, &tb);
   ::strftime(buffer, sizeof(buffer), "%Y-%m-%dT%H:%M:%SZ", &tb);
   return std::string(buffer, len - 1);
 }
@@ -210,8 +210,8 @@ inline Supervision::TimePoint stringToTimepoint(std::string const& s) {
     tt.tm_hour = std::stoi(s.substr(11, 2));
     tt.tm_min = std::stoi(s.substr(14, 2));
     tt.tm_sec = std::stoi(s.substr(17, 2));
-    tt.tm_isdst = -1;
-    auto time_c = ::mktime(&tt);
+    tt.tm_isdst = 0;
+    auto time_c = TRI_timegm(&tt);
     return std::chrono::system_clock::from_time_t(time_c);
   } catch (...) {
     return std::chrono::system_clock::now();

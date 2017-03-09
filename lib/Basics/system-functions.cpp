@@ -120,6 +120,14 @@ void TRI_gmtime(time_t tt, struct tm* tb) {
 #endif
 }
 
+time_t TRI_timegm(struct tm* tb) {
+#ifdef _WIN32
+  return _mkgmtime(tb);
+#else
+  return timegm(tb);
+#endif
+}
+
 double TRI_microtime() {
   struct timeval t;
 
