@@ -68,7 +68,7 @@ bool UnassumedLeadership::create(std::shared_ptr<VPackBuilder> b) {
   LOG_TOPIC(INFO, Logger::AGENCY)
       << "Todo: Find new leader for to be created shard " << _shard;
 
-  std::string path = agencyPrefix + toDoPrefix + _jobId;
+  std::string path = toDoPrefix + _jobId;
 
   _jb = std::make_shared<Builder>();
   _jb->openArray();
@@ -131,7 +131,7 @@ bool UnassumedLeadership::start() {
   // Apply
   // --- Add pending entry
   pending.openObject();
-  pending.add(agencyPrefix + pendingPrefix + _jobId,
+  pending.add(pendingPrefix + _jobId,
               VPackValue(VPackValueType::Object));
   pending.add("timeStarted",
               VPackValue(timepointToString(std::chrono::system_clock::now())));
@@ -143,19 +143,19 @@ bool UnassumedLeadership::start() {
   pending.close();
 
   // --- Remove todo entry
-  pending.add(agencyPrefix + toDoPrefix + _jobId,
+  pending.add(toDoPrefix + _jobId,
               VPackValue(VPackValueType::Object));
   pending.add("op", VPackValue("delete"));
   pending.close();
 
   // --- Increment Plan/Version
-  pending.add(agencyPrefix + planVersion, VPackValue(VPackValueType::Object));
+  pending.add(planVersion, VPackValue(VPackValueType::Object));
   pending.add("op", VPackValue("increment"));
   pending.close();
 
   // --- Reassign DBServer
   std::string path = planPath + "/shards/" + _shard;
-  pending.add(agencyPrefix + path, VPackValue(VPackValueType::Array));
+  pending.add(path, VPackValue(VPackValueType::Array));
   for (const auto& dbserver : VPackArrayIterator(_snapshot(path).slice())) {
     if (dbserver.copyString() == _from) {
       pending.add(VPackValue(_to));
@@ -169,7 +169,7 @@ bool UnassumedLeadership::start() {
   // Precondition
   // --- Check that Current servers are as we expect
   pending.openObject();
-  pending.add(agencyPrefix + curPath, VPackValue(VPackValueType::Object));
+  pending.add(curPath, VPackValue(VPackValueType::Object));
   pending.add("old", current.slice());
   pending.close();
 

@@ -119,7 +119,7 @@ JOB_STATUS RemoveServer::status() {
           continue;
         }
 
-        std::string const& key(agencyPrefix + "/Plan/Collections/" +
+        std::string const& key("/Plan/Collections/" +
                                database.first + "/" + collptr.first +
                                "/shards/" + shard.first);
 
@@ -133,12 +133,12 @@ JOB_STATUS RemoveServer::status() {
   }
   preconditions.close();
 
-  trx.add(VPackValue(agencyPrefix + "/Target/CleanedServers"));
+  trx.add(VPackValue("/Target/CleanedServers"));
   trx.openObject();
   trx.add("op", VPackValue("push"));
   trx.add("new", VPackValue(_server));
   trx.close();
-  trx.add(VPackValue(agencyPrefix + planVersion));
+  trx.add(VPackValue(planVersion));
   trx.openObject();
   trx.add("op", VPackValue("increment"));
   trx.close();
@@ -167,7 +167,7 @@ bool RemoveServer::create(std::shared_ptr<VPackBuilder> b) {
 
   LOG_TOPIC(INFO, Logger::AGENCY) << "Todo: Remove server " + _server;
 
-  std::string path = agencyPrefix + toDoPrefix + _jobId;
+  std::string path = toDoPrefix + _jobId;
 
   _jb = std::make_shared<Builder>();
   _jb->openArray();
@@ -208,7 +208,7 @@ bool RemoveServer::start() {
       return false;
     }
   } else {
-    todo.add(_jb->slice()[0].get(agencyPrefix + toDoPrefix + _jobId));
+    todo.add(_jb->slice()[0].get(toDoPrefix + _jobId));
   }
   todo.close();
 
@@ -217,7 +217,7 @@ bool RemoveServer::start() {
 
   // --- Add pending
   pending.openObject();
-  pending.add(agencyPrefix + pendingPrefix + _jobId,
+  pending.add(pendingPrefix + _jobId,
               VPackValue(VPackValueType::Object));
   pending.add("timeStarted",
               VPackValue(timepointToString(std::chrono::system_clock::now())));
@@ -227,13 +227,13 @@ bool RemoveServer::start() {
   pending.close();
 
   // --- Delete todo
-  pending.add(agencyPrefix + toDoPrefix + _jobId,
+  pending.add(toDoPrefix + _jobId,
               VPackValue(VPackValueType::Object));
   pending.add("op", VPackValue("delete"));
   pending.close();
 
   // --- Block _server
-  pending.add(agencyPrefix + blockedServersPrefix + _server,
+  pending.add(blockedServersPrefix + _server,
               VPackValue(VPackValueType::Object));
   pending.add("jobId", VPackValue(_jobId));
   pending.close();
@@ -243,7 +243,7 @@ bool RemoveServer::start() {
   // Preconditions
   // --- Check that toServer not blocked
   pending.openObject();
-  pending.add(agencyPrefix + blockedServersPrefix + _server,
+  pending.add(blockedServersPrefix + _server,
               VPackValue(VPackValueType::Object));
   pending.add("oldEmpty", VPackValue(true));
   pending.close();

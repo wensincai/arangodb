@@ -97,7 +97,7 @@ bool FailedServer::start() {
         return false;
       }
     } else {
-      todo.add(_jb->slice()[0].get(agencyPrefix + toDoPrefix + _jobId));
+      todo.add(_jb->slice()[0].get(toDoPrefix + _jobId));
     }} // Todo entry
   
   // Pending entry
@@ -107,7 +107,7 @@ bool FailedServer::start() {
     // Operations -------------->
     { VPackObjectBuilder oper(&pending); 
       // Add pending
-      pending.add(VPackValue(agencyPrefix + pendingPrefix + _jobId));
+      pending.add(VPackValue(pendingPrefix + _jobId));
       { VPackObjectBuilder ts(&pending);
         pending.add("timeStarted",
                     VPackValue(timepointToString(system_clock::now())));
@@ -116,11 +116,11 @@ bool FailedServer::start() {
         }
       }
       // Delete todo
-      pending.add(VPackValue(agencyPrefix + toDoPrefix + _jobId));
+      pending.add(VPackValue(toDoPrefix + _jobId));
       { VPackObjectBuilder del(&pending);
         pending.add("op", VPackValue("delete")); }
       // Block toServer
-      pending.add(VPackValue(agencyPrefix + blockedServersPrefix + _server));
+      pending.add(VPackValue(blockedServersPrefix + _server));
       { VPackObjectBuilder block(&pending);
         pending.add("jobId", VPackValue(_jobId));
       }
@@ -129,7 +129,7 @@ bool FailedServer::start() {
     // Preconditions ----------->
     { VPackObjectBuilder prec(&pending);
       // Check that toServer not blocked
-      pending.add(VPackValue(agencyPrefix + blockedServersPrefix + _server));
+      pending.add(VPackValue(blockedServersPrefix + _server));
       { VPackObjectBuilder block(&pending);
         pending.add("oldEmpty", VPackValue(true));
       }
@@ -249,7 +249,7 @@ bool FailedServer::create(std::shared_ptr<VPackBuilder> envelope) {
     { VPackObjectBuilder operations (_jb.get());
       
       // ToDo entry
-      _jb->add(VPackValue(agencyPrefix + toDoPrefix + _jobId));
+      _jb->add(VPackValue(toDoPrefix + _jobId));
       { VPackObjectBuilder todo(_jb.get());
         _jb->add("type", VPackValue("failedServer"));
         _jb->add("server", VPackValue(_server));
@@ -258,19 +258,19 @@ bool FailedServer::create(std::shared_ptr<VPackBuilder> envelope) {
         _jb->add("timeCreated", VPackValue(timepointToString(
                                              system_clock::now()))); } 
       // FailedServers entry []
-      _jb->add(VPackValue(agencyPrefix + failedServersPrefix + "/" + _server));
+      _jb->add(VPackValue(failedServersPrefix + "/" + _server));
       { VPackArrayBuilder failedServers(_jb.get()); }} // Operations
 
     //Preconditions
     { VPackObjectBuilder health(_jb.get());
 
       // Status should still be FAILED
-      _jb->add(VPackValue(agencyPrefix + healthPrefix + _server + "/Status"));
+      _jb->add(VPackValue(healthPrefix + _server + "/Status"));
       { VPackObjectBuilder old(_jb.get());
         _jb->add("old", VPackValue("BAD")); }
 
       // Target/FailedServers is still as in the snapshot
-      _jb->add(VPackValue(agencyPrefix + failedServersPrefix));
+      _jb->add(VPackValue(failedServersPrefix));
       { VPackObjectBuilder old(_jb.get());
         _jb->add("old", _snapshot(failedServersPrefix).toBuilder().slice()[0]);
       }} // Preconditions
@@ -315,8 +315,7 @@ JOB_STATUS FailedServer::status() {
           deleteTodos->openArray();
           deleteTodos->openObject();
         }
-        deleteTodos->add(
-          agencyPrefix + toDoPrefix + subJob.first,
+        deleteTodos->add( toDoPrefix + subJob.first,
           VPackValue(VPackValueType::Object));
         deleteTodos->add("op", VPackValue("delete"));
         deleteTodos->close();

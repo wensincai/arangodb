@@ -87,7 +87,7 @@ JOB_STATUS CleanOutServer::status() {
       VPackArrayBuilder guard(&reportTrx);
       {
         VPackObjectBuilder guard3(&reportTrx);
-        reportTrx.add(VPackValue(agencyPrefix + "/Target/CleanedServers"));
+        reportTrx.add(VPackValue("/Target/CleanedServers"));
         {
           VPackObjectBuilder guard4(&reportTrx);
           reportTrx.add("op", VPackValue("push"));
@@ -120,7 +120,7 @@ bool CleanOutServer::create(std::shared_ptr<VPackBuilder> b) {
   LOG_TOPIC(DEBUG, Logger::AGENCY)
       << "Todo: Clean out server " + _server + " for shrinkage";
 
-  std::string path = agencyPrefix + toDoPrefix + _jobId;
+  std::string path = toDoPrefix + _jobId;
 
   _jb = std::make_shared<Builder>();
   _jb->openArray();
@@ -170,7 +170,7 @@ bool CleanOutServer::start() {
 
   // --- Add pending
   pending.openObject();
-  pending.add(agencyPrefix + pendingPrefix + _jobId,
+  pending.add(pendingPrefix + _jobId,
               VPackValue(VPackValueType::Object));
   pending.add("timeStarted",
               VPackValue(timepointToString(std::chrono::system_clock::now())));
@@ -180,19 +180,19 @@ bool CleanOutServer::start() {
   pending.close();
 
   // --- Delete todo
-  pending.add(agencyPrefix + toDoPrefix + _jobId,
+  pending.add(toDoPrefix + _jobId,
               VPackValue(VPackValueType::Object));
   pending.add("op", VPackValue("delete"));
   pending.close();
 
   // --- Block toServer
-  pending.add(agencyPrefix + blockedServersPrefix + _server,
+  pending.add(blockedServersPrefix + _server,
               VPackValue(VPackValueType::Object));
   pending.add("jobId", VPackValue(_jobId));
   pending.close();
 
   // --- Announce in Sync that server is cleaning out
-  /*  pending.add(agencyPrefix + serverStatePrefix + _server,
+  /*  pending.add(serverStatePrefix + _server,
                 VPackValue(VPackValueType::Object));
     pending.add("cleaning", VPackValue(true));
     pending.close();*/
@@ -202,7 +202,7 @@ bool CleanOutServer::start() {
   // Preconditions
   // --- Check that toServer not blocked
   pending.openObject();
-  pending.add(agencyPrefix + blockedServersPrefix + _server,
+  pending.add(blockedServersPrefix + _server,
               VPackValue(VPackValueType::Object));
   pending.add("oldEmpty", VPackValue(true));
   pending.close();

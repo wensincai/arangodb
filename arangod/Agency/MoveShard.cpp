@@ -91,13 +91,13 @@ bool MoveShard::create(std::shared_ptr<VPackBuilder> b) {
   { VPackArrayBuilder guard(_jb.get());
     { VPackObjectBuilder guard2(_jb.get());
       if (_from == _to) {
-        path = agencyPrefix + failedPrefix + _jobId;
+        path = failedPrefix + _jobId;
         _jb->add("timeFinished", VPackValue(now));
         _jb->add(
             "result",
             VPackValue("Source and destination of moveShard must be different"));
       } else {
-        path = agencyPrefix + toDoPrefix + _jobId;
+        path = toDoPrefix + _jobId;
       }
       _jb->add("creator", VPackValue(_creator));
       _jb->add("type", VPackValue("moveShard"));
@@ -253,7 +253,7 @@ bool MoveShard::start() {
       }
     } else {
       try {
-        todo.add(_jb->slice()[0].get(agencyPrefix + toDoPrefix + _jobId));
+        todo.add(_jb->slice()[0].get(toDoPrefix + _jobId));
       } catch (std::exception const& e) {
         // Just in case, this is never going to happen, since when _jb is
         // set, then the current job is stored under ToDo.
@@ -276,7 +276,7 @@ bool MoveShard::start() {
       // --- Plan changes
       doForAllShards(_snapshot, _database, shardsLikeMe,
         [this, &pending](Slice plan, Slice current, std::string& planPath) {
-          pending.add(VPackValue(agencyPrefix + planPath));
+          pending.add(VPackValue(planPath));
           { VPackArrayBuilder serverList(&pending);
             if (_isLeader) {
               TRI_ASSERT(plan[0].copyString() != _to);
@@ -405,7 +405,7 @@ JOB_STATUS MoveShard::pendingLeader() {
         doForAllShards(_snapshot, _database, shardsLikeMe,
           [this, &trx, &pre](Slice plan, Slice current, std::string& planPath) {
             // Replace _from by "_" + _from
-            trx.add(VPackValue(agencyPrefix + planPath));
+            trx.add(VPackValue(planPath));
             { VPackArrayBuilder guard(&trx);
               for (auto const& srv : VPackArrayIterator(plan)) {
                 if (srv.copyString() == _from) {
@@ -416,7 +416,7 @@ JOB_STATUS MoveShard::pendingLeader() {
               }
             }
             // Precondition: Plan still as it was
-            pre.add(VPackValue(agencyPrefix + planPath));
+            pre.add(VPackValue(planPath));
             { VPackObjectBuilder guard(&pre);
               pre.add(VPackValue("old"));
               pre.add(plan);
@@ -453,7 +453,7 @@ JOB_STATUS MoveShard::pendingLeader() {
         doForAllShards(_snapshot, _database, shardsLikeMe,
           [this, &trx, &pre](Slice plan, Slice current, std::string& planPath) {
             // Replace "_" + _from by _to and leave _from out:
-            trx.add(VPackValue(agencyPrefix + planPath));
+            trx.add(VPackValue(planPath));
             { VPackArrayBuilder guard(&trx);
               for (auto const& srv : VPackArrayIterator(plan)) {
                 if (srv.copyString() == "_" + _from) {
@@ -464,7 +464,7 @@ JOB_STATUS MoveShard::pendingLeader() {
               }
             }
             // Precondition: Plan still as it was
-            pre.add(VPackValue(agencyPrefix + planPath));
+            pre.add(VPackValue(planPath));
             { VPackObjectBuilder guard(&pre);
               pre.add(VPackValue("old"));
               pre.add(plan);
@@ -501,7 +501,7 @@ JOB_STATUS MoveShard::pendingLeader() {
         doForAllShards(_snapshot, _database, shardsLikeMe,
           [this, &pre](Slice plan, Slice current, std::string& planPath) {
             // Precondition: Plan still as it was
-            pre.add(VPackValue(agencyPrefix + planPath));
+            pre.add(VPackValue(planPath));
             { VPackObjectBuilder guard(&pre);
               pre.add(VPackValue("old"));
               pre.add(plan);
@@ -577,7 +577,7 @@ JOB_STATUS MoveShard::pendingFollower() {
         [this, &trx, &precondition](Slice plan, Slice current,
                                     std::string& planPath) {
           // Remove fromServer from Plan:
-          trx.add(VPackValue(agencyPrefix + planPath));
+          trx.add(VPackValue(planPath));
           { VPackArrayBuilder guard(&trx);
             for (auto const& srv : VPackArrayIterator(plan)) {
               if (srv.copyString() != _from) {
@@ -586,7 +586,7 @@ JOB_STATUS MoveShard::pendingFollower() {
             }
           }
           // Precondition: Plan still as it was
-          precondition.add(VPackValue(agencyPrefix + planPath));
+          precondition.add(VPackValue(planPath));
           { VPackObjectBuilder guard(&precondition);
             precondition.add(VPackValue("old"));
             precondition.add(plan);
@@ -643,7 +643,7 @@ void MoveShard::abort() {
         doForAllShards(_snapshot, _database, shardsLikeMe,
           [this, &trx](Slice plan, Slice current, std::string& planPath) {
             // Restore leader to be _from:
-            trx.add(VPackValue(agencyPrefix + planPath));
+            trx.add(VPackValue(planPath));
             { VPackArrayBuilder guard(&trx);
               trx.add(VPackValue(_from));
               VPackArrayIterator iter(plan);
@@ -672,7 +672,7 @@ void MoveShard::abort() {
         doForAllShards(_snapshot, _database, shardsLikeMe,
           [this, &trx](Slice plan, Slice current, std::string& planPath) {
             // Remove toServer from Plan:
-            trx.add(VPackValue(agencyPrefix + planPath));
+            trx.add(VPackValue(planPath));
             { VPackArrayBuilder guard(&trx);
               for (auto const& srv : VPackArrayIterator(plan)) {
                 if (srv.copyString() != _to) {

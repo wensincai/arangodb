@@ -95,7 +95,7 @@ bool FailedFollower::create(std::shared_ptr<VPackBuilder> envelope) {
     // Operation -------------------------------------------------------
     { VPackObjectBuilder oper(_jb.get());
       // Todo entry
-      _jb->add(VPackValue(agencyPrefix + toDoPrefix + _jobId));
+      _jb->add(VPackValue(toDoPrefix + _jobId));
       { VPackObjectBuilder td(_jb.get());
         _jb->add("creator", VPackValue(_creator));
         _jb->add("type", VPackValue("failedFollower"));
@@ -108,7 +108,7 @@ bool FailedFollower::create(std::shared_ptr<VPackBuilder> envelope) {
         _jb->add("timeCreated",
                  VPackValue(timepointToString(system_clock::now()))); }
       // Add shard to /arango/Target/FailedServers/<server> array
-      _jb->add(VPackValue(agencyPrefix + failedServersPrefix + "/" + _from));
+      _jb->add(VPackValue(failedServersPrefix + "/" + _from));
       { VPackObjectBuilder (_jb.get());
         _jb->add("op", VPackValue("push"));
         _jb->add("new", VPackValue(_shard)); }}} // Operations ---------
@@ -140,7 +140,7 @@ bool FailedFollower::start() {
         return false;
       }
     } else {
-    todo.add(_jb->slice().get(agencyPrefix + toDoPrefix + _jobId).valueAt(0));
+    todo.add(_jb->slice().get(toDoPrefix + _jobId).valueAt(0));
     }}
   
   // FIXME: move to finished right away
@@ -153,7 +153,7 @@ bool FailedFollower::start() {
   // Apply
   // --- Add pending entry
   pending.openObject();
-  pending.add(agencyPrefix + pendingPrefix + _jobId,
+  pending.add(pendingPrefix + _jobId,
               VPackValue(VPackValueType::Object));
   pending.add("timeStarted",
               VPackValue(timepointToString(std::chrono::system_clock::now())));
@@ -163,13 +163,13 @@ bool FailedFollower::start() {
   pending.close();
 
   // --- Remove todo entry
-  pending.add(agencyPrefix + toDoPrefix + _jobId,
+  pending.add(toDoPrefix + _jobId,
               VPackValue(VPackValueType::Object));
   pending.add("op", VPackValue("delete"));
   pending.close();
 
   // --- Add new server to the list
-  pending.add(agencyPrefix + planPath, VPackValue(VPackValueType::Array));
+  pending.add(planPath, VPackValue(VPackValueType::Array));
   for(const auto& i : VPackArrayIterator(planned.slice())) {
     if (i.copyString() != _from) {
       pending.add(i);
@@ -181,13 +181,13 @@ bool FailedFollower::start() {
   pending.close();
 
   // --- Block shard
-  pending.add(agencyPrefix + blockedShardsPrefix + _shard,
+  pending.add(blockedShardsPrefix + _shard,
               VPackValue(VPackValueType::Object));
   pending.add("jobId", VPackValue(_jobId));
   pending.close();
 
   // --- Increment Plan/Version
-  pending.add(agencyPrefix + planVersion, VPackValue(VPackValueType::Object));
+  pending.add(planVersion, VPackValue(VPackValueType::Object));
   pending.add("op", VPackValue("increment"));
   pending.close();
 
@@ -197,7 +197,7 @@ bool FailedFollower::start() {
   pending.openObject();
   
   // --- Check if shard is not blocked by other job
-  pending.add(agencyPrefix + blockedShardsPrefix + _shard,
+  pending.add(blockedShardsPrefix + _shard,
               VPackValue(VPackValueType::Object));
   pending.add("oldEmpty", VPackValue(true));
   pending.close();
@@ -250,7 +250,7 @@ JOB_STATUS FailedFollower::status() {
     Builder del;
     del.openArray();
     del.openObject();
-    std::string path = agencyPrefix + failedServersPrefix + "/" + _from;
+    std::string path = failedServersPrefix + "/" + _from;
     del.add(path, VPackValue(VPackValueType::Object));
     del.add("op", VPackValue("erase"));
     del.add("val", VPackValue(_shard));

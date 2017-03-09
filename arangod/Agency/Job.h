@@ -62,31 +62,6 @@ static std::string const planVersion = "/Plan/Version";
 static std::string const plannedServers = "/Plan/DBServers";
 static std::string const healthPrefix = "/Supervision/Health/";
 
-inline arangodb::consensus::write_ret_t transact(AgentInterface* _agent,
-                                                 Builder const& transaction,
-                                                 bool waitForCommit = true) {
-  query_t envelope = std::make_shared<Builder>();
-
-  try {
-    envelope->openArray();
-    envelope->add(transaction.slice());
-    envelope->close();
-  } catch (std::exception const& e) {
-    LOG_TOPIC(ERR, Logger::SUPERVISION)
-        << "Supervision failed to build transaction.";
-    LOG_TOPIC(ERR, Logger::SUPERVISION) << e.what() << " " << __FILE__ << __LINE__;
-  }
-
-  auto ret = _agent->write(envelope);
-  if (waitForCommit && !ret.indices.empty()) {
-    auto maximum = *std::max_element(ret.indices.begin(), ret.indices.end());
-    if (maximum > 0) {  // some baby has worked
-      _agent->waitFor(maximum);
-    }
-  }
-  return ret;
-}
-
 struct JobResult {
   JobResult() {}
 };
@@ -189,6 +164,44 @@ struct Job {
   static void addPreconditionUnchanged(Builder& pre,
     std::string key, Slice value);
 };
+
+inline arangodb::consensus::write_ret_t transact(AgentInterface* _agent,
+                                                 Builder const& transaction,
+                                                 bool waitForCommit = true) {
+  query_t envelope = std::make_shared<Builder>();
+
+  Slice trx = transaction.slice();
+  try {
+    { VPackArrayBuilder listOfTrxs(envelope.get());
+      VPackArrayBuilder onePair(envelope.get());
+      { VPackObjectBuilder mutationPart(envelope.get());
+        for (auto const& pair : VPackObjectIterator(trx[0])) {
+          envelope->add(Job::agencyPrefix + pair.key.copyString(), pair.value);
+        }
+      }
+      if (trx.length() > 1) {
+        VPackObjectBuilder preconditionPart(envelope.get());
+        for (auto const& pair : VPackObjectIterator(trx[1])) {
+          envelope->add(Job::agencyPrefix + pair.key.copyString(), pair.value);
+        }
+      }
+    }
+  } catch (std::exception const& e) {
+    LOG_TOPIC(ERR, Logger::SUPERVISION)
+        << "Supervision failed to build transaction.";
+    LOG_TOPIC(ERR, Logger::SUPERVISION) << e.what() << " " << __FILE__ << __LINE__;
+  }
+
+  auto ret = _agent->write(envelope);
+  if (waitForCommit && !ret.indices.empty()) {
+    auto maximum = *std::max_element(ret.indices.begin(), ret.indices.end());
+    if (maximum > 0) {  // some baby has worked
+      _agent->waitFor(maximum);
+    }
+  }
+  return ret;
+}
+
 }  // namespace consensus
 }  // namespace arangodb
 

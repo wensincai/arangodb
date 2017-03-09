@@ -83,7 +83,7 @@ bool FailedLeader::create(std::shared_ptr<VPackBuilder> b) {
     
     { VPackObjectBuilder operations(_jb.get());
       // Todo entry
-      _jb->add(VPackValue(agencyPrefix + toDoPrefix + _jobId));
+      _jb->add(VPackValue(toDoPrefix + _jobId));
       { VPackObjectBuilder todo(_jb.get());
         _jb->add("creator", VPackValue(_creator));
         _jb->add("type", VPackValue("failedLeader"));
@@ -97,7 +97,7 @@ bool FailedLeader::create(std::shared_ptr<VPackBuilder> b) {
           "timeCreated", VPackValue(timepointToString(system_clock::now())));
       }
       // Add shard to /arango/Target/FailedServers/<server> array
-      _jb->add(VPackValue(agencyPrefix + failedServersPrefix + "/" + _from));
+      _jb->add(VPackValue(failedServersPrefix + "/" + _from));
       { VPackObjectBuilder failed(_jb.get());
         _jb->add("op", VPackValue("push"));
         _jb->add("new", VPackValue(_shard));
@@ -141,7 +141,7 @@ bool FailedLeader::start() {
         return false;
       }
     } else {
-      todo.add(_jb->slice().get(agencyPrefix + toDoPrefix + _jobId).valueAt(0));
+      todo.add(_jb->slice().get(toDoPrefix + _jobId).valueAt(0));
     }}
   
   std::vector<std::string> planv;
@@ -159,7 +159,7 @@ bool FailedLeader::start() {
     // Operations ------------------------------------------------------------
     { VPackObjectBuilder operations(&pending);
       // Add pending entry
-      pending.add(VPackValue(agencyPrefix + pendingPrefix + _jobId));
+      pending.add(VPackValue(pendingPrefix + _jobId));
       { VPackObjectBuilder ts(&pending);
         pending.add("timeStarted",
                     VPackValue(timepointToString(system_clock::now())));
@@ -168,11 +168,11 @@ bool FailedLeader::start() {
         }
       }
       // Remove todo entry
-      pending.add(VPackValue(agencyPrefix + toDoPrefix + _jobId));
+      pending.add(VPackValue(toDoPrefix + _jobId));
       { VPackObjectBuilder rem(&pending);
         pending.add("op", VPackValue("delete")); }
       // DB server vector
-      pending.add(VPackValue(agencyPrefix + planPath));
+      pending.add(VPackValue(planPath));
       { VPackArrayBuilder dbs(&pending);
         pending.add(VPackValue(_to));
         for (auto const& i : VPackArrayIterator(current)) {
@@ -188,27 +188,27 @@ bool FailedLeader::start() {
           pending.add(VPackValue(i));
         }}
       // Block shard
-      pending.add(VPackValue(agencyPrefix + blockedShardsPrefix + _shard));
+      pending.add(VPackValue(blockedShardsPrefix + _shard));
       { VPackObjectBuilder block(&pending);
         pending.add("jobId", VPackValue(_jobId)); }
       // Increment Plan/Version
-      pending.add(VPackValue(agencyPrefix + planVersion));
+      pending.add(VPackValue(planVersion));
       { VPackObjectBuilder version(&pending);
         pending.add("op", VPackValue("increment")); }} // Operations ---------
 
     // Preconditions ---------------------------------------------------------
     { VPackObjectBuilder preconditions(&pending);    
       // Current servers are as we expect
-      pending.add(VPackValue(agencyPrefix + curPath));
+      pending.add(VPackValue(curPath));
       { VPackObjectBuilder cur(&pending);
         pending.add("old", current); }
       // Plan servers are as we expect
-      pending.add(VPackValue(agencyPrefix + planPath));
+      pending.add(VPackValue(planPath));
       { VPackObjectBuilder plan(&pending);
         pending.add("old", planned); }
       // Shard is not blocked
       
-      pending.add(VPackValue(agencyPrefix + blockedShardsPrefix + _shard));
+      pending.add(VPackValue(blockedShardsPrefix + _shard));
       { VPackObjectBuilder blocked(&pending);
         pending.add("oldEmpty", VPackValue(true)); }} // Preconditions --------
 
@@ -244,7 +244,7 @@ JOB_STATUS FailedLeader::status() {
     Builder del;
     { VPackArrayBuilder a(&del);
       { VPackObjectBuilder o(&del);
-        del.add(VPackValue(agencyPrefix + failedServersPrefix + "/" + _from));
+        del.add(VPackValue(failedServersPrefix + "/" + _from));
         { VPackObjectBuilder erase(&del);
           del.add("op", VPackValue("erase"));
           del.add("val", VPackValue(_shard));

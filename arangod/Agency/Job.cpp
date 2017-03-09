@@ -113,7 +113,7 @@ bool Job::finish(std::string const& type, bool success,
   // --- Add finished
   finished.openObject();
   finished.add(
-    agencyPrefix + (success ? finishedPrefix : failedPrefix) + _jobId,
+    (success ? finishedPrefix : failedPrefix) + _jobId,
     VPackValue(VPackValueType::Object));
   finished.add(
     "timeFinished",
@@ -127,20 +127,20 @@ bool Job::finish(std::string const& type, bool success,
   finished.close();
 
   // --- Delete pending
-  finished.add(agencyPrefix + pendingPrefix + _jobId,
+  finished.add(pendingPrefix + _jobId,
                VPackValue(VPackValueType::Object));
   finished.add("op", VPackValue("delete"));
   finished.close();
 
   // --- Delete todo
-  finished.add(agencyPrefix + toDoPrefix + _jobId,
+  finished.add(toDoPrefix + _jobId,
                VPackValue(VPackValueType::Object));
   finished.add("op", VPackValue("delete"));
   finished.close();
 
   // --- Remove block if specified
   if (type != "") {
-    finished.add(agencyPrefix + "/Supervision/" + type,
+    finished.add("/Supervision/" + type,
                  VPackValue(VPackValueType::Object));
     finished.add("op", VPackValue("delete"));
     finished.close();
@@ -294,7 +294,7 @@ void Job::doForAllShards(Node const& snapshot,
 }
 
 void Job::addIncreasePlanVersion(Builder& trx) {
-  trx.add(VPackValue(agencyPrefix + planVersion));
+  trx.add(VPackValue(planVersion));
   { VPackObjectBuilder guard(&trx);
     trx.add("op", VPackValue("increment"));
   }
@@ -302,7 +302,7 @@ void Job::addIncreasePlanVersion(Builder& trx) {
 
 void Job::addRemoveJobFromSomewhere(Builder& trx, std::string where,
   std::string jobId) {
-  trx.add(VPackValue(agencyPrefix + "/Target/" + where + "/" + jobId));
+  trx.add(VPackValue("/Target/" + where + "/" + jobId));
   { VPackObjectBuilder guard(&trx);
     trx.add("op", VPackValue("delete"));
   }
@@ -313,7 +313,7 @@ void Job::addPutJobIntoSomewhere(Builder& trx, std::string where, Slice job,
   Slice jobIdSlice = job.get("jobId");
   TRI_ASSERT(jobIdSlice.isString());
   std::string jobId = jobIdSlice.copyString();
-  trx.add(VPackValue(agencyPrefix + "/Target/" + where + "/" + jobId));
+  trx.add(VPackValue("/Target/" + where + "/" + jobId));
   { VPackObjectBuilder guard(&trx);
     if (where == "Pending") {
       trx.add("timeStarted",
@@ -334,7 +334,7 @@ void Job::addPutJobIntoSomewhere(Builder& trx, std::string where, Slice job,
 void Job::addPreconditionCollectionStillThere(Builder& pre,
     std::string database, std::string collection) {
   std::string planPath
-      = agencyPrefix + planColPrefix + database + "/" + collection;
+      = planColPrefix + database + "/" + collection;
   pre.add(VPackValue(planPath));
   { VPackObjectBuilder guard(&pre);
     pre.add("oldEmpty", VPackValue(false));
@@ -342,14 +342,14 @@ void Job::addPreconditionCollectionStillThere(Builder& pre,
 }
 
 void Job::addPreconditionServerNotBlocked(Builder& pre, std::string server) {
-	pre.add(VPackValue(agencyPrefix + blockedServersPrefix + server));
+	pre.add(VPackValue(blockedServersPrefix + server));
 	{ VPackObjectBuilder shardLockEmpty(&pre);
 		pre.add("oldEmpty", VPackValue(true));
 	}
 }
 
 void Job::addPreconditionShardNotBlocked(Builder& pre, std::string shard) {
-	pre.add(VPackValue(agencyPrefix + blockedShardsPrefix + shard));
+	pre.add(VPackValue(blockedShardsPrefix + shard));
 	{ VPackObjectBuilder shardLockEmpty(&pre);
 		pre.add("oldEmpty", VPackValue(true));
 	}
@@ -357,29 +357,29 @@ void Job::addPreconditionShardNotBlocked(Builder& pre, std::string shard) {
 
 void Job::addPreconditionUnchanged(Builder& pre,
     std::string key, Slice value) {
-  pre.add(VPackValue(agencyPrefix + key));
+  pre.add(VPackValue(key));
   { VPackObjectBuilder guard(&pre);
     pre.add("old", value);
   }
 }
 
 void Job::addBlockServer(Builder& trx, std::string server, std::string jobId) {
-  trx.add(agencyPrefix + blockedServersPrefix + server, VPackValue(jobId));
+  trx.add(blockedServersPrefix + server, VPackValue(jobId));
 }
 
 void Job::addBlockShard(Builder& trx, std::string shard, std::string jobId) {
-  trx.add(agencyPrefix + blockedShardsPrefix + shard, VPackValue(jobId));
+  trx.add(blockedShardsPrefix + shard, VPackValue(jobId));
 }
 
 void Job::addReleaseServer(Builder& trx, std::string server) {
-  trx.add(VPackValue(agencyPrefix + blockedServersPrefix + server));
+  trx.add(VPackValue(blockedServersPrefix + server));
   { VPackObjectBuilder guard(&trx);
     trx.add("op", VPackValue("delete"));
   }
 }
 
 void Job::addReleaseShard(Builder& trx, std::string shard) {
-  trx.add(VPackValue(agencyPrefix + blockedShardsPrefix + shard));
+  trx.add(VPackValue(blockedShardsPrefix + shard));
   { VPackObjectBuilder guard(&trx);
     trx.add("op", VPackValue("delete"));
   }

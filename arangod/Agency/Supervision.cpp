@@ -74,8 +74,7 @@ void Supervision::upgradeAgency() {
       Builder builder;
       builder.openArray();
       builder.openObject();
-      builder.add(_agencyPrefix + failedServersPrefix,
-                  VPackValue(VPackValueType::Object));
+      builder.add(failedServersPrefix, VPackValue(VPackValueType::Object));
       for (auto const& failed :
              VPackArrayIterator(_snapshot(failedServersPrefix).slice())) {
         builder.add(failed.copyString(), VPackValue(VPackValueType::Object));
@@ -90,8 +89,7 @@ void Supervision::upgradeAgency() {
     Builder builder;
     builder.openArray();
     builder.openObject();
-    builder.add(
-      _agencyPrefix + failedServersPrefix, VPackValue(VPackValueType::Object));
+    builder.add(failedServersPrefix, VPackValue(VPackValueType::Object));
     builder.close();
     builder.close();
     builder.close();
@@ -185,7 +183,7 @@ std::vector<check_t> Supervision::checkDBServers() {
         Builder del;
         del.openArray();
         del.openObject();
-        del.add(_agencyPrefix + failedServerPath,
+        del.add(failedServerPath,
                 VPackValue(VPackValueType::Object));
         del.add("op", VPackValue("delete"));
         del.close();
@@ -856,10 +854,10 @@ void Supervision::getUniqueIds() {
     Builder uniq;
     uniq.openArray();
     uniq.openObject();
-    uniq.add(_agencyPrefix + syncLatest, VPackValue(latestId + 100000));  // new
+    uniq.add(syncLatest, VPackValue(latestId + 100000));  // new
     uniq.close();
     uniq.openObject();
-    uniq.add(_agencyPrefix + syncLatest, VPackValue(latestId));  // precond
+    uniq.add(syncLatest, VPackValue(latestId));  // precond
     uniq.close();
     uniq.close();
 

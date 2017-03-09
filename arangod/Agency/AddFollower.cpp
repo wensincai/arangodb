@@ -116,7 +116,7 @@ bool AddFollower::create(std::shared_ptr<VPackBuilder> b) {
   _jb->openArray();
   _jb->openObject();
 
-  path = agencyPrefix + toDoPrefix + _jobId;
+  path = toDoPrefix + _jobId;
 
   // FIXME: create a single larger AddFollower job with many shards
 
@@ -207,7 +207,7 @@ bool AddFollower::start() {
 
   // --- Add pending
   pending.openObject();
-  pending.add(agencyPrefix + pendingPrefix + _jobId,
+  pending.add(pendingPrefix + _jobId,
               VPackValue(VPackValueType::Object));
   pending.add("timeStarted",
               VPackValue(timepointToString(std::chrono::system_clock::now())));
@@ -217,27 +217,27 @@ bool AddFollower::start() {
   pending.close();
 
   // --- Delete todo
-  pending.add(agencyPrefix + toDoPrefix + _jobId,
+  pending.add(toDoPrefix + _jobId,
               VPackValue(VPackValueType::Object));
   pending.add("op", VPackValue("delete"));
   pending.close();
 
   // --- Block shard
-  pending.add(agencyPrefix + blockedShardsPrefix + _shard,
+  pending.add(blockedShardsPrefix + _shard,
               VPackValue(VPackValueType::Object));
   pending.add("jobId", VPackValue(_jobId));
   pending.close();
 
   // --- Plan changes
   for (auto const& i : _newFollower) {
-    pending.add(agencyPrefix + planPath, VPackValue(VPackValueType::Object));
+    pending.add(planPath, VPackValue(VPackValueType::Object));
     pending.add("op", VPackValue("push"));
     pending.add("new", VPackValue(i));
     pending.close();
   }
 
   // --- Increment Plan/Version
-  pending.add(agencyPrefix + planVersion, VPackValue(VPackValueType::Object));
+  pending.add(planVersion, VPackValue(VPackValueType::Object));
   pending.add("op", VPackValue("increment"));
   pending.close();
 
@@ -248,17 +248,17 @@ bool AddFollower::start() {
   // FIXME: is this check really necessary?
   // --- Check that Current servers are as we expect
   pending.openObject();
-  pending.add(agencyPrefix + curPath, VPackValue(VPackValueType::Object));
+  pending.add(curPath, VPackValue(VPackValueType::Object));
   pending.add("old", current);
   pending.close();
 
   // --- Check that Plan servers are as we expect
-  pending.add(agencyPrefix + planPath, VPackValue(VPackValueType::Object));
+  pending.add(planPath, VPackValue(VPackValueType::Object));
   pending.add("old", planned);
   pending.close();
 
   // --- Check if shard is not blocked
-  pending.add(agencyPrefix + blockedShardsPrefix + _shard,
+  pending.add(blockedShardsPrefix + _shard,
               VPackValue(VPackValueType::Object));
   pending.add("oldEmpty", VPackValue(true));
   pending.close();
