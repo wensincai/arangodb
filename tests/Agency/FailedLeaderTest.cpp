@@ -61,6 +61,10 @@ Node createRootNode() {
           {
             VPackObjectBuilder d(&builder);
           }
+          builder.add(VPackValue("Failed"));
+          {
+            VPackObjectBuilder d(&builder);
+          }
         }
         builder.add(VPackValue("Current"));
         {
@@ -114,6 +118,33 @@ Node createRootNode() {
                 }
               }
             }
+          }
+        }
+        builder.add(VPackValue("Supervision"));
+        {
+          VPackObjectBuilder c(&builder);
+          builder.add(VPackValue("Health"));
+          {
+            VPackObjectBuilder c(&builder);
+            builder.add(VPackValue(SHARD_LEADER));
+            {
+              VPackObjectBuilder e(&builder);
+              builder.add("Status", VPackValue("FAILED"));
+            }
+            builder.add(VPackValue(SHARD_FOLLOWER1));
+            {
+              VPackObjectBuilder e(&builder);
+              builder.add("Status", VPackValue("GOOD"));
+            }
+            builder.add(VPackValue(SHARD_FOLLOWER2));
+            {
+              VPackObjectBuilder e(&builder);
+              builder.add("Status", VPackValue("GOOD"));
+            }
+          }
+          builder.add(VPackValue("DBServers"));
+          {
+            VPackObjectBuilder c(&builder);
           }
         }
       }
@@ -228,13 +259,476 @@ SECTION("if we want to start and the collection went missing from plan (our trut
     REQUIRE(q->slice()[0][0].typeName() == "object");
 
     auto writes = q->slice()[0][0];
-    REQUIRE(writes.get("/arango/Target/ToDo/1").isObject());
-    REQUIRE(writes.get("/arango/Target/ToDo/1").get("op").isString());
+    REQUIRE(writes.get("/arango/Target/ToDo/1").typeName() == "object");
+    REQUIRE(writes.get("/arango/Target/ToDo/1").get("op").typeName() == "string");
     CHECK(writes.get("/arango/Target/ToDo/1").get("op").copyString() == "delete");
-    CHECK(writes.get("/arango/Target/Finished/1").isObject());
+    CHECK(writes.get("/arango/Target/Finished/1").typeName() == "object");
     return fakeWriteResult;
   });
   When(Method(mockAgent, waitFor)).AlwaysReturn(AgentInterface::raft_commit_t::OK);
+  AgentInterface &agent = mockAgent.get();
+  auto failedLeader = FailedLeader(
+    agency("arango"),
+    &agent,
+    JOB_STATUS::TODO,
+    jobId
+  );
+  failedLeader.start();
+}
+
+SECTION("if we are supposed to fail a distributeShardsLike job we immediately fail because this should be done by a job running on the master shard") {
+  std::string jobId = "1";
+
+  std::function<std::unique_ptr<VPackBuilder>(VPackSlice const&, std::string const&)> createTestStructure = [&](VPackSlice const& s, std::string const& path) {
+    std::unique_ptr<VPackBuilder> builder;
+    builder.reset(new VPackBuilder());
+    if (s.isObject()) {
+      builder->add(VPackValue(VPackValueType::Object));
+      for (auto const& it: VPackObjectIterator(s)) {
+        auto childBuilder = createTestStructure(it.value, path + "/" + it.key.copyString());
+        if (childBuilder) {
+          builder->add(it.key.copyString(), childBuilder->slice());
+        }
+      }
+
+      if (path == "/arango/Plan/Collections/" + DATABASE + "/" + COLLECTION) {
+        builder->add("distributeShardsLike", VPackValue("PENG"));
+      }
+
+      if (path == "/arango/Target/ToDo") {
+        VPackBuilder jobBuilder;
+        jobBuilder.add(VPackValue(VPackValueType::Object));
+        jobBuilder.add("creator", VPackValue("1"));
+        jobBuilder.add("type", VPackValue("failedLeader"));
+        jobBuilder.add("database", VPackValue(DATABASE));
+        jobBuilder.add("collection", VPackValue(COLLECTION));
+        jobBuilder.add("shard", VPackValue(SHARD));
+        jobBuilder.add("fromServer", VPackValue(SHARD_LEADER));
+        jobBuilder.add("jobId", VPackValue(jobId));
+        jobBuilder.add("timeCreated", VPackValue("2017-01-01 00:00:00"));
+        jobBuilder.close();
+        builder->add("1", jobBuilder.slice());
+      }
+      builder->close();
+    } else {
+      builder->add(s);
+    }
+    return builder;
+  };
+
+  auto builder = createTestStructure(baseStructure.toBuilder().slice(), "");
+  REQUIRE(builder);
+  Node agency = createNodeFromBuilder(*builder);
+
+  Mock<AgentInterface> mockAgent;
+  When(Method(mockAgent, write)).AlwaysDo([&](query_t const& q) -> write_ret_t {
+    INFO(q->slice().toJson());
+    REQUIRE(q->slice().typeName() == "array" );
+    REQUIRE(q->slice().length() == 1);
+    REQUIRE(q->slice()[0].typeName() == "array");
+    REQUIRE(q->slice()[0].length() == 1); // we always simply override! no preconditions...
+    REQUIRE(q->slice()[0][0].typeName() == "object");
+
+    auto writes = q->slice()[0][0];
+    REQUIRE(writes.get("/arango/Target/ToDo/1").typeName() == "object");
+    REQUIRE(writes.get("/arango/Target/ToDo/1").get("op").typeName() == "string");
+    CHECK(writes.get("/arango/Target/ToDo/1").get("op").copyString() == "delete");
+    CHECK(writes.get("/arango/Target/Failed/1").typeName() == "object");
+    return fakeWriteResult;
+  });
+  When(Method(mockAgent, waitFor)).AlwaysReturn(AgentInterface::raft_commit_t::OK);
+  AgentInterface &agent = mockAgent.get();
+  auto failedLeader = FailedLeader(
+    agency("arango"),
+    &agent,
+    JOB_STATUS::TODO,
+    jobId
+  );
+  failedLeader.start();
+}
+
+SECTION("if we are supposed to fail a distributeShardsLike job we immediately fail because this should be done by a job running on the master shard") {
+  std::string jobId = "1";
+
+  std::function<std::unique_ptr<VPackBuilder>(VPackSlice const&, std::string const&)> createTestStructure = [&](VPackSlice const& s, std::string const& path) {
+    std::unique_ptr<VPackBuilder> builder;
+    builder.reset(new VPackBuilder());
+    if (s.isObject()) {
+      builder->add(VPackValue(VPackValueType::Object));
+      for (auto const& it: VPackObjectIterator(s)) {
+        auto childBuilder = createTestStructure(it.value, path + "/" + it.key.copyString());
+        if (childBuilder) {
+          builder->add(it.key.copyString(), childBuilder->slice());
+        }
+      }
+
+      if (path == "/arango/Plan/Collections/" + DATABASE + "/" + COLLECTION) {
+        builder->add("distributeShardsLike", VPackValue("PENG"));
+      }
+
+      if (path == "/arango/Target/ToDo") {
+        VPackBuilder jobBuilder;
+        jobBuilder.add(VPackValue(VPackValueType::Object));
+        jobBuilder.add("creator", VPackValue("1"));
+        jobBuilder.add("type", VPackValue("failedLeader"));
+        jobBuilder.add("database", VPackValue(DATABASE));
+        jobBuilder.add("collection", VPackValue(COLLECTION));
+        jobBuilder.add("shard", VPackValue(SHARD));
+        jobBuilder.add("fromServer", VPackValue(SHARD_LEADER));
+        jobBuilder.add("jobId", VPackValue(jobId));
+        jobBuilder.add("timeCreated", VPackValue("2017-01-01 00:00:00"));
+        jobBuilder.close();
+        builder->add("1", jobBuilder.slice());
+      }
+      builder->close();
+    } else {
+      builder->add(s);
+    }
+    return builder;
+  };
+
+  auto builder = createTestStructure(baseStructure.toBuilder().slice(), "");
+  REQUIRE(builder);
+  Node agency = createNodeFromBuilder(*builder);
+
+  Mock<AgentInterface> mockAgent;
+  When(Method(mockAgent, write)).AlwaysDo([&](query_t const& q) -> write_ret_t {
+    INFO(q->slice().toJson());
+    REQUIRE(q->slice().typeName() == "array" );
+    REQUIRE(q->slice().length() == 1);
+    REQUIRE(q->slice()[0].typeName() == "array");
+    REQUIRE(q->slice()[0].length() == 1); // we always simply override! no preconditions...
+    REQUIRE(q->slice()[0][0].typeName() == "object");
+
+    auto writes = q->slice()[0][0];
+    REQUIRE(writes.get("/arango/Target/ToDo/1").typeName() == "object");
+    REQUIRE(writes.get("/arango/Target/ToDo/1").get("op").typeName() == "string");
+    CHECK(writes.get("/arango/Target/ToDo/1").get("op").copyString() == "delete");
+    CHECK(writes.get("/arango/Target/Failed/1").typeName() == "object");
+    return fakeWriteResult;
+  });
+  When(Method(mockAgent, waitFor)).AlwaysReturn(AgentInterface::raft_commit_t::OK);
+  AgentInterface &agent = mockAgent.get();
+  auto failedLeader = FailedLeader(
+    agency("arango"),
+    &agent,
+    JOB_STATUS::TODO,
+    jobId
+  );
+  failedLeader.start();
+}
+
+SECTION("if the leader is healthy again we fail the job") {
+  std::string jobId = "1";
+
+  std::function<std::unique_ptr<VPackBuilder>(VPackSlice const&, std::string const&)> createTestStructure = [&](VPackSlice const& s, std::string const& path) {
+    std::unique_ptr<VPackBuilder> builder;
+    builder.reset(new VPackBuilder());
+    if (s.isObject()) {
+      builder->add(VPackValue(VPackValueType::Object));
+      for (auto const& it: VPackObjectIterator(s)) {
+        auto childBuilder = createTestStructure(it.value, path + "/" + it.key.copyString());
+        if (childBuilder) {
+          builder->add(it.key.copyString(), childBuilder->slice());
+        }
+      }
+
+      if (path == "/arango/Supervision/Health/" + SHARD_LEADER) {
+        builder->add("Status", VPackValue("GOOD"));
+      }
+
+      if (path == "/arango/Target/ToDo") {
+        VPackBuilder jobBuilder;
+        jobBuilder.add(VPackValue(VPackValueType::Object));
+        jobBuilder.add("creator", VPackValue("1"));
+        jobBuilder.add("type", VPackValue("failedLeader"));
+        jobBuilder.add("database", VPackValue(DATABASE));
+        jobBuilder.add("collection", VPackValue(COLLECTION));
+        jobBuilder.add("shard", VPackValue(SHARD));
+        jobBuilder.add("fromServer", VPackValue(SHARD_LEADER));
+        jobBuilder.add("jobId", VPackValue(jobId));
+        jobBuilder.add("timeCreated", VPackValue("2017-01-01 00:00:00"));
+        jobBuilder.close();
+        builder->add("1", jobBuilder.slice());
+      }
+      builder->close();
+    } else {
+      builder->add(s);
+    }
+    return builder;
+  };
+
+  auto builder = createTestStructure(baseStructure.toBuilder().slice(), "");
+  REQUIRE(builder);
+  Node agency = createNodeFromBuilder(*builder);
+
+  Mock<AgentInterface> mockAgent;
+  When(Method(mockAgent, write)).AlwaysDo([&](query_t const& q) -> write_ret_t {
+    INFO(q->slice().toJson());
+    REQUIRE(q->slice().typeName() == "array" );
+    REQUIRE(q->slice().length() == 1);
+    REQUIRE(q->slice()[0].typeName() == "array");
+    REQUIRE(q->slice()[0].length() == 1); // we always simply override! no preconditions...
+    REQUIRE(q->slice()[0][0].typeName() == "object");
+
+    auto writes = q->slice()[0][0];
+    REQUIRE(writes.get("/arango/Target/ToDo/1").typeName() == "object");
+    REQUIRE(writes.get("/arango/Target/ToDo/1").get("op").typeName() == "string");
+    CHECK(writes.get("/arango/Target/ToDo/1").get("op").copyString() == "delete");
+    CHECK(writes.get("/arango/Target/Failed/1").typeName() == "object");
+    return fakeWriteResult;
+  });
+  When(Method(mockAgent, waitFor)).AlwaysReturn(AgentInterface::raft_commit_t::OK);
+  AgentInterface &agent = mockAgent.get();
+  auto failedLeader = FailedLeader(
+    agency("arango"),
+    &agent,
+    JOB_STATUS::TODO,
+    jobId
+  );
+  failedLeader.start();
+}
+
+SECTION("the job must not be started if there is no server that is in sync for every shard") {
+  std::string jobId = "1";
+
+  std::function<std::unique_ptr<VPackBuilder>(VPackSlice const&, std::string const&)> createTestStructure = [&](VPackSlice const& s, std::string const& path) {
+    std::unique_ptr<VPackBuilder> builder;
+    builder.reset(new VPackBuilder());
+    if (s.isObject()) {
+      builder->add(VPackValue(VPackValueType::Object));
+      for (auto const& it: VPackObjectIterator(s)) {
+        auto childBuilder = createTestStructure(it.value, path + "/" + it.key.copyString());
+        if (childBuilder) {
+          builder->add(it.key.copyString(), childBuilder->slice());
+        }
+      }
+
+      if (path == "/arango/Target/ToDo") {
+        VPackBuilder jobBuilder;
+        jobBuilder.add(VPackValue(VPackValueType::Object));
+        jobBuilder.add("creator", VPackValue("1"));
+        jobBuilder.add("type", VPackValue("failedLeader"));
+        jobBuilder.add("database", VPackValue(DATABASE));
+        jobBuilder.add("collection", VPackValue(COLLECTION));
+        jobBuilder.add("shard", VPackValue(SHARD));
+        jobBuilder.add("fromServer", VPackValue(SHARD_LEADER));
+        jobBuilder.add("jobId", VPackValue(jobId));
+        jobBuilder.add("timeCreated", VPackValue("2017-01-01 00:00:00"));
+        jobBuilder.close();
+        builder->add("1", jobBuilder.slice());
+      }
+      builder->close();
+    } else {
+      if (path == "/arango/Current/Collections/" + DATABASE + "/" + COLLECTION + "/" + SHARD + "/servers") {
+        builder->add(VPackValue(VPackValueType::Array));
+        builder->add(VPackValue(SHARD_LEADER));
+      } else {
+        builder->add(s);
+      }
+    }
+    return builder;
+  };
+
+  auto builder = createTestStructure(baseStructure.toBuilder().slice(), "");
+  REQUIRE(builder);
+  INFO(builder->toJson());
+  Node agency = createNodeFromBuilder(*builder);
+  
+  // nothing should happen
+  Mock<AgentInterface> mockAgent;
+  AgentInterface &agent = mockAgent.get();
+  auto failedLeader = FailedLeader(
+    agency("arango"),
+    &agent,
+    JOB_STATUS::TODO,
+    jobId
+  );
+  failedLeader.start();
+}
+
+SECTION("the job must not be started if there if one of the linked shards (distributeShardsLike) is not in sync") {
+  std::string jobId = "1";
+
+  std::function<std::unique_ptr<VPackBuilder>(VPackSlice const&, std::string const&)> createTestStructure = [&](VPackSlice const& s, std::string const& path) {
+    std::unique_ptr<VPackBuilder> builder;
+    builder.reset(new VPackBuilder());
+    if (s.isObject()) {
+      builder->add(VPackValue(VPackValueType::Object));
+      for (auto const& it: VPackObjectIterator(s)) {
+        auto childBuilder = createTestStructure(it.value, path + "/" + it.key.copyString());
+        if (childBuilder) {
+          builder->add(it.key.copyString(), childBuilder->slice());
+        }
+      }
+
+      if (path == "/arango/Current/Collections/" + DATABASE) {
+        // we fake that follower2 is in sync
+        builder->add(VPackValue("linkedcollection1"));
+        {
+          VPackObjectBuilder f(builder.get());
+          builder->add(VPackValue("linkedshard1"));
+          {
+            VPackObjectBuilder f(builder.get());
+            builder->add(VPackValue("servers"));
+            {
+              VPackArrayBuilder g(builder.get());
+              builder->add(VPackValue(SHARD_LEADER));
+              builder->add(VPackValue(SHARD_FOLLOWER2));
+            }
+          }
+        }
+        // for the other shard there is only follower1 in sync
+        builder->add(VPackValue("linkedcollection2"));
+        {
+          VPackObjectBuilder f(builder.get());
+          builder->add(VPackValue("linkedshard2"));
+          {
+            VPackObjectBuilder f(builder.get());
+            builder->add(VPackValue("servers"));
+            {
+              VPackArrayBuilder g(builder.get());
+              builder->add(VPackValue(SHARD_LEADER));
+              builder->add(VPackValue(SHARD_FOLLOWER1));
+            }
+          }
+        }
+      } else if (path == "/arango/Current/Plan/" + DATABASE) {
+        builder->add(VPackValue("linkedcollection1"));
+        {
+          VPackObjectBuilder f(builder.get());
+          builder->add("distributeShardsLike", VPackValue(SHARD));
+          builder->add(VPackValue("shards"));
+          {
+            VPackObjectBuilder f(builder.get());
+            builder->add(VPackValue("linkedshard1"));
+            {
+              VPackArrayBuilder g(builder.get());
+              builder->add(VPackValue(SHARD_LEADER));
+              builder->add(VPackValue(SHARD_FOLLOWER1));
+              builder->add(VPackValue(SHARD_FOLLOWER2));
+            }
+          }
+        }
+        builder->add(VPackValue("linkedcollection2"));
+        {
+          VPackObjectBuilder f(builder.get());
+          builder->add("distributeShardsLike", VPackValue(SHARD));
+          builder->add(VPackValue("shards"));
+          {
+            VPackObjectBuilder f(builder.get());
+            builder->add(VPackValue("linkedshard2"));
+            {
+              VPackArrayBuilder g(builder.get());
+              builder->add(VPackValue(SHARD_LEADER));
+              builder->add(VPackValue(SHARD_FOLLOWER1));
+              builder->add(VPackValue(SHARD_FOLLOWER2));
+            }
+          }
+        }
+      } else if (path == "/arango/Target/ToDo") {
+        VPackBuilder jobBuilder;
+        jobBuilder.add(VPackValue(VPackValueType::Object));
+        jobBuilder.add("creator", VPackValue("1"));
+        jobBuilder.add("type", VPackValue("failedLeader"));
+        jobBuilder.add("database", VPackValue(DATABASE));
+        jobBuilder.add("collection", VPackValue(COLLECTION));
+        jobBuilder.add("shard", VPackValue(SHARD));
+        jobBuilder.add("fromServer", VPackValue(SHARD_LEADER));
+        jobBuilder.add("jobId", VPackValue(jobId));
+        jobBuilder.add("timeCreated", VPackValue("2017-01-01 00:00:00"));
+        jobBuilder.close();
+        builder->add("1", jobBuilder.slice());
+      }
+      builder->close();
+    } else {
+      builder->add(s);
+    }
+    return builder;
+  };
+  auto builder = createTestStructure(baseStructure.toBuilder().slice(), "");
+  REQUIRE(builder);
+  INFO(builder->toJson());
+  Node agency = createNodeFromBuilder(*builder);
+
+  // nothing should happen
+  Mock<AgentInterface> mockAgent;
+  AgentInterface &agent = mockAgent.get();
+  auto failedLeader = FailedLeader(
+    agency("arango"),
+    &agent,
+    JOB_STATUS::TODO,
+    jobId
+  );
+  failedLeader.start();
+}
+
+SECTION("if everything is fine than the job should be written to pending, adding the toServer") {
+  std::string jobId = "1";
+
+  std::function<std::unique_ptr<VPackBuilder>(VPackSlice const&, std::string const&)> createTestStructure = [&](VPackSlice const& s, std::string const& path) {
+    std::unique_ptr<VPackBuilder> builder(new VPackBuilder());
+    if (s.isObject()) {
+      builder->add(VPackValue(VPackValueType::Object));
+      for (auto const& it: VPackObjectIterator(s)) {
+        auto childBuilder = createTestStructure(it.value, path + "/" + it.key.copyString());
+        if (childBuilder) {
+          builder->add(it.key.copyString(), childBuilder->slice());
+        }
+      }
+      if (path == "/arango/Target/ToDo") {
+        VPackBuilder jobBuilder;
+        jobBuilder.add(VPackValue(VPackValueType::Object));
+        jobBuilder.add("creator", VPackValue("1"));
+        jobBuilder.add("type", VPackValue("failedLeader"));
+        jobBuilder.add("database", VPackValue(DATABASE));
+        jobBuilder.add("collection", VPackValue(COLLECTION));
+        jobBuilder.add("shard", VPackValue(SHARD));
+        jobBuilder.add("fromServer", VPackValue(SHARD_LEADER));
+        jobBuilder.add("jobId", VPackValue(jobId));
+        jobBuilder.add("timeCreated", VPackValue("2017-01-01 00:00:00"));
+        jobBuilder.close();
+        builder->add("1", jobBuilder.slice());
+      }
+      builder->close();
+    } else {
+      if (path == "aaa/arango/Current/Collections/" + DATABASE + "/" + COLLECTION + "/" + SHARD + "/servers") {
+        builder->add(VPackValue(VPackValueType::Array));
+        builder->add(VPackValue(SHARD_LEADER));
+        builder->add(VPackValue(SHARD_FOLLOWER2));
+        builder->close();
+      } else {
+        builder->add(s);
+      }
+    }
+    return builder;
+  };
+  auto builder = createTestStructure(baseStructure.toBuilder().slice(), "");
+  REQUIRE(builder);
+  INFO("Teststructure: " << builder->toJson());
+  Node agency = createNodeFromBuilder(*builder);
+
+  // nothing should happen
+  Mock<AgentInterface> mockAgent;
+  When(Method(mockAgent, write)).AlwaysDo([&](query_t const& q) -> write_ret_t {
+    INFO("WriteTransaction: " << q->slice().toJson());
+    REQUIRE(q->slice().typeName() == "array" );
+    REQUIRE(q->slice().length() == 1);
+    REQUIRE(q->slice()[0].typeName() == "array");
+    REQUIRE(q->slice()[0].length() == 2); // preconditions!
+    REQUIRE(q->slice()[0][0].typeName() == "object");
+
+    auto writes = q->slice()[0][0];
+    REQUIRE(writes.get("/arango/Target/ToDo/1").typeName() == "object");
+    REQUIRE(writes.get("/arango/Target/ToDo/1").get("op").typeName() == "string");
+    CHECK(writes.get("/arango/Target/ToDo/1").get("op").copyString() == "delete");
+    CHECK(writes.get("/arango/Target/Pending/1").typeName() == "object");
+
+    auto job = writes.get("/arango/Target/Pending/1");
+    REQUIRE(job.get("toServer").typeName() == "string");
+    CHECK(job.get("toServer").copyString() == SHARD_FOLLOWER2);
+    return fakeWriteResult;
+  });
   AgentInterface &agent = mockAgent.get();
   auto failedLeader = FailedLeader(
     agency("arango"),

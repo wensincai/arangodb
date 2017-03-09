@@ -53,7 +53,11 @@ FailedLeader::FailedLeader(Node const& snapshot, AgentInterface* agent,
     _database = _snapshot(path + "database").getString();
     _collection = _snapshot(path + "collection").getString();
     _from = _snapshot(path + "fromServer").getString();
-    _to = _snapshot(path + "toServer").getString();
+    try {
+      // set only if started
+      _to = _snapshot(path + "toServer").getString();
+    } catch (StoreException const& e) {
+    }
     _shard = _snapshot(path + "shard").getString();
     _creator = _snapshot(path + "creator").getString();
   } catch (std::exception const& e) {
