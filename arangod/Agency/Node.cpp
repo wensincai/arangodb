@@ -716,9 +716,7 @@ Node::Children const& Node::children() const { return _children; }
 
 Builder Node::toBuilder() const {
   Builder builder;
-  builder.openArray();
   toBuilder(builder);
-  builder.close();
   return builder;
 }
 

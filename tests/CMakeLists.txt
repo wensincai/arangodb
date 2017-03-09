@@ -5,7 +5,7 @@ endforeach()
 # linking is a dark art...workmonitordummy is somehow necessary
 add_executable(
   arangodbtests
-  ../lib/Basics/WorkMonitorDummy.cpp
+  Agency/FailedLeaderTest.cpp
   Basics/AttributeNameParserTest.cpp
   Basics/associative-multi-pointer-test.cpp
   Basics/associative-multi-pointer-nohashcache-test.cpp
