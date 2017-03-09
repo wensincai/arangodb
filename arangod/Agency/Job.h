@@ -202,6 +202,37 @@ inline arangodb::consensus::write_ret_t transact(AgentInterface* _agent,
   return ret;
 }
 
+inline arangodb::consensus::trans_ret_t transient(AgentInterface* _agent,
+                                                  Builder const& transaction,
+                                                  bool waitForCommit = true) {
+  query_t envelope = std::make_shared<Builder>();
+
+  Slice trx = transaction.slice();
+  try {
+    { VPackArrayBuilder listOfTrxs(envelope.get());
+      VPackArrayBuilder onePair(envelope.get());
+      { VPackObjectBuilder mutationPart(envelope.get());
+        for (auto const& pair : VPackObjectIterator(trx[0])) {
+          envelope->add(Job::agencyPrefix + pair.key.copyString(), pair.value);
+        }
+      }
+      if (trx.length() > 1) {
+        VPackObjectBuilder preconditionPart(envelope.get());
+        for (auto const& pair : VPackObjectIterator(trx[1])) {
+          envelope->add(Job::agencyPrefix + pair.key.copyString(), pair.value);
+        }
+      }
+    }
+  } catch (std::exception const& e) {
+    LOG_TOPIC(ERR, Logger::SUPERVISION)
+        << "Supervision failed to build transaction.";
+    LOG_TOPIC(ERR, Logger::SUPERVISION) << e.what() << " " << __FILE__ << __LINE__;
+  }
+
+  
+  return _agent->transient(envelope);
+}
+
 }  // namespace consensus
 }  // namespace arangodb
 

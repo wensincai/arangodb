@@ -77,14 +77,16 @@ void FailedLeader::run() {
 
 bool FailedLeader::create(std::shared_ptr<VPackBuilder> b) {
 
+  LOG_TOPIC(INFO, Logger::AGENCY) << __FILE__ << __LINE__;
+
   using namespace std::chrono;
   LOG_TOPIC(INFO, Logger::AGENCY)
     << "Handle failed Leader for " + _shard + " from " + _from + " to " + _to;
 
+  LOG_TOPIC(INFO, Logger::AGENCY) << __FILE__ << __LINE__;
+  
   _jb = std::make_shared<Builder>();
-
   { VPackArrayBuilder transaction(_jb.get());
-    
     { VPackObjectBuilder operations(_jb.get());
       // Todo entry
       _jb->add(VPackValue(toDoPrefix + _jobId));
@@ -95,25 +97,40 @@ bool FailedLeader::create(std::shared_ptr<VPackBuilder> b) {
         _jb->add("collection", VPackValue(_collection));
         _jb->add("shard", VPackValue(_shard));
         _jb->add("fromServer", VPackValue(_from));
-        _jb->add("toServer", VPackValue(_to));
         _jb->add("jobId", VPackValue(_jobId));
         _jb->add(
           "timeCreated", VPackValue(timepointToString(system_clock::now())));
-      }
-      // Add shard to /arango/Target/FailedServers/<server> array
-      _jb->add(VPackValue(failedServersPrefix + "/" + _from));
-      { VPackObjectBuilder failed(_jb.get());
-        _jb->add("op", VPackValue("push"));
-        _jb->add("new", VPackValue(_shard));
       }}}
   
+  LOG_TOPIC(INFO, Logger::AGENCY) << __FILE__ << __LINE__;
+
   write_ret_t res = transact(_agent, *_jb);
   
   return (res.accepted && res.indices.size() == 1 && res.indices[0]);
   
 }
 
+/*
+        // Add shard to /arango/Target/FailedServers/<server> array
+      _jb->add(VPackValue(agencyPrefix + failedServersPrefix + "/" + _from));
+      { VPackObjectBuilder failed(_jb.get());
+        _jb->add("op", VPackValue("push"));
+        _jb->add("new", VPackValue(_shard));
+      }}
+*/
+
 bool FailedLeader::start() {
+
+  std::vector<std::string> existing =
+    _snapshot.exists(planColPrefix + _database + "/" + _collection + "/" +
+                     "distributeShardsLike");
+  
+  // Fail if got distributeShardsLike
+  if (existing.size() == 5) {
+    finish("Shards/" + _shard, false, "Collection has distributeShardsLike");
+  } else if (existing.size() < 4) {
+    finish("Shards/" + _shard, true, "Collection no longer there");
+  }
 
   using namespace std::chrono;
   
@@ -141,7 +158,8 @@ bool FailedLeader::start() {
         _snapshot(toDoPrefix + _jobId).toBuilder(todo);
       } catch (std::exception const&) {
         LOG_TOPIC(INFO, Logger::AGENCY)
-          << "Failed to get key " + toDoPrefix + _jobId + " from agency snapshot";
+          << "Failed to get key " + toDoPrefix + _jobId
+          + " from agency snapshot";
         return false;
       }
     } else {
@@ -191,6 +209,7 @@ bool FailedLeader::start() {
         for (auto const& i : planv) {
           pending.add(VPackValue(i));
         }}
+
       // Block shard
       pending.add(VPackValue(blockedShardsPrefix + _shard));
       { VPackObjectBuilder block(&pending);
@@ -199,7 +218,6 @@ bool FailedLeader::start() {
       pending.add(VPackValue(planVersion));
       { VPackObjectBuilder version(&pending);
         pending.add("op", VPackValue("increment")); }} // Operations ---------
-
     // Preconditions ---------------------------------------------------------
     { VPackObjectBuilder preconditions(&pending);    
       // Current servers are as we expect
@@ -215,7 +233,6 @@ bool FailedLeader::start() {
       pending.add(VPackValue(blockedShardsPrefix + _shard));
       { VPackObjectBuilder blocked(&pending);
         pending.add("oldEmpty", VPackValue(true)); }} // Preconditions --------
-
   }
 
   // Transact

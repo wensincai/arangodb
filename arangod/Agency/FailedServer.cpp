@@ -63,7 +63,7 @@ void FailedServer::run() {
 bool FailedServer::start() {
   
   using namespace std::chrono;
-  
+
   // Fail job, if Health back to not FAILED
   if (_snapshot(healthPrefix + _server + "/Status").getString() != "FAILED") {
     std::stringstream reason;
@@ -136,6 +136,7 @@ bool FailedServer::start() {
     } // <--------- Preconditions
   }
 
+  
   // Transact to agency
   write_ret_t res = transact(_agent, pending);
 
@@ -234,6 +235,8 @@ bool FailedServer::create(std::shared_ptr<VPackBuilder> envelope) {
   LOG_TOPIC(DEBUG, Logger::AGENCY)
     << "Todo: Handle failover for db server " + _server;
 
+  LOG_TOPIC(INFO, Logger::AGENCY) << __FILE__ << __LINE__;
+  
   using namespace std::chrono;
   bool selfCreate = (envelope == nullptr); // Do we create ourselves?
 
@@ -272,20 +275,18 @@ bool FailedServer::create(std::shared_ptr<VPackBuilder> envelope) {
       // Target/FailedServers is still as in the snapshot
       _jb->add(VPackValue(failedServersPrefix));
       { VPackObjectBuilder old(_jb.get());
-        _jb->add("old", _snapshot(failedServersPrefix).toBuilder().slice()[0]);
+        _jb->add("old", _snapshot(failedServersPrefix).toBuilder().slice());
       }} // Preconditions
   }
 
-  LOG_TOPIC(INFO, Logger::SUPERVISION) << __FILE__ << __LINE__;
   if (selfCreate) {
     write_ret_t res = transact(_agent, *_jb);
     if (!res.accepted || res.indices.size() != 1 || res.indices[0] == 0) {
       LOG_TOPIC(INFO, Logger::AGENCY) << "Failed to insert job " + _jobId;
       return false;
     }
-  } 
+  }
 
-  LOG_TOPIC(INFO, Logger::SUPERVISION) << __FILE__ << __LINE__;
   return true;
 
 }

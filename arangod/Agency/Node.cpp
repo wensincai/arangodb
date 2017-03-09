@@ -393,10 +393,14 @@ bool Node::handle<SET>(VPackSlice const& slice) {
 /// Increment integer value or set 1
 template <>
 bool Node::handle<INCREMENT>(VPackSlice const& slice) {
+
+  size_t inc = (slice.hasKey("step") && slice.get("step").isUInt()) ?
+    slice.get("step").getUInt() : 1;
+
   Builder tmp;
   tmp.openObject();
   try {
-    tmp.add("tmp", Value(this->slice().getInt() + 1));
+    tmp.add("tmp", Value(this->slice().getInt() + inc));
   } catch (std::exception const&) {
     tmp.add("tmp", Value(1));
   }

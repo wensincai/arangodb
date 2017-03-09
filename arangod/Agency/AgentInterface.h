@@ -36,6 +36,9 @@ class AgentInterface {
   /// @brief Attempt write
   virtual write_ret_t write(query_t const&) = 0;
 
+  /// @brief Attempt write
+  virtual trans_ret_t transient(query_t const&) = 0;
+
   /// @brief Wait for slaves to confirm appended entries
   virtual raft_commit_t waitFor(index_t last_entry, double timeout = 2.0) = 0;
 };

@@ -146,11 +146,9 @@ std::vector<check_t> Supervision::checkDBServers() {
 
     auto report = std::make_shared<Builder>();
     report->openArray();
-    report->openArray();
 
     report->openObject();
-    report->add(_agencyPrefix + healthPrefix + serverID,
-                VPackValue(VPackValueType::Object));
+    report->add(healthPrefix + serverID, VPackValue(VPackValueType::Object));
     report->add("LastHeartbeatSent", VPackValue(heartbeatTime));
     report->add("LastHeartbeatStatus", VPackValue(heartbeatStatus));
     report->add("Role", VPackValue("DBServer"));
@@ -208,10 +206,8 @@ std::vector<check_t> Supervision::checkDBServers() {
           reportPersistent = true;
           report->add("Status", VPackValue(Supervision::HEALTH_STATUS_FAILED));
           envelope = std::make_shared<VPackBuilder>();
-          LOG_TOPIC(WARN,Logger::SUPERVISION) << __FILE__ << __LINE__;
           FailedServer(_snapshot, _agent, std::to_string(_jobId++),
                        "supervision", serverID).create(envelope);
-          LOG_TOPIC(WARN,Logger::SUPERVISION) << __FILE__ << __LINE__;
         }
       } else {
         if (lastStatus != Supervision::HEALTH_STATUS_BAD) {
@@ -239,12 +235,11 @@ std::vector<check_t> Supervision::checkDBServers() {
     }
     
     report->close(); // inner array
-    report->close(); // outer array    
 
     if (!this->isStopping()) {
-      _agent->transient(report);
+      transient(_agent, *report);
       if (reportPersistent) {
-        _agent->write(report);
+        transact(_agent, *report);
       }
     }
     
@@ -483,8 +478,7 @@ void Supervision::run() {
         MUTEX_LOCKER(locker, _lock);
 
         updateSnapshot();
-        // mop: always do health checks so shutdown is able to detect if a server
-        // failed otherwise
+
         if (_agent->leading()) {
           upgradeAgency();
           doChecks();
@@ -835,45 +829,42 @@ bool Supervision::start(Agent* agent) {
 }
 
 static std::string const syncLatest = "/Sync/LatestID";
-// Get bunch of cluster's unique ids from agency, guarded above
+
 void Supervision::getUniqueIds() {
-  uint64_t latestId = 0;
-  // Run forever, supervision does not make sense before the agency data
-  // is initialized by some other server...
-  while (!this->isStopping()) {
+
+  size_t n = 10000;
+
+  std::string path = _agencyPrefix + "/Sync/LatestID";
+  auto builder = std::make_shared<Builder>();
+  { VPackArrayBuilder a(builder.get());
+    { VPackArrayBuilder b(builder.get());
+      { VPackObjectBuilder c(builder.get());
+        {
+          builder->add(VPackValue(path));
+          VPackObjectBuilder b(builder.get());
+          builder->add("op",VPackValue("increment"));
+          builder->add("step",VPackValue(n));
+        }
+      }
+    }
+    { VPackArrayBuilder a(builder.get());
+      builder->add(VPackValue(path)); }
+  } // [[{path:{"op":"increment","step":n}}],[path]]
+  
+  auto ret = _agent->transact(builder);
+  if (ret.accepted) {
     try {
-      MUTEX_LOCKER(locker, _lock);
-      latestId = _agent->readDB().get(_agencyPrefix + "/Sync/LatestID").getUInt();
+      _jobIdMax = ret.result->slice()[1].get(
+        std::vector<std::string>(
+          {"arango", "Sync", "LatestID"})).getUInt();
+      _jobId = _jobIdMax - n;
     } catch (std::exception const& e) {
-      LOG_TOPIC(ERR, Logger::SUPERVISION) << "/Sync/LatestID is no integer, "
-        << e.what();
-      std::this_thread::sleep_for(std::chrono::seconds(1));
-      continue;
-    }
-
-    Builder uniq;
-    uniq.openArray();
-    uniq.openObject();
-    uniq.add(syncLatest, VPackValue(latestId + 100000));  // new
-    uniq.close();
-    uniq.openObject();
-    uniq.add(syncLatest, VPackValue(latestId));  // precond
-    uniq.close();
-    uniq.close();
-
-    auto result = transact(_agent, uniq);
-
-    if (!result.accepted || result.indices.empty()) {
-      return;
-    }
-
-    if (result.indices[0]) {
-      _agent->waitFor(result.indices[0]);
-      _jobId = latestId;
-      _jobIdMax = latestId + 100000;
-      return;
+      LOG_TOPIC(ERR, Logger::SUPERVISION)
+        << "Failed to acquire job IDs from agency: "
+        << e.what() << __FILE__ << __LINE__; 
     }
   }
+  
 }
 
 void Supervision::beginShutdown() {
