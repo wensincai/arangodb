@@ -97,28 +97,30 @@ bool MoveShard::create(std::shared_ptr<VPackBuilder> envelope) {
 
   if (selfCreate) {
     _jb->openArray();
-    _jb->openObject();
   }
 
-  if (_from == _to) {
-    path = failedPrefix + _jobId;
-    _jb->add("timeFinished", VPackValue(now));
-    _jb->add(
-        "result",
-        VPackValue("Source and destination of moveShard must be different"));
-  } else {
-    path = toDoPrefix + _jobId;
+  { VPackObjectBuilder guard(_jb.get());
+    _jb->add(VPackValue(_from == _to ? failedPrefix + _jobId
+                                     : toDoPrefix + _jobId));
+    { VPackObjectBuilder guard2(_jb.get());
+      if (_from == _to) {
+        _jb->add("timeFinished", VPackValue(now));
+        _jb->add(
+            "result",
+            VPackValue("Source and destination of moveShard must be different"));
+      }
+      _jb->add("creator", VPackValue(_creator));
+      _jb->add("type", VPackValue("moveShard"));
+      _jb->add("database", VPackValue(_database));
+      _jb->add("collection", VPackValue(_collection));
+      _jb->add("shard", VPackValue(_shard));
+      _jb->add("fromServer", VPackValue(_from));
+      _jb->add("toServer", VPackValue(_to));
+      _jb->add("isLeader", VPackValue(_isLeader));
+      _jb->add("jobId", VPackValue(_jobId));
+      _jb->add("timeCreated", VPackValue(now));
+    }
   }
-  _jb->add("creator", VPackValue(_creator));
-  _jb->add("type", VPackValue("moveShard"));
-  _jb->add("database", VPackValue(_database));
-  _jb->add("collection", VPackValue(_collection));
-  _jb->add("shard", VPackValue(_shard));
-  _jb->add("fromServer", VPackValue(_from));
-  _jb->add("toServer", VPackValue(_to));
-  _jb->add("isLeader", VPackValue(_isLeader));
-  _jb->add("jobId", VPackValue(_jobId));
-  _jb->add("timeCreated", VPackValue(now));
 
   _status = TODO;
 
@@ -126,8 +128,7 @@ bool MoveShard::create(std::shared_ptr<VPackBuilder> envelope) {
     return true;
   }
 
-  _jb->close();
-  _jb->close();
+  _jb->close();  // close array
 
   write_ret_t res = transact(_agent, *_jb);
 
