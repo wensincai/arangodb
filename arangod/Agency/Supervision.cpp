@@ -181,8 +181,7 @@ std::vector<check_t> Supervision::checkDBServers() {
         Builder del;
         del.openArray();
         del.openObject();
-        del.add(failedServerPath,
-                VPackValue(VPackValueType::Object));
+        del.add(failedServerPath, VPackValue(VPackValueType::Object));
         del.add("op", VPackValue("delete"));
         del.close();
         del.close();

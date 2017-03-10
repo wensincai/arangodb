@@ -128,6 +128,17 @@ bool MoveShard::start() {
   // If anything throws here, the run() method catches it and finishes
   // the job.
 
+  // Check if the toServer exists:
+  Node server("dummy");
+  try {
+    server = _snapshot(plannedServers + "/" + _to);
+  }
+  catch (...) {
+    finish("Shards/" + _shard, false,
+           "toServer does not exist as DBServer in Plan");
+    return false;
+  }
+
   // Are we distributeShardsLiking other shard? Then fail miserably.
   Node collection("dummy");
   try {
