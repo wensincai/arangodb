@@ -182,13 +182,12 @@ std::vector<std::string> Job::availableServers(Node const& snapshot) {
     }
   } catch (...) {}
 
-  
   // Remove failed servers from list
   try {
     for (auto const& srv :
-           VPackArrayIterator(snapshot(failedServersPrefix).slice())) {
+           VPackObjectIterator(snapshot(failedServersPrefix).slice())) {
       ret.erase(
-        std::remove(ret.begin(), ret.end(), srv.copyString()),
+        std::remove(ret.begin(), ret.end(), srv.key.copyString()),
         ret.end());
     }
   } catch (...) {}
@@ -369,8 +368,15 @@ void Job::addPreconditionCollectionStillThere(Builder& pre,
 
 void Job::addPreconditionServerNotBlocked(Builder& pre, std::string server) {
 	pre.add(VPackValue(blockedServersPrefix + server));
-	{ VPackObjectBuilder shardLockEmpty(&pre);
+	{ VPackObjectBuilder serverLockEmpty(&pre);
 		pre.add("oldEmpty", VPackValue(true));
+	}
+}
+
+void Job::addPreconditionServerGood(Builder& pre, std::string server) {
+	pre.add(VPackValue(healthPrefix + server + "/Status"));
+	{ VPackObjectBuilder serverGood(&pre);
+		pre.add("old", VPackValue("GOOD"));
 	}
 }
 
@@ -409,5 +415,16 @@ void Job::addReleaseShard(Builder& trx, std::string shard) {
   { VPackObjectBuilder guard(&trx);
     trx.add("op", VPackValue("delete"));
   }
+}
+
+std::string Job::checkServerGood(Node const& snapshot,
+                                 std::string const& server) {
+  if (!snapshot.has(healthPrefix + server + "/Status")) {
+    return "UNCLEAR";
+  }
+  if (snapshot(healthPrefix + server + "/Status").getString() != "GOOD") {
+    return "UNHEALTHY";
+  }
+  return "GOOD";
 }
 

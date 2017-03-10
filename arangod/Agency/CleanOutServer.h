@@ -41,14 +41,15 @@ struct CleanOutServer : public Job {
   virtual ~CleanOutServer();
 
   virtual JOB_STATUS status() override final;
-  virtual bool create(std::shared_ptr<VPackBuilder> b = nullptr) override final;
+  virtual bool create(std::shared_ptr<VPackBuilder> envelope = nullptr)
+    override final;
   virtual void run() override final;
   virtual bool start() override final;
   virtual void abort() override final;
 
   // Check if all shards' replication factors can be satisfied after clean out.
   bool checkFeasibility();
-  bool scheduleMoveShards();
+  bool scheduleMoveShards(std::shared_ptr<Builder>& trx);
 
   std::string _server;
 };
