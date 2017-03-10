@@ -258,7 +258,7 @@ bool MoveShard::start() {
     }
     ++count;
   }
-  if ((_isLeader && found != 1) ||
+  if ((_isLeader && found != 0) ||
       (!_isLeader && found < 1)) {
     if (_isLeader) {
       finish("", false, "fromServer must be the leader in plan for shard");
