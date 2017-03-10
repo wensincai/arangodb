@@ -555,7 +555,7 @@ SECTION("the job should fail if the shard distributes its shards like some other
 
       if (path == "/arango/Target/ToDo") {
         builder->add(jobId, createJob(SHARD, SHARD_LEADER, FREE_SERVER).slice());
-      } else if (path == "/arango/Plan/Collections/" + DATABASE + "/" + COLLECTION + "/" + SHARD) {
+      } else if (path == "/arango/Plan/Collections/" + DATABASE + "/" + COLLECTION) {
         builder->add("distributeShardsLike", VPackValue("PENG"));
       }
       builder->close();
