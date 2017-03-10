@@ -312,6 +312,7 @@ bool MoveShard::start() {
       addRemoveJobFromSomewhere(pending, "ToDo", _jobId);
 
       addBlockShard(pending, _shard, _jobId);
+      addBlockServer(pending, _to, _jobId);
     
       // --- Plan changes
       doForAllShards(_snapshot, _database, shardsLikeMe,
