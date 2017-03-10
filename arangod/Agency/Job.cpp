@@ -81,23 +81,25 @@ JOB_STATUS Job::exists() const {
   return NOTFOUND;
 }
 
-bool Job::finish(std::string const& type, bool success,
-                 std::string const& reason) {
+bool Job::finish(std::string const& server, std::string const& shard,
+                 bool success, std::string const& reason) {
   
   Builder pending, finished;
   
   // Get todo entry
-  pending.openArray();
-  if (_snapshot.exists(pendingPrefix + _jobId).size() == 3) {
-    _snapshot(pendingPrefix + _jobId).toBuilder(pending);
-  } else if (_snapshot.exists(toDoPrefix + _jobId).size() == 3) {
-    _snapshot(toDoPrefix + _jobId).toBuilder(pending);
-  } else {
-    LOG_TOPIC(DEBUG, Logger::AGENCY)
-      << "Nothing in pending to finish up for job " << _jobId;
-    return false;
+  bool started = false;
+  { VPackArrayBuilder guard(&pending);
+    if (_snapshot.exists(pendingPrefix + _jobId).size() == 3) {
+      _snapshot(pendingPrefix + _jobId).toBuilder(pending);
+      started = true;
+    } else if (_snapshot.exists(toDoPrefix + _jobId).size() == 3) {
+      _snapshot(toDoPrefix + _jobId).toBuilder(pending);
+    } else {
+      LOG_TOPIC(DEBUG, Logger::AGENCY)
+        << "Nothing in pending to finish up for job " << _jobId;
+      return false;
+    }
   }
-  pending.close();
 
   std::string jobType;
   try {
@@ -108,52 +110,28 @@ bool Job::finish(std::string const& type, bool success,
   }
   
   // Prepare pending entry, block toserver
-  finished.openArray();
-  
-  // --- Add finished
-  finished.openObject();
-  finished.add(
-    (success ? finishedPrefix : failedPrefix) + _jobId,
-    VPackValue(VPackValueType::Object));
-  finished.add(
-    "timeFinished",
-    VPackValue(timepointToString(std::chrono::system_clock::now())));
-  for (auto const& obj : VPackObjectIterator(pending.slice()[0])) {
-    finished.add(obj.key.copyString(), obj.value);
-  }
-  if (!reason.empty()) {
-    finished.add("reason", VPackValue(reason));
-  }
-  finished.close();
+  { VPackArrayBuilder guard(&finished);
+    VPackObjectBuilder guard2(&finished);
 
-  // --- Delete pending
-  finished.add(pendingPrefix + _jobId,
-               VPackValue(VPackValueType::Object));
-  finished.add("op", VPackValue("delete"));
-  finished.close();
+    addPutJobIntoSomewhere(finished, success ? "Finished" : "Failed",
+                           pending.slice()[0], reason);
 
-  // --- Delete todo
-  finished.add(toDoPrefix + _jobId,
-               VPackValue(VPackValueType::Object));
-  finished.add("op", VPackValue("delete"));
-  finished.close();
+    addRemoveJobFromSomewhere(finished, "Todo", _jobId);
+    addRemoveJobFromSomewhere(finished, "Pending", _jobId);
 
-  // --- Remove block if specified
-  if (type != "") {
-    finished.add("/Supervision/" + type,
-                 VPackValue(VPackValueType::Object));
-    finished.add("op", VPackValue("delete"));
-    finished.close();
-  }
-
-  // --- Need precond?
-  finished.close();
-  finished.close();
+    // --- Remove blocks if specified:
+    if (started && !server.empty()) {
+      addReleaseServer(finished, server);
+    }
+    if (started && !shard.empty()) {
+      addReleaseShard(finished, shard);
+    }
+  }  // close object and array
 
   write_ret_t res = transact(_agent, finished);
   if (res.accepted && res.indices.size() == 1 && res.indices[0]) {
     LOG_TOPIC(DEBUG, Logger::AGENCY)
-      << "Successfully finished job " << type << "(" << _jobId << ")";
+      << "Successfully finished job " << jobType << "(" << _jobId << ")";
     _status = (success ? FINISHED : FAILED);
     return true;
   }

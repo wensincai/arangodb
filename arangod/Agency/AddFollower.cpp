@@ -71,7 +71,7 @@ AddFollower::AddFollower(Node const& snapshot, AgentInterface* agent,
     std::stringstream err;
     err << "Failed to find job " << _jobId << " in agency: " << e.what();
     LOG_TOPIC(ERR, Logger::SUPERVISION) << err.str();
-    finish("Shards/" + _shard, false, err.str());
+    finish("", _shard, false, err.str());
     _status = FAILED;
   }
 }
@@ -79,7 +79,7 @@ AddFollower::AddFollower(Node const& snapshot, AgentInterface* agent,
 AddFollower::~AddFollower() {}
 
 void AddFollower::run() {
-  runHelper("Shards/" + _shard);
+  runHelper("", _shard);
 }
 
 bool AddFollower::create(std::shared_ptr<VPackBuilder> b) {
@@ -166,7 +166,7 @@ bool AddFollower::start() {
   for (auto const& srv : VPackArrayIterator(current)) {
     TRI_ASSERT(srv.isString());
     if (srv.copyString() == _newFollower.front()) {
-      finish("Shards/" + _shard, false,
+      finish("", _shard, false,
              "newFollower must not be already holding the shard.");
       return false;
     }
@@ -174,7 +174,7 @@ bool AddFollower::start() {
   for (auto const& srv : VPackArrayIterator(planned)) {
     TRI_ASSERT(srv.isString());
     if (srv.copyString() == _newFollower.front()) {
-      finish("Shards/" + _shard, false,
+      finish("", _shard, false,
              "newFollower must not be planned for shard already.");
       return false;
     }
@@ -294,7 +294,7 @@ JOB_STATUS AddFollower::status() {
   Slice current = _snapshot(curPath).slice();
   for (auto const& srv : VPackArrayIterator(current)) {
     if (srv.copyString() == _newFollower.front()) {
-      if (finish("Shards/" + _shard)) {
+      if (finish("", _shard)) {
         return FINISHED;
       }
     }

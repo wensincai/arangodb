@@ -62,7 +62,7 @@ FailedLeader::FailedLeader(Node const& snapshot, AgentInterface* agent,
     std::stringstream err;
     err << "Failed to find job " << _jobId << " in agency: " << e.what();
     LOG_TOPIC(ERR, Logger::SUPERVISION) << err.str();
-    finish("Shards/" + _shard, false, err.str());
+    finish("", _shard, false, err.str());
     _status = FAILED;
   }
 }
@@ -70,7 +70,7 @@ FailedLeader::FailedLeader(Node const& snapshot, AgentInterface* agent,
 FailedLeader::~FailedLeader() {}
 
 void FailedLeader::run() {
-  runHelper("Shards/" + _shard);
+  runHelper("", _shard);
 }
 
 bool FailedLeader::create(std::shared_ptr<VPackBuilder> b) {
@@ -110,9 +110,9 @@ bool FailedLeader::start() {
   
   // Fail if got distributeShardsLike
   if (existing.size() == 5) {
-    finish("Shards/" + _shard, false, "Collection has distributeShardsLike");
+    finish("", _shard, false, "Collection has distributeShardsLike");
   } else if (existing.size() < 4) {
-    finish("Shards/" + _shard, true, "Collection " + _collection + " gone");
+    finish("", _shard, true, "Collection " + _collection + " gone");
   }
 
   std::string commonInSync =
@@ -253,7 +253,7 @@ bool FailedLeader::start() {
         {"arango", "Plan", "Collections", _database, _collection}
         )).isObject();
     if (!exist) {
-      finish("Shards/" + _shard, false, "Collection " + _collection + " gone");
+      finish("", _shard, false, "Collection " + _collection + " gone");
     }
   } catch (std::exception const& e) {
     LOG_TOPIC(ERR, Logger::SUPERVISION)
@@ -266,7 +266,7 @@ bool FailedLeader::start() {
       std::vector<std::string>(
         {"arango", "Supervision", "Health", _from, "Status"})).copyString();
     if (state != "FAILED") {
-      finish("Shards/" + _shard, false, _from + " is no longer 'FAILED'");
+      finish("", _shard, false, _from + " is no longer 'FAILED'");
     }
   } catch (std::exception const& e) {
     LOG_TOPIC(ERR, Logger::SUPERVISION)
@@ -313,7 +313,7 @@ JOB_STATUS FailedLeader::status() {
         }}}
     
     write_ret_t res = transact(_agent, del);
-    if (finish("Shards/" + shard)) {
+    if (finish("", shard)) {
       LOG_TOPIC(INFO, Logger::SUPERVISION)
         << "Finished failedLeader for " + _shard + " from " + _from + " to " + _to;  
         return FINISHED;

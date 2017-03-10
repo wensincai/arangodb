@@ -45,7 +45,7 @@ RemoveServer::RemoveServer(Node const& snapshot, AgentInterface* agent,
     std::stringstream err;
     err << "Failed to find job " << _jobId << " in agency: " << e.what();
     LOG_TOPIC(ERR, Logger::SUPERVISION) << err.str();
-    finish("DBServers/" + _server, false, err.str());
+    finish(_server, "", false, err.str());
     _status = FAILED;
   }
 }
@@ -53,7 +53,7 @@ RemoveServer::RemoveServer(Node const& snapshot, AgentInterface* agent,
 RemoveServer::~RemoveServer() {}
 
 void RemoveServer::run() {
-  runHelper("DBServers/" + _server);
+  runHelper(_server, "");
 }
 
 JOB_STATUS RemoveServer::status() {
@@ -153,7 +153,7 @@ JOB_STATUS RemoveServer::status() {
   if (res.accepted && res.indices.size() == 1 && res.indices[0] != 0) {
     LOG_TOPIC(INFO, Logger::SUPERVISION) << "Have reported " << _server
                                     << " in /Target/CleanedServers";
-    if (finish("DBServers/" + _server)) {
+    if (finish(_server, "")) {
       return FINISHED;
     }
     return _status;
@@ -259,14 +259,13 @@ bool RemoveServer::start() {
 
     // Check if we can get things done in the first place
     if (!checkFeasibility()) {
-      finish("DBServers/" + _server, false);
+      finish(_server, "", false, "job not feasible");
       return false;
     }
 
     // Schedule shard relocations
     if (!scheduleAddFollowers()) {
-      finish("DBServers/" + _server, false,
-             "Could not schedule add followers.");
+      finish(_server, "", false, "Could not schedule add followers.");
       return false;
     }
 

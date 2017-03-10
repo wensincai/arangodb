@@ -53,7 +53,7 @@ UnassumedLeadership::UnassumedLeadership(
     std::stringstream err;
     err << "Failed to find job " << _jobId << " in agency: " << e.what();
     LOG_TOPIC(ERR, Logger::SUPERVISION) << err.str();
-    finish("Shards/" + _shard, false, err.str());
+    finish("", _shard, false, err.str());
     _status = FAILED;
   }
 }
@@ -61,7 +61,7 @@ UnassumedLeadership::UnassumedLeadership(
 UnassumedLeadership::~UnassumedLeadership() {}
 
 void UnassumedLeadership::run() {
-  runHelper("Shards/" + _shard);
+  runHelper("", _shard);
 }
 
 bool UnassumedLeadership::create(std::shared_ptr<VPackBuilder> b) {
@@ -275,7 +275,7 @@ JOB_STATUS UnassumedLeadership::status() {
   if (planned.slice()[0] == current.slice()[0]) {
     LOG_TOPIC(DEBUG, Logger::SUPERVISION)
         << "Done reassigned creation of " + _shard + " to " + _to;
-    if (finish("Shards/" + shard)) {
+    if (finish("", shard)) {
       return FINISHED;
     }
   }

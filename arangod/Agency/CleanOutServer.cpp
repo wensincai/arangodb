@@ -49,7 +49,7 @@ CleanOutServer::CleanOutServer(Node const& snapshot, AgentInterface* agent,
     std::stringstream err;
     err << "Failed to find job " << _jobId << " in agency: " << e.what();
     LOG_TOPIC(ERR, Logger::SUPERVISION) << err.str();
-    finish("DBServers/" + _server, false, err.str());
+    finish(_server, "", false, err.str());
     _status = FAILED;
   }
 }
@@ -57,7 +57,7 @@ CleanOutServer::CleanOutServer(Node const& snapshot, AgentInterface* agent,
 CleanOutServer::~CleanOutServer() {}
 
 void CleanOutServer::run() {
-  runHelper("DBServers/" + _server);
+  runHelper(_server, "");
 }
 
 JOB_STATUS CleanOutServer::status() {
@@ -181,7 +181,7 @@ bool CleanOutServer::start() {
  
   // Check if the server exists:
   if (!_snapshot.has(plannedServers + "/" + _server)) {
-    finish("", false, "server does not exist as DBServer in Plan");
+    finish("", "", false, "server does not exist as DBServer in Plan");
     return false;
   }
 
@@ -218,7 +218,7 @@ bool CleanOutServer::start() {
   if (cleanedServers.isArray()) {
     for (auto const& x : VPackArrayIterator(cleanedServers)) {
       if (x.isString() && x.copyString() == _server) {
-        finish("", false, "server must not be in `Target/CleanedServers`");
+        finish("", "", false, "server must not be in `Target/CleanedServers`");
         return false;
       }
     }
@@ -240,14 +240,14 @@ bool CleanOutServer::start() {
   if (failedServers.isObject()) {
     Slice found = failedServers.get(_server);
     if (!found.isNone()) {
-      finish("", false, "server must not be in `Target/FailedServers`");
+      finish("", "", false, "server must not be in `Target/FailedServers`");
       return false;
     }
   }
 
   // Check if we can get things done in the first place
   if (!checkFeasibility()) {
-    finish("", false, "server " + _server + " cannot be cleaned out");
+    finish("", "", false, "server " + _server + " cannot be cleaned out");
     return false;
   }
 
@@ -295,7 +295,7 @@ bool CleanOutServer::start() {
 
       // Schedule shard relocations
       if (!scheduleMoveShards(pending)) {
-        finish("", false, "Could not schedule MoveShard.");
+        finish("", "", false, "Could not schedule MoveShard.");
         return false;
       }
 
@@ -457,7 +457,7 @@ void CleanOutServer::abort() {
 
   // Can now only be TODO or PENDING
   if (_status == TODO) {
-    finish("", false, "job aborted");
+    finish("", "", false, "job aborted");
     return;
   }
 
@@ -476,6 +476,6 @@ void CleanOutServer::abort() {
     }
   }
 
-  finish("DBServers/" + _server, false, "job aborted");
+  finish(_server, "", false, "job aborted");
 }
 

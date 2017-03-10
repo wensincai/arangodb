@@ -60,7 +60,7 @@ FailedFollower::FailedFollower(Node const& snapshot, AgentInterface* agent,
     std::stringstream err;
     err << "Failed to find job " << _jobId << " in agency: " << e.what();
     LOG_TOPIC(ERR, Logger::SUPERVISION) << err.str();
-    finish("Shards/" + _shard, false, err.str());
+    finish("", _shard, false, err.str());
     _status = FAILED;
   }
 }
@@ -68,7 +68,7 @@ FailedFollower::FailedFollower(Node const& snapshot, AgentInterface* agent,
 FailedFollower::~FailedFollower() {}
 
 void FailedFollower::run() {
-  runHelper("Shards/" + _shard);
+  runHelper("", _shard);
 }
 
 bool FailedFollower::create(std::shared_ptr<VPackBuilder> envelope) {
@@ -259,7 +259,7 @@ JOB_STATUS FailedFollower::status() {
     del.close();
     write_ret_t res = transact(_agent, del);
 
-    if (finish("Shards/" + shard)) {
+    if (finish("", shard)) {
       return FINISHED;
     }
   }

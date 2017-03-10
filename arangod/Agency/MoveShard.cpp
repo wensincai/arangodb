@@ -60,7 +60,7 @@ MoveShard::MoveShard(Node const& snapshot, AgentInterface* agent,
     std::string err = 
       std::string("Failed to find job ") + _jobId + " in agency: " + e.what();
     LOG_TOPIC(ERR, Logger::SUPERVISION) << err;
-    finish("Shards/" + _shard, false, err);
+    finish("", _shard, false, err);
     _status = FAILED;
   }
 }
@@ -68,7 +68,7 @@ MoveShard::MoveShard(Node const& snapshot, AgentInterface* agent,
 MoveShard::~MoveShard() {}
 
 void MoveShard::run() {
-  runHelper("Shards/" + _shard);
+  runHelper(_to, _shard);
 }
 
 bool MoveShard::create(std::shared_ptr<VPackBuilder> envelope) {
@@ -148,24 +148,24 @@ bool MoveShard::start() {
 
   // Check if the fromServer exists:
   if (!_snapshot.has(plannedServers + "/" + _from)) {
-    finish("", false, "fromServer does not exist as DBServer in Plan");
+    finish("", "", false, "fromServer does not exist as DBServer in Plan");
     return false;
   }
 
   // Check if the toServer exists:
   if (!_snapshot.has(plannedServers + "/" + _to)) {
-    finish("", false, "toServer does not exist as DBServer in Plan");
+    finish("", "", false, "toServer does not exist as DBServer in Plan");
     return false;
   }
 
   // Are we distributeShardsLiking other shard? Then fail miserably.
   if (!_snapshot.has(planColPrefix + _database + "/" + _collection)) {
-    finish("", false, "collection has been dropped in the meantime");
+    finish("", "", false, "collection has been dropped in the meantime");
     return false;
   }
   Node collection = _snapshot(planColPrefix + _database + "/" + _collection);
   if (collection.has("distributeShardsLike")) {
-    finish("Shards/" + _shard, false,
+    finish("", _shard, false,
            "collection must not have 'distributeShardsLike' attribute");
     return false;
   }
@@ -210,7 +210,8 @@ bool MoveShard::start() {
   if (cleanedServers.isArray()) {
     for (auto const& x : VPackArrayIterator(cleanedServers)) {
       if (x.isString() && x.copyString() == _to) {
-        finish("", false, "toServer must not be in `Target/CleanedServers`");
+        finish("", "", false,
+               "toServer must not be in `Target/CleanedServers`");
         return false;
       }
     }
@@ -232,7 +233,7 @@ bool MoveShard::start() {
   if (failedServers.isObject()) {
     Slice found = failedServers.get(_to);
     if (!found.isNone()) {
-      finish("", false, "toServer must not be in `Target/FailedServers`");
+      finish("", "", false, "toServer must not be in `Target/FailedServers`");
       return false;
     }
   }
@@ -254,7 +255,7 @@ bool MoveShard::start() {
   for (auto const& srv : VPackArrayIterator(planned)) {
     TRI_ASSERT(srv.isString());
     if (srv.copyString() == _to) {
-      finish("", false, "toServer must not yet be planned for shard");
+      finish("", "", false, "toServer must not yet be planned for shard");
       return false;
     }
     if (srv.copyString() == _from) {
@@ -265,9 +266,9 @@ bool MoveShard::start() {
   if ((_isLeader && found != 0) ||
       (!_isLeader && found < 1)) {
     if (_isLeader) {
-      finish("", false, "fromServer must be the leader in plan for shard");
+      finish("", "", false, "fromServer must be the leader in plan for shard");
     } else {
-      finish("", false, "fromServer must be a follower in plan for shard");
+      finish("", "", false, "fromServer must be a follower in plan for shard");
     }
     return false;
   }
@@ -383,7 +384,7 @@ JOB_STATUS MoveShard::status() {
     // Oops, collection is gone, simple finish job:
     LOG_TOPIC(ERR, Logger::SUPERVISION) << "collection was dropped" 
       << ": " << __FILE__ << ":" << __LINE__;
-    finish("Shards/" + _shard, true, "collection was dropped");
+    finish("", _shard, true, "collection was dropped");
     return FINISHED;
   }
  
@@ -565,7 +566,7 @@ JOB_STATUS MoveShard::pendingLeader() {
     finishedAfterTransaction = true;
   } else {
     // something seriously wrong here, fail job:
-    finish("Shards/" + _shard, false, "something seriously wrong");
+    finish("", _shard, false, "something seriously wrong");
     return FAILED;
   }
 
@@ -669,7 +670,7 @@ void MoveShard::abort() {
   }
   // Can now only be TODO or PENDING
   if (_status == TODO) {
-    finish("", false, "job aborted");
+    finish("", "", false, "job aborted");
     return;
   }
 

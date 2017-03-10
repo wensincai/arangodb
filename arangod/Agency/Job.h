@@ -88,11 +88,18 @@ struct Job {
 
   virtual void run() = 0;
 
-  void runHelper(std::string const& removePlace) {
+  void runHelper(std::string const& server, std::string const& shard) {
     if (_status == FAILED) {  // happens when the constructor did not work
       return;
     }
-    status();   // This runs everything to to with state PENDING if needed!
+    try {
+      status();   // This runs everything to to with state PENDING if needed!
+    } catch (std::exception const& e) {
+      LOG_TOPIC(WARN, Logger::AGENCY) << "Exception caught in status() method: "
+        << e.what() << ": " << __FILE__
+        << ":" << __LINE__;
+      finish(server, shard, false, e.what());
+    }
     try {
       if (_status == TODO) {
         start();
@@ -102,9 +109,9 @@ struct Job {
         }
       }
     } catch (std::exception const& e) {
-      LOG_TOPIC(WARN, Logger::AGENCY) << e.what() << ": " << __FILE__
-        << ":" << __LINE__;
-      finish(removePlace, false, e.what());
+      LOG_TOPIC(WARN, Logger::AGENCY) << "Exception caught in create() or "
+        "start() method: " << e.what() << ": " << __FILE__ << ":" << __LINE__;
+      finish("", "", false, e.what());
     }
   }
 
@@ -112,7 +119,8 @@ struct Job {
 
   virtual JOB_STATUS exists() const;
 
-  virtual bool finish(std::string const& type, bool success = true,
+  virtual bool finish(std::string const& server, std::string const& shard,
+                      bool success = true,
                       std::string const& reason = std::string());
   virtual JOB_STATUS status() = 0;
 

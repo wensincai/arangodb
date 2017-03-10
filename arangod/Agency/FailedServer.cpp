@@ -49,7 +49,7 @@ FailedServer::FailedServer(Node const& snapshot, AgentInterface* agent,
     std::stringstream err;
     err << "Failed to find job " << _jobId << " in agency: " << e.what();
     LOG_TOPIC(ERR, Logger::SUPERVISION) << err.str();
-    finish("DBServers/" + _server, false, err.str());
+    finish(_server, "", false, err.str());
     _status = FAILED;
   }
 }
@@ -57,7 +57,7 @@ FailedServer::FailedServer(Node const& snapshot, AgentInterface* agent,
 FailedServer::~FailedServer() {}
 
 void FailedServer::run() {
-  runHelper("DBServers/" + _server);
+  runHelper(_server, "");
 }
 
 bool FailedServer::start() {
@@ -71,7 +71,7 @@ bool FailedServer::start() {
       << "Server " << _server
       << " is no longer failed. Not starting FailedServer job";
     LOG_TOPIC(INFO, Logger::SUPERVISION) << reason.str();
-    finish("DBServers/" + _server, false, reason.str());
+    finish(_server, "", false, reason.str());
     return false;
   }
   
@@ -351,7 +351,7 @@ JOB_STATUS FailedServer::status() {
 
   // FIXME: what if some subjobs have failed, we should fail then
   if (!hasOpenChildTasks) {
-    if (finish("DBServers/" + _server)) {
+    if (finish(_server, "")) {
       return FINISHED;
     }
   }
