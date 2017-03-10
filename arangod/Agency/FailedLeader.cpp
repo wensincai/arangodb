@@ -98,7 +98,6 @@ bool FailedLeader::create(std::shared_ptr<VPackBuilder> b) {
           "timeCreated", VPackValue(timepointToString(system_clock::now())));
       }}}
   
-
   write_ret_t res = transact(_agent, *_jb);
   
   return (res.accepted && res.indices.size() == 1 && res.indices[0]);
@@ -116,7 +115,7 @@ bool FailedLeader::start() {
   if (existing.size() == 5) {
     finish("Shards/" + _shard, false, "Collection has distributeShardsLike");
   } else if (existing.size() < 4) {
-    finish("Shards/" + _shard, true, "Collection no longer there");
+    finish("Shards/" + _shard, true, "Collection " + _collection + " gone");
   }
 
   std::string commonInSync =
@@ -150,7 +149,7 @@ bool FailedLeader::start() {
         return false;
       }
     } else {
-      todo.add(_jb->slice().get(toDoPrefix + _jobId).valueAt(0));
+      todo.add(_jb->slice()[0].get(toDoPrefix + _jobId));
     }}
   
   std::vector<std::string> planv;
@@ -295,7 +294,7 @@ JOB_STATUS FailedLeader::status() {
   for (auto const& clone : clones(_snapshot, _database, _collection, _shard)) {
     auto sub = database + "/" + clone.collection;
     if(_snapshot(planColPrefix + sub + "/shards/" + clone.shard).slice()[0] !=
-       _snapshot(curColPrefix + "/" + clone.shard + "/servers").slice()[0]) {
+       _snapshot(curColPrefix + sub + "/" + clone.shard + "/servers").slice()[0]) {
       LOG_TOPIC(DEBUG, Logger::SUPERVISION)
         << "FailedLeader waiting for " << sub + "/" + shard;
       break;
