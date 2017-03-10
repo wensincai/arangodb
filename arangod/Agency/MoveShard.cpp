@@ -142,6 +142,12 @@ bool MoveShard::start() {
   // If anything throws here, the run() method catches it and finishes
   // the job.
 
+  // Check if the fromServer exists:
+  if (!_snapshot.has(plannedServers + "/" + _from)) {
+    finish("", false, "fromServer does not exist as DBServer in Plan");
+    return false;
+  }
+
   // Check if the toServer exists:
   if (!_snapshot.has(plannedServers + "/" + _to)) {
     finish("", false, "toServer does not exist as DBServer in Plan");
@@ -239,12 +245,27 @@ bool MoveShard::start() {
   TRI_ASSERT(current.isArray());
   TRI_ASSERT(planned.isArray());
   
+  int found = -1;
+  int count = 0;
   for (auto const& srv : VPackArrayIterator(planned)) {
     TRI_ASSERT(srv.isString());
     if (srv.copyString() == _to) {
-      finish("", false, "toServer must not be planned for shard already.");
+      finish("", false, "toServer must not yet be planned for shard");
       return false;
     }
+    if (srv.copyString() == _from) {
+      found = count;
+    }
+    ++count;
+  }
+  if ((_isLeader && found != 1) ||
+      (!_isLeader && found < 1)) {
+    if (_isLeader) {
+      finish("", false, "fromServer must be the leader in plan for shard");
+    } else {
+      finish("", false, "fromServer must be a follower in plan for shard");
+    }
+    return false;
   }
 
   // Compute group to move shards together:
