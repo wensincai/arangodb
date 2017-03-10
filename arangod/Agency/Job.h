@@ -89,6 +89,9 @@ struct Job {
   virtual void run() = 0;
 
   void runHelper(std::string const& removePlace) {
+    if (_status == FAILED) {  // happens when the constructor did not work
+      return;
+    }
     status();   // This runs everything to to with state PENDING if needed!
     try {
       if (_status == TODO) {
@@ -164,9 +167,12 @@ struct Job {
   static void addReleaseServer(Builder& trx, std::string server);
   static void addReleaseShard(Builder& trx, std::string shard);
   static void addPreconditionServerNotBlocked(Builder& pre, std::string server);
+  static void addPreconditionServerGood(Builder& pre, std::string server);
   static void addPreconditionShardNotBlocked(Builder& pre, std::string shard);
   static void addPreconditionUnchanged(Builder& pre,
     std::string key, Slice value);
+  static std::string checkServerGood(Node const& snapshot,
+                                     std::string const& server);
 
 };
 

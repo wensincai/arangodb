@@ -59,7 +59,7 @@ MoveShard::MoveShard(Node const& snapshot, AgentInterface* agent,
   } catch (std::exception const& e) {
     std::string err = 
       std::string("Failed to find job ") + _jobId + " in agency: " + e.what();
-    LOG_TOPIC(ERR, Logger::AGENCY) << err;
+    LOG_TOPIC(ERR, Logger::SUPERVISION) << err;
     finish("Shards/" + _shard, false, err);
     _status = FAILED;
   }
@@ -71,11 +71,19 @@ void MoveShard::run() {
   runHelper("Shards/" + _shard);
 }
 
-bool MoveShard::create(std::shared_ptr<VPackBuilder> b) {
+bool MoveShard::create(std::shared_ptr<VPackBuilder> envelope) {
 
-  LOG_TOPIC(DEBUG, Logger::AGENCY)
+  LOG_TOPIC(DEBUG, Logger::SUPERVISION)
     << "Todo: Move shard " + _shard + " from " + _from + " to " << _to;
   
+  bool selfCreate = (envelope == nullptr); // Do we create ourselves?
+
+  if (selfCreate) {
+    _jb = std::make_shared<Builder>();
+  } else {
+    _jb = envelope;
+  }
+
   std::string path;
   std::string now(timepointToString(std::chrono::system_clock::now()));
   
@@ -112,15 +120,21 @@ bool MoveShard::create(std::shared_ptr<VPackBuilder> b) {
     }
   }
 
+  _status = TODO;
+
+  if (!selfCreate) {
+    return true;
+  }
+
   write_ret_t res = transact(_agent, *_jb);
 
   if (res.accepted && res.indices.size() == 1 && res.indices[0]) {
     return true;
   }
 
-  _status = TODO;
+  _status = NOTFOUND;
 
-  LOG_TOPIC(INFO, Logger::AGENCY) << "Failed to insert job " + _jobId;
+  LOG_TOPIC(INFO, Logger::SUPERVISION) << "Failed to insert job " + _jobId;
   return false;
 }
 
@@ -129,48 +143,44 @@ bool MoveShard::start() {
   // the job.
 
   // Check if the toServer exists:
-  Node server("dummy");
-  try {
-    server = _snapshot(plannedServers + "/" + _to);
-  }
-  catch (...) {
-    finish("Shards/" + _shard, false,
-           "toServer does not exist as DBServer in Plan");
+  if (!_snapshot.has(plannedServers + "/" + _to)) {
+    finish("", false, "toServer does not exist as DBServer in Plan");
     return false;
   }
 
   // Are we distributeShardsLiking other shard? Then fail miserably.
-  Node collection("dummy");
-  try {
-    collection = _snapshot(planColPrefix + _database + "/" + _collection);
-  }
-  catch (...) {
-    finish("Shards/" + _shard, false,
-           "collection has been dropped in the meantime");
+  if (!_snapshot.has(planColPrefix + _database + "/" + _collection)) {
+    finish("", false, "collection has been dropped in the meantime");
     return false;
   }
-  if (collection.exists("distributeShardsLike").size() == 1) {
+  Node collection = _snapshot(planColPrefix + _database + "/" + _collection);
+  if (collection.has("distributeShardsLike")) {
     finish("Shards/" + _shard, false,
            "collection must not have 'distributeShardsLike' attribute");
     return false;
   }
   
   // Check that the shard is not locked:
-  auto shardLocks = _snapshot(blockedShardsPrefix).children();
-  auto it = shardLocks.find(_shard);
-  if (it != shardLocks.end()) {
-    LOG_TOPIC(DEBUG, Logger::AGENCY) << "shard " << _shard << " is currently"
-      " locked, not starting MoveShard job " << _jobId;
+  if (_snapshot.has(blockedShardsPrefix + _shard)) {
+    LOG_TOPIC(DEBUG, Logger::SUPERVISION) << "shard " << _shard
+      << " is currently locked, not starting MoveShard job " << _jobId;
     return false;
   }
 
   // Check that the toServer is not locked:
-  auto serverLocks = _snapshot(blockedServersPrefix).children();
-  it = serverLocks.find(_to);
-  if (it != serverLocks.end()) {
-    LOG_TOPIC(DEBUG, Logger::AGENCY) << "server " << _to << " is currently"
+  if (_snapshot.has(blockedServersPrefix + _to)) {
+    LOG_TOPIC(DEBUG, Logger::SUPERVISION) << "server " << _to << " is currently"
       " locked, not starting MoveShard job " << _jobId;
     return false;
+  }
+
+  // Check that the toServer is in state "GOOD":
+  std::string health = checkServerGood(_snapshot, _to);
+  if (health != "GOOD") {
+    LOG_TOPIC(DEBUG, Logger::SUPERVISION) << "server " << _to
+      << " is currently " << health << ", not starting MoveShard job "
+      << _jobId;
+      return false;
   }
 
   // Check that _to is not in `Target/CleanedServers`:
@@ -190,8 +200,7 @@ bool MoveShard::start() {
   if (cleanedServers.isArray()) {
     for (auto const& x : VPackArrayIterator(cleanedServers)) {
       if (x.isString() && x.copyString() == _to) {
-        finish("Shards/" + _shard, false,
-               "toServer must not be in `Target/CleanedServers`");
+        finish("", false, "toServer must not be in `Target/CleanedServers`");
         return false;
       }
     }
@@ -213,8 +222,7 @@ bool MoveShard::start() {
   if (failedServers.isObject()) {
     Slice found = failedServers.get(_to);
     if (!found.isNone()) {
-      finish("Shards/" + _shard, false,
-             "toServer must not be in `Target/FailedServers`");
+      finish("", false, "toServer must not be in `Target/FailedServers`");
       return false;
     }
   }
@@ -234,8 +242,7 @@ bool MoveShard::start() {
   for (auto const& srv : VPackArrayIterator(planned)) {
     TRI_ASSERT(srv.isString());
     if (srv.copyString() == _to) {
-      finish("Shards/" + _shard, false,
-             "toServer must not be planned for shard already.");
+      finish("", false, "toServer must not be planned for shard already.");
       return false;
     }
   }
@@ -258,7 +265,7 @@ bool MoveShard::start() {
       } catch (std::exception const&) {
         // Just in case, this is never going to happen, since we will only
         // call the start() method if the job is already in ToDo.
-        LOG_TOPIC(INFO, Logger::AGENCY)
+        LOG_TOPIC(INFO, Logger::SUPERVISION)
           << "Failed to get key " + toDoPrefix + _jobId + " from agency snapshot";
         return false;
       }
@@ -268,7 +275,8 @@ bool MoveShard::start() {
       } catch (std::exception const& e) {
         // Just in case, this is never going to happen, since when _jb is
         // set, then the current job is stored under ToDo.
-        LOG_TOPIC(WARN, Logger::AGENCY) << e.what() << ": " << __FILE__ << ":" << __LINE__;
+        LOG_TOPIC(WARN, Logger::SUPERVISION) << e.what() << ": "
+          << __FILE__ << ":" << __LINE__;
         return false;
       }
     }
@@ -317,6 +325,7 @@ bool MoveShard::start() {
       addPreconditionUnchanged(pending, planPath, planned);
       addPreconditionShardNotBlocked(pending, _shard);
       addPreconditionServerNotBlocked(pending, _to);
+      addPreconditionServerGood(pending, _to);
       addPreconditionUnchanged(pending, failedServersPrefix, failedServers);
       addPreconditionUnchanged(pending, cleanedPrefix, cleanedServers);
     }   // precondition done
@@ -327,12 +336,12 @@ bool MoveShard::start() {
   write_ret_t res = transact(_agent, pending);
 
   if (res.accepted && res.indices.size() == 1 && res.indices[0]) {
-    LOG_TOPIC(DEBUG, Logger::AGENCY)
+    LOG_TOPIC(DEBUG, Logger::SUPERVISION)
         << "Pending: Move shard " + _shard + " from " + _from + " to " + _to;
     return true;
   }
 
-  LOG_TOPIC(INFO, Logger::AGENCY)
+  LOG_TOPIC(INFO, Logger::SUPERVISION)
     << "Start precondition failed for MoveShard job " + _jobId;
   return false;
 }
@@ -344,12 +353,10 @@ JOB_STATUS MoveShard::status() {
 
   // check that shard still there, otherwise finish job
   std::string planPath = planColPrefix + _database + "/" + _collection;
-  try {
-    auto coll = _snapshot(planPath);
-  } catch (std::exception const& e) {
+  if (!_snapshot.has(planPath)) {
     // Oops, collection is gone, simple finish job:
-    LOG_TOPIC(ERR, Logger::AGENCY) << e.what() << ": " << __FILE__ << ":" 
-        << __LINE__;
+    LOG_TOPIC(ERR, Logger::SUPERVISION) << "collection was dropped" 
+      << ": " << __FILE__ << ":" << __LINE__;
     finish("Shards/" + _shard, true, "collection was dropped");
     return FINISHED;
   }
@@ -539,12 +546,12 @@ JOB_STATUS MoveShard::pendingLeader() {
   write_ret_t res = transact(_agent, trx);
 
   if (res.accepted && res.indices.size() == 1 && res.indices[0]) {
-    LOG_TOPIC(DEBUG, Logger::AGENCY)
+    LOG_TOPIC(DEBUG, Logger::SUPERVISION)
         << "Pending: Move shard " + _shard + " from " + _from + " to " + _to;
     return (finishedAfterTransaction ? FINISHED : PENDING);
   }
 
-  LOG_TOPIC(INFO, Logger::AGENCY)
+  LOG_TOPIC(INFO, Logger::SUPERVISION)
     << "Precondition failed for MoveShard job " + _jobId;
   return PENDING;
 }
