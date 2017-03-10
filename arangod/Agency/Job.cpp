@@ -238,6 +238,32 @@ std::vector<Job::shard_t> Job::clones(
 }
 
 
+std::string Job::findCommonInSyncFollower(
+  Node const& snap, std::string const& db, std::string const& col,
+  std::string const& shrd) {
+
+  auto cs = clones(snap, db, col, shrd);
+  auto nclones = cs.size();
+
+  std::map<std::string,size_t> currentServers;
+  for (const auto& clone : cs) {
+    auto shardPath =
+      curColPrefix + db + "/" + clone.collection + "/"
+      + clone.shard + "/servers";
+    size_t i = 0;
+    for (const auto& server : VPackArrayIterator(snap(shardPath).getArray())) {
+      if (i++ > 0) { // Skip leader
+        if (++currentServers[server.copyString()] == nclones) {
+          return server.copyString();
+        }
+      }
+    }
+  }
+
+  return std::string();
+  
+}
+
 std::string Job::uuidLookup (std::string const& shortID) {
   for (auto const& uuid : _snapshot(mapUniqueToShortID).children()) {
     if ((*uuid.second)("ShortName").getString() == shortID) {

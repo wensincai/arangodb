@@ -54,20 +54,29 @@ struct Empty {
 };
 
 /// @brief Split strings by separator
-inline static std::vector<std::string> split(const std::string& value,
+inline static std::vector<std::string> split(const std::string& str,
                                              char separator) {
-  std::vector<std::string> res;
-  std::string::size_type q, p = (value.find(separator) == 0) ? 1 : 0;
 
-  while ((q = value.find(separator, p)) != std::string::npos) {
-    res.emplace_back(value, p, q - p);
+  std::vector<std::string> result;
+  if (str.empty()) {
+    return result;
+  }
+  std::regex reg("/+");
+  std::string key = std::regex_replace(str, reg, "/");
+
+  if (!key.empty() && key.front() == '/') { key.erase(0,1); }
+  if (!key.empty() && key.back()  == '/') { key.pop_back(); }
+  
+  std::string::size_type p = 0;
+  std::string::size_type q;
+  while ((q = key.find(separator, p)) != std::string::npos) {
+    result.emplace_back(key, p, q - p);
     p = q + 1;
   }
-  res.emplace_back(value, p);
-  res.erase(std::find_if(res.rbegin(), res.rend(), NotEmpty()).base(),
-            res.end());
-
-  return res;
+  result.emplace_back(key, p);
+  result.erase(std::find_if(result.rbegin(), result.rend(), NotEmpty()).base(),
+               result.end());
+  return result;
 }
 
 /// Build endpoint from URL

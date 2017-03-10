@@ -106,7 +106,7 @@ class Agent : public arangodb::Thread,
   inquire_ret_t inquire(query_t const&);
 
   /// @brief Attempt read/write transaction
-  trans_ret_t transact(query_t const&);
+  trans_ret_t transact(query_t const&) override;
 
   /// @brief Received by followers to replicate log entries ($5.3);
   ///        also used as heartbeat ($5.2).

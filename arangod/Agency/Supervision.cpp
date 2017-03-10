@@ -744,14 +744,13 @@ void Supervision::shrinkCluster() {
         uint64_t replFact{0};
         try {
           replFact = (*collptr.second)("replicationFactor").getUInt();
-
           if (replFact > maxReplFact) {
             maxReplFact = replFact;
           }
         } catch (std::exception const& e) {
-          LOG_TOPIC(WARN, Logger::AGENCY) << "Cannot retrieve replication "
-                                          << "factor for collection "
-                                          << collptr.first << ": " << e.what();
+          LOG_TOPIC(WARN, Logger::AGENCY)
+            << "Cannot retrieve replication factor for collection "
+            << collptr.first << ": " << e.what();
           return;
         }
         if (uselessFailedServers.size() > 0) {
@@ -865,6 +864,7 @@ void Supervision::getUniqueIds() {
   }
   
 }
+
 
 void Supervision::beginShutdown() {
   // Personal hygiene

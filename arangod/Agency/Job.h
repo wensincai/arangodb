@@ -129,6 +129,10 @@ struct Job {
     Node const& snap, std::string const& db, std::string const& col,
     std::string const& shrd);
 
+  static std::string findCommonInSyncFollower(
+    Node const& snap, std::string const& db, std::string const& col,
+    std::string const& shrd);
+
   JOB_STATUS _status;
   Node const _snapshot;
   AgentInterface* _agent;
@@ -163,6 +167,7 @@ struct Job {
   static void addPreconditionShardNotBlocked(Builder& pre, std::string shard);
   static void addPreconditionUnchanged(Builder& pre,
     std::string key, Slice value);
+
 };
 
 inline arangodb::consensus::write_ret_t transact(AgentInterface* _agent,

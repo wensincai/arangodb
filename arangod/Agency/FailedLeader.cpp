@@ -77,13 +77,9 @@ void FailedLeader::run() {
 
 bool FailedLeader::create(std::shared_ptr<VPackBuilder> b) {
 
-  LOG_TOPIC(INFO, Logger::AGENCY) << __FILE__ << __LINE__;
-
   using namespace std::chrono;
   LOG_TOPIC(INFO, Logger::AGENCY)
     << "Handle failed Leader for " + _shard + " from " + _from + " to " + _to;
-
-  LOG_TOPIC(INFO, Logger::AGENCY) << __FILE__ << __LINE__;
   
   _jb = std::make_shared<Builder>();
   { VPackArrayBuilder transaction(_jb.get());
@@ -102,7 +98,6 @@ bool FailedLeader::create(std::shared_ptr<VPackBuilder> b) {
           "timeCreated", VPackValue(timepointToString(system_clock::now())));
       }}}
   
-  LOG_TOPIC(INFO, Logger::AGENCY) << __FILE__ << __LINE__;
 
   write_ret_t res = transact(_agent, *_jb);
   
@@ -110,17 +105,9 @@ bool FailedLeader::create(std::shared_ptr<VPackBuilder> b) {
   
 }
 
-/*
-        // Add shard to /arango/Target/FailedServers/<server> array
-      _jb->add(VPackValue(agencyPrefix + failedServersPrefix + "/" + _from));
-      { VPackObjectBuilder failed(_jb.get());
-        _jb->add("op", VPackValue("push"));
-        _jb->add("new", VPackValue(_shard));
-      }}
-*/
-
 bool FailedLeader::start() {
 
+  
   std::vector<std::string> existing =
     _snapshot.exists(planColPrefix + _database + "/" + _collection + "/" +
                      "distributeShardsLike");
@@ -132,23 +119,23 @@ bool FailedLeader::start() {
     finish("Shards/" + _shard, true, "Collection no longer there");
   }
 
+  std::string commonInSync =
+    findCommonInSyncFollower(_snapshot, _database, _collection, _shard);
+  if (commonInSync.empty()) {
+    return false;
+  } else {
+    _to = commonInSync;
+  }
+
   using namespace std::chrono;
   
-  // DBservers
-  std::string planPath =
-      planColPrefix + _database + "/" + _collection + "/shards/" + _shard;
-  std::string curPath =
-      curColPrefix + _database + "/" + _collection + "/" + _shard + "/servers";
-
-  auto const& current = _snapshot(curPath).slice();
-  auto const& planned = _snapshot(planPath).slice();
-
-  if (current.length() == 1) {
-    LOG_TOPIC(ERR, Logger::AGENCY)
-      << "Failed to change leadership for shard " + _shard + " from " + _from 
-      +  " to " + _to + ". No in-sync followers:" + current.toJson();
-    return false;
-  }
+  auto const& current =
+    _snapshot(
+      curColPrefix + _database + "/" + _collection + "/" + _shard + "/servers")
+    .slice();
+  auto const& planned =
+    _snapshot(
+      planColPrefix + _database + "/" + _collection + "/shards/" + _shard).slice();
 
   // Get todo entry
   Builder todo;
@@ -174,93 +161,149 @@ bool FailedLeader::start() {
     }
   }
 
-  // Transaction
-  Builder pending;
-  { VPackArrayBuilder transaction(&pending);
+  // Transactions
+  auto pending = std::make_shared<Builder>();
+  
+  { VPackArrayBuilder transactions(pending.get());
     
-    // Operations ------------------------------------------------------------
-    { VPackObjectBuilder operations(&pending);
-      // Add pending entry
-      pending.add(VPackValue(pendingPrefix + _jobId));
-      { VPackObjectBuilder ts(&pending);
-        pending.add("timeStarted",
-                    VPackValue(timepointToString(system_clock::now())));
-        for (auto const& obj : VPackObjectIterator(todo.slice()[0])) {
-          pending.add(obj.key.copyString(), obj.value);
-        }
-      }
-      // Remove todo entry
-      pending.add(VPackValue(toDoPrefix + _jobId));
-      { VPackObjectBuilder rem(&pending);
-        pending.add("op", VPackValue("delete")); }
-      // DB server vector
-      pending.add(VPackValue(planPath));
-      { VPackArrayBuilder dbs(&pending);
-        pending.add(VPackValue(_to));
-        for (auto const& i : VPackArrayIterator(current)) {
-          std::string s = i.copyString();
-          if (s != _from && s != _to) {
-            pending.add(i);
-            planv.erase(
-              std::remove(planv.begin(), planv.end(), s), planv.end());
+    { VPackArrayBuilder stillThere(pending.get()); // Collection still there?
+      pending->add(
+        VPackValue(
+          agencyPrefix + planColPrefix + _database + "/" + _collection));}
+    
+    { VPackArrayBuilder stillThere(pending.get()); // Still failing?
+      pending->add(VPackValue(agencyPrefix + healthPrefix + _from + "/Status"));}
+    
+    { VPackArrayBuilder transaction(pending.get());
+      
+      // Operations ----------------------------------------------------------
+      { VPackObjectBuilder operations(pending.get());
+        // Add pending entry
+        pending->add(VPackValue(agencyPrefix + pendingPrefix + _jobId));
+        { VPackObjectBuilder ts(pending.get());
+          pending->add("timeStarted", // start
+                       VPackValue(timepointToString(system_clock::now())));
+          pending->add("toServer", VPackValue(_to)); // toServer
+          for (auto const& obj : VPackObjectIterator(todo.slice()[0])) {
+            pending->add(obj.key.copyString(), obj.value);
           }
         }
-        pending.add(VPackValue(_from));
-        for (auto const& i : planv) {
-          pending.add(VPackValue(i));
-        }}
+        // Remove todo entry ------
+        pending->add(VPackValue(agencyPrefix + toDoPrefix + _jobId));
+        { VPackObjectBuilder rem(pending.get());
+          pending->add("op", VPackValue("delete")); }
+        // DB server vector -------
+        Builder ns;
+        { VPackArrayBuilder servers(&ns);
+          ns.add(VPackValue(_to));  
+          for (auto const& i : VPackArrayIterator(current)) {
+            std::string s = i.copyString();
+            if (s != _from && s != _to) {
+              ns.add(i);
+              planv.erase(
+                std::remove(planv.begin(), planv.end(), s), planv.end());
+            }
+          }
+          ns.add(VPackValue(_from));
+          for (auto const& i : planv) {
+            ns.add(VPackValue(i));
+          }
+        }
+        for (auto const& clone :
+               clones(_snapshot, _database, _collection, _shard)) {
+          pending->add(
+            agencyPrefix + planColPrefix + _database + "/"
+            + clone.collection + "/shards/" + clone.shard, ns.slice());
+        }
+        // Block shard ------------
+        pending->add(VPackValue(agencyPrefix + blockedShardsPrefix + _shard));
+        { VPackObjectBuilder block(pending.get());
+          pending->add("jobId", VPackValue(_jobId)); }
+        // Increment Plan/Version -
+        pending->add(VPackValue(agencyPrefix + planVersion));
+        { VPackObjectBuilder version(pending.get());
+          pending->add("op", VPackValue("increment")); }} // Operations ------
+      // Preconditions -------------------------------------------------------
+      { VPackObjectBuilder preconditions(pending.get());
 
-      // Block shard
-      pending.add(VPackValue(blockedShardsPrefix + _shard));
-      { VPackObjectBuilder block(&pending);
-        pending.add("jobId", VPackValue(_jobId)); }
-      // Increment Plan/Version
-      pending.add(VPackValue(planVersion));
-      { VPackObjectBuilder version(&pending);
-        pending.add("op", VPackValue("increment")); }} // Operations ---------
-    // Preconditions ---------------------------------------------------------
-    { VPackObjectBuilder preconditions(&pending);    
-      // Current servers are as we expect
-      pending.add(VPackValue(curPath));
-      { VPackObjectBuilder cur(&pending);
-        pending.add("old", current); }
-      // Plan servers are as we expect
-      pending.add(VPackValue(planPath));
-      { VPackObjectBuilder plan(&pending);
-        pending.add("old", planned); }
-      // Shard is not blocked
-      
-      pending.add(VPackValue(blockedShardsPrefix + _shard));
-      { VPackObjectBuilder blocked(&pending);
-        pending.add("oldEmpty", VPackValue(true)); }} // Preconditions --------
+        pending->add( // Collection should not have been deleted in the mt
+          VPackValue(
+            agencyPrefix + planColPrefix + _database + "/" + _collection));
+        { VPackObjectBuilder stillExists(pending.get());
+          pending->add("oldEmpty", VPackValue(false)); }
+
+        pending->add( // Status should still be failed
+          VPackValue(agencyPrefix + healthPrefix + _from + "/Status"));
+        { VPackObjectBuilder stillExists(pending.get());
+          pending->add("old", VPackValue("FAILED")); }
+
+      } // Preconditions -----------------------------------------------------
+    }}
+  
+  LOG_TOPIC(DEBUG, Logger::SUPERVISION)
+    << "FailedLeader transaction: " << pending->toJson();
+  
+  trans_ret_t res = _agent->transact(pending);
+
+  LOG_TOPIC(DEBUG, Logger::SUPERVISION)
+    << "FailedLeader result: " << pending->toJson();
+  
+  try {
+    auto exist = res.result->slice()[0].get(
+      std::vector<std::string>(
+        {"arango", "Plan", "Collections", _database, _collection}
+        )).isObject();
+    if (!exist) {
+      finish("Shards/" + _shard, false, "Collection " + _collection + " gone");
+    }
+  } catch (std::exception const& e) {
+    LOG_TOPIC(ERR, Logger::SUPERVISION)
+      << "Failed to acquire find " << _from << " in job IDs from agency: "
+      << e.what() << __FILE__ << __LINE__; 
   }
-
-  // Transact
-  write_ret_t res = transact(_agent, pending);
-
-  return (res.accepted && res.indices.size() == 1 && res.indices[0]);
-
+  
+  try {
+    auto state = res.result->slice()[1].get(
+      std::vector<std::string>(
+        {"arango", "Supervision", "Health", _from, "Status"})).copyString();
+    if (state != "FAILED") {
+      finish("Shards/" + _shard, false, _from + " is no longer 'FAILED'");
+    }
+  } catch (std::exception const& e) {
+    LOG_TOPIC(ERR, Logger::SUPERVISION)
+      << "Failed to acquire find " << _from << " in job IDs from agency: "
+      << e.what() << __FILE__ << __LINE__; 
+  }
+  
+  
+  return (res.accepted && res.result->slice()[2].getUInt());
+  
 }
 
 JOB_STATUS FailedLeader::status() {
+
   if (_status != PENDING) {
     return _status;
   }
 
   Node const& job = _snapshot(pendingPrefix + _jobId);
   std::string database = job("database").toJson(),
-              collection = job("collection").toJson(),
-              shard = job("shard").toJson();
-
-  std::string planPath = planColPrefix + database + "/" + collection +
-                         "/shards/" + shard,
-              curPath = curColPrefix + database + "/" + collection + "/" +
-                        shard + "/servers";
-  auto const& planned = _snapshot(planPath);
-  auto const& current = _snapshot(curPath);
-
-  if (planned.slice()[0] == current.slice()[0]) {
-
+    collection = job("collection").toJson(),
+    shard = job("shard").toJson();
+  
+  bool done = false;
+  for (auto const& clone : clones(_snapshot, _database, _collection, _shard)) {
+    auto sub = database + "/" + clone.collection;
+    if(_snapshot(planColPrefix + sub + "/shards/" + clone.shard).slice()[0] !=
+       _snapshot(curColPrefix + "/" + clone.shard + "/servers").slice()[0]) {
+      LOG_TOPIC(DEBUG, Logger::SUPERVISION)
+        << "FailedLeader waiting for " << sub + "/" + shard;
+      break;
+    }
+    done = true;
+  }
+  
+  if (done) {
     // Remove shard to /arango/Target/FailedServers/<server> array
     Builder del;
     { VPackArrayBuilder a(&del);
@@ -270,18 +313,18 @@ JOB_STATUS FailedLeader::status() {
           del.add("op", VPackValue("erase"));
           del.add("val", VPackValue(_shard));
         }}}
-
-    write_ret_t res = transact(_agent, del);
     
+    write_ret_t res = transact(_agent, del);
     if (finish("Shards/" + shard)) {
       return FINISHED;
     }
   }
-
+  
   return _status;
 }
 
 void FailedLeader::abort() {
   // TO BE IMPLEMENTED
 }
+
 

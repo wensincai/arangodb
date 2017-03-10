@@ -155,8 +155,9 @@ bool FailedServer::start() {
 
       for (auto const& collptr : database.second->children()) {
         auto const& collection = *(collptr.second);
-        
-        if (!cdatabase.find(collptr.first)->second->children().empty()) {
+
+        auto const& found = cdatabase.find(collptr.first);
+        if (found != cdatabase.end() && !found->second->children().empty()) {
 
           auto const& collection = *(collptr.second);
           auto const& replicationFactor = collection("replicationFactor");
@@ -186,7 +187,7 @@ bool FailedServer::start() {
                   available.end());
 
                 if (dbs == _server) {
-                  if (pos == 0) {
+                  if (pos == 0 && !isClone) {
                     FailedLeader(
                       _snapshot, _agent, _jobId + "-" + std::to_string(sub++),
                       _jobId, database.first, collptr.first,
@@ -235,8 +236,6 @@ bool FailedServer::create(std::shared_ptr<VPackBuilder> envelope) {
   LOG_TOPIC(DEBUG, Logger::AGENCY)
     << "Todo: Handle failover for db server " + _server;
 
-  LOG_TOPIC(INFO, Logger::AGENCY) << __FILE__ << __LINE__;
-  
   using namespace std::chrono;
   bool selfCreate = (envelope == nullptr); // Do we create ourselves?
 
@@ -267,7 +266,7 @@ bool FailedServer::create(std::shared_ptr<VPackBuilder> envelope) {
     //Preconditions
     { VPackObjectBuilder health(_jb.get());
 
-      // Status should still be FAILED
+      // Status should still be BAD
       _jb->add(VPackValue(healthPrefix + _server + "/Status"));
       { VPackObjectBuilder old(_jb.get());
         _jb->add("old", VPackValue("BAD")); }

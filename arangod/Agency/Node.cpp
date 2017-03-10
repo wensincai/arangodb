@@ -45,16 +45,26 @@ struct Empty {
 };
 
 /// @brief Split strings by separator
-inline static std::vector<std::string> split(const std::string& value,
-                                      char separator) {
+inline static std::vector<std::string> split(const std::string& str,
+                                             char separator) {
+
   std::vector<std::string> result;
-  std::string::size_type p = (value.find(separator) == 0) ? 1 : 0;
+  if (str.empty()) {
+    return result;
+  }
+  std::regex reg("/+");
+  std::string key = std::regex_replace(str, reg, "/");
+
+  if (!key.empty() && key.front() == '/') { key.erase(0,1); }
+  if (!key.empty() && key.back()  == '/') { key.pop_back(); }
+  
+  std::string::size_type p = 0;
   std::string::size_type q;
-  while ((q = value.find(separator, p)) != std::string::npos) {
-    result.emplace_back(value, p, q - p);
+  while ((q = key.find(separator, p)) != std::string::npos) {
+    result.emplace_back(key, p, q - p);
     p = q + 1;
   }
-  result.emplace_back(value, p);
+  result.emplace_back(key, p);
   result.erase(std::find_if(result.rbegin(), result.rend(), NotEmpty()).base(),
                result.end());
   return result;
@@ -755,6 +765,14 @@ std::vector<std::string> Node::exists(
 
 std::vector<std::string> Node::exists(std::string const& rel) const {
   return exists(split(rel, '/'));
+}
+
+bool Node::has(std::vector<std::string> const& rel) const {
+  return exists(rel).size() == rel.size();
+}
+
+bool Node::has(std::string const& rel) const {
+  return has(split(rel, '/'));
 }
 
 int Node::getInt() const {
