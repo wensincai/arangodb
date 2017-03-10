@@ -51,7 +51,7 @@ struct MoveShard : public Job {
   virtual bool create(std::shared_ptr<VPackBuilder> envelope = nullptr)
     override final;
   virtual bool start() override final;
-  virtual void abort() override final;
+  virtual void abort() override;
   JOB_STATUS pendingLeader();
   JOB_STATUS pendingFollower();
 
