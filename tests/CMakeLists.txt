@@ -6,6 +6,7 @@ endforeach()
 add_executable(
   arangodbtests
   Agency/FailedLeaderTest.cpp
+  Agency/MoveShardTest.cpp
   Basics/AttributeNameParserTest.cpp
   Basics/associative-multi-pointer-test.cpp
   Basics/associative-multi-pointer-nohashcache-test.cpp
