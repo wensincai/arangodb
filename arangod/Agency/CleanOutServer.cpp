@@ -25,6 +25,7 @@
 
 #include "Agency/AgentInterface.h"
 #include "Agency/Job.h"
+#include "Agency/JobContext.h"
 #include "Agency/MoveShard.h"
 #include "Random/RandomGenerator.h"
 
@@ -79,43 +80,55 @@ JOB_STATUS CleanOutServer::status() {
     }
   }
 
-  // FIXME: implement timeout here?
+  if (found > 0) {  // some subjob still running
+    // timeout here:
+    std::string timeCreatedString
+      = _snapshot(pendingPrefix + _jobId + "/timeCreated").getString();
+    Supervision::TimePoint timeCreated = stringToTimepoint(timeCreatedString);
+    Supervision::TimePoint now(std::chrono::system_clock::now());
+    if (now - timeCreated > std::chrono::duration<double>(7200.0)) {
+      abort();
+      return FAILED;
+    }
+    return PENDING;
+  }
+  
+  // all subjobs done:
 
-  if (found == 0) {
-    // Put server in /Target/CleanedServers:
-    Builder reportTrx;
+  // Put server in /Target/CleanedServers:
+  Builder reportTrx;
+  {
+    VPackArrayBuilder arrayGuard(&reportTrx);
     {
-      VPackArrayBuilder guard(&reportTrx);
+      VPackObjectBuilder objectGuard(&reportTrx);
+      reportTrx.add(VPackValue("/Target/CleanedServers"));
       {
-        VPackObjectBuilder guard3(&reportTrx);
-        reportTrx.add(VPackValue("/Target/CleanedServers"));
-        {
-          VPackObjectBuilder guard4(&reportTrx);
-          reportTrx.add("op", VPackValue("push"));
-          reportTrx.add("new", VPackValue(_server));
-        }
+        VPackObjectBuilder guard4(&reportTrx);
+        reportTrx.add("op", VPackValue("push"));
+        reportTrx.add("new", VPackValue(_server));
       }
-    }
-    // Transact to agency
-    write_ret_t res = transact(_agent, reportTrx);
-
-    if (res.accepted && res.indices.size() == 1 && res.indices[0] != 0) {
-      LOG_TOPIC(DEBUG, Logger::SUPERVISION) << "Have reported " << _server
-                                      << " in /Target/CleanedServers";
-    } else {
-      LOG_TOPIC(ERR, Logger::SUPERVISION) << "Failed to report " << _server
-                                     << " in /Target/CleanedServers";
-    }
-
-    if (finish("DBServers/" + _server)) {
-      return FINISHED;
+      addRemoveJobFromSomewhere(reportTrx, "Pending", _jobId);
+      Builder job;
+      _snapshot(pendingPrefix + _jobId).toBuilder(job);
+      addPutJobIntoSomewhere(reportTrx, "Finished", job.slice(), "");
+      addReleaseServer(reportTrx, _server);
     }
   }
 
-  return _status;
+  // Transact to agency
+  write_ret_t res = transact(_agent, reportTrx);
+
+  if (res.accepted && res.indices.size() == 1 && res.indices[0] != 0) {
+    LOG_TOPIC(DEBUG, Logger::SUPERVISION) << "Have reported " << _server
+                                    << " in /Target/CleanedServers";
+    return FINISHED;
+  }
+
+  LOG_TOPIC(ERR, Logger::SUPERVISION) << "Failed to report " << _server
+                                 << " in /Target/CleanedServers";
+  return FAILED;
 }
 
-// Only through shrink cluster
 bool CleanOutServer::create(std::shared_ptr<VPackBuilder> envelope) {
 
   LOG_TOPIC(DEBUG, Logger::SUPERVISION)
@@ -437,6 +450,32 @@ bool CleanOutServer::checkFeasibility() {
 }
 
 void CleanOutServer::abort() {
-  // TO BE IMPLEMENTED
+  // We can assume that the job is either in ToDo or in Pending.
+  if (_status == NOTFOUND || _status == FINISHED || _status == FAILED) {
+    return;
+  }
+
+  // Can now only be TODO or PENDING
+  if (_status == TODO) {
+    finish("", false, "job aborted");
+    return;
+  }
+
+  // Abort all our subjobs:
+  Node::Children const todos = _snapshot(toDoPrefix).children();
+  Node::Children const pends = _snapshot(pendingPrefix).children();
+
+  for (auto const& subJob : todos) {
+    if (!subJob.first.compare(0, _jobId.size() + 1, _jobId + "-")) {
+      JobContext(TODO, subJob.first, _snapshot, _agent).abort();
+    }
+  }
+  for (auto const& subJob : pends) {
+    if (!subJob.first.compare(0, _jobId.size() + 1, _jobId + "-")) {
+      JobContext(TODO, subJob.first, _snapshot, _agent).abort();
+    }
+  }
+
+  finish("DBServers/" + _server, false, "job aborted");
 }
 

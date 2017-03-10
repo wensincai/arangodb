@@ -97,29 +97,28 @@ bool MoveShard::create(std::shared_ptr<VPackBuilder> envelope) {
 
   if (selfCreate) {
     _jb->openArray();
+    _jb->openObject();
   }
 
-  { VPackObjectBuilder guard(_jb.get());
-    _jb->add(VPackValue(_from == _to ? failedPrefix + _jobId
-                                     : toDoPrefix + _jobId));
-    { VPackObjectBuilder guard2(_jb.get());
-      if (_from == _to) {
-        _jb->add("timeFinished", VPackValue(now));
-        _jb->add(
-            "result",
-            VPackValue("Source and destination of moveShard must be different"));
-      }
-      _jb->add("creator", VPackValue(_creator));
-      _jb->add("type", VPackValue("moveShard"));
-      _jb->add("database", VPackValue(_database));
-      _jb->add("collection", VPackValue(_collection));
-      _jb->add("shard", VPackValue(_shard));
-      _jb->add("fromServer", VPackValue(_from));
-      _jb->add("toServer", VPackValue(_to));
-      _jb->add("isLeader", VPackValue(_isLeader));
-      _jb->add("jobId", VPackValue(_jobId));
-      _jb->add("timeCreated", VPackValue(now));
+  _jb->add(VPackValue(_from == _to ? failedPrefix + _jobId
+                                   : toDoPrefix + _jobId));
+  { VPackObjectBuilder guard2(_jb.get());
+    if (_from == _to) {
+      _jb->add("timeFinished", VPackValue(now));
+      _jb->add(
+          "result",
+          VPackValue("Source and destination of moveShard must be different"));
     }
+    _jb->add("creator", VPackValue(_creator));
+    _jb->add("type", VPackValue("moveShard"));
+    _jb->add("database", VPackValue(_database));
+    _jb->add("collection", VPackValue(_collection));
+    _jb->add("shard", VPackValue(_shard));
+    _jb->add("fromServer", VPackValue(_from));
+    _jb->add("toServer", VPackValue(_to));
+    _jb->add("isLeader", VPackValue(_isLeader));
+    _jb->add("jobId", VPackValue(_jobId));
+    _jb->add("timeCreated", VPackValue(now));
   }
 
   _status = TODO;
@@ -128,6 +127,7 @@ bool MoveShard::create(std::shared_ptr<VPackBuilder> envelope) {
     return true;
   }
 
+  _jb->close();  // transaction object
   _jb->close();  // close array
 
   write_ret_t res = transact(_agent, *_jb);
@@ -557,6 +557,7 @@ JOB_STATUS MoveShard::pendingLeader() {
         _snapshot(pendingPrefix + _jobId).toBuilder(job);
         addPutJobIntoSomewhere(trx, "Finished", job.slice(), "");
         addReleaseShard(trx, _shard);
+        addReleaseServer(trx, _to);
       }
       // Add precondition to transaction:
       trx.add(pre.slice());
@@ -644,6 +645,7 @@ JOB_STATUS MoveShard::pendingFollower() {
       addPutJobIntoSomewhere(trx, "Finished", job.slice(), "");
       addPreconditionCollectionStillThere(precondition, _database, _collection);
       addReleaseShard(trx, _shard);
+      addReleaseServer(trx, _to);
 
       addIncreasePlanVersion(trx);
     }
@@ -662,14 +664,12 @@ JOB_STATUS MoveShard::pendingFollower() {
 
 void MoveShard::abort() {
   // We can assume that the job is either in ToDo or in Pending.
-  auto status = exists();
-
-  if (status == NOTFOUND || status == FINISHED || status == FAILED) {
+  if (_status == NOTFOUND || _status == FINISHED || _status == FAILED) {
     return;
   }
   // Can now only be TODO or PENDING
-  if (status == TODO) {
-    finish("Shards/" + _shard, false, "job aborted");
+  if (_status == TODO) {
+    finish("", false, "job aborted");
     return;
   }
 
@@ -705,6 +705,7 @@ void MoveShard::abort() {
         _snapshot(pendingPrefix + _jobId).toBuilder(job);
         addPutJobIntoSomewhere(trx, "Failed", job.slice(), "job aborted");
         addReleaseShard(trx, _shard);
+        addReleaseServer(trx, _to);
         addIncreasePlanVersion(trx);
       }
     }
@@ -732,6 +733,7 @@ void MoveShard::abort() {
         _snapshot(pendingPrefix + _jobId).toBuilder(job);
         addPutJobIntoSomewhere(trx, "Failed", job.slice(), "job aborted");
         addReleaseShard(trx, _shard);
+        addReleaseServer(trx, _to);
         addIncreasePlanVersion(trx);
       }
     }
