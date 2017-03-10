@@ -52,7 +52,7 @@ UnassumedLeadership::UnassumedLeadership(
   } catch (std::exception const& e) {
     std::stringstream err;
     err << "Failed to find job " << _jobId << " in agency: " << e.what();
-    LOG_TOPIC(ERR, Logger::AGENCY) << err.str();
+    LOG_TOPIC(ERR, Logger::SUPERVISION) << err.str();
     finish("Shards/" + _shard, false, err.str());
     _status = FAILED;
   }
@@ -65,7 +65,7 @@ void UnassumedLeadership::run() {
 }
 
 bool UnassumedLeadership::create(std::shared_ptr<VPackBuilder> b) {
-  LOG_TOPIC(INFO, Logger::AGENCY)
+  LOG_TOPIC(INFO, Logger::SUPERVISION)
       << "Todo: Find new leader for to be created shard " << _shard;
 
   std::string path = toDoPrefix + _jobId;
@@ -92,7 +92,7 @@ bool UnassumedLeadership::create(std::shared_ptr<VPackBuilder> b) {
     return true;
   }
 
-  LOG_TOPIC(INFO, Logger::AGENCY) << "Failed to insert job " + _jobId;
+  LOG_TOPIC(INFO, Logger::SUPERVISION) << "Failed to insert job " + _jobId;
   return false;
 }
 
@@ -116,7 +116,7 @@ bool UnassumedLeadership::start() {
     try {
       _snapshot(toDoPrefix + _jobId).toBuilder(todo);
     } catch (std::exception const&) {
-      LOG_TOPIC(INFO, Logger::AGENCY) << "Failed to get key " + toDoPrefix +
+      LOG_TOPIC(INFO, Logger::SUPERVISION) << "Failed to get key " + toDoPrefix +
                                              _jobId + " from agency snapshot";
       return false;
     }
@@ -180,13 +180,13 @@ bool UnassumedLeadership::start() {
   write_ret_t res = transact(_agent, pending);
 
   if (res.accepted && res.indices.size() == 1 && res.indices[0]) {
-    LOG_TOPIC(INFO, Logger::AGENCY)
+    LOG_TOPIC(INFO, Logger::SUPERVISION)
         << "Pending: Reassign creating leader for " + _shard + " from " +
                _from + " to " + _to;
     return true;
   }
 
-  LOG_TOPIC(INFO, Logger::AGENCY)
+  LOG_TOPIC(INFO, Logger::SUPERVISION)
       << "Precondition failed for starting job " + _jobId;
 
   return false;
@@ -236,17 +236,17 @@ bool UnassumedLeadership::reassignShard() {
   
   // Minimum 1 DB server must remain
   if (availServers.empty()) {
-    LOG_TOPIC(ERR, Logger::AGENCY) << "No DB servers left as target.";
+    LOG_TOPIC(ERR, Logger::SUPERVISION) << "No DB servers left as target.";
     return false;
   }
 
   // Among those a random destination
   try {
     _to = availServers.at(rand() % availServers.size());
-    LOG_TOPIC(DEBUG, Logger::AGENCY)
+    LOG_TOPIC(DEBUG, Logger::SUPERVISION)
         << "Will reassign creation of " + _shard + " to " + _to;
   } catch (...) {
-    LOG_TOPIC(ERR, Logger::AGENCY)
+    LOG_TOPIC(ERR, Logger::SUPERVISION)
         << "Range error picking destination for shard " + _shard;
     return false;
   }
@@ -273,7 +273,7 @@ JOB_STATUS UnassumedLeadership::status() {
   Node const& current = _snapshot(curPath);
 
   if (planned.slice()[0] == current.slice()[0]) {
-    LOG_TOPIC(DEBUG, Logger::AGENCY)
+    LOG_TOPIC(DEBUG, Logger::SUPERVISION)
         << "Done reassigned creation of " + _shard + " to " + _to;
     if (finish("Shards/" + shard)) {
       return FINISHED;

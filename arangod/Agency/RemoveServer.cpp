@@ -44,7 +44,7 @@ RemoveServer::RemoveServer(Node const& snapshot, AgentInterface* agent,
   } catch (std::exception const& e) {
     std::stringstream err;
     err << "Failed to find job " << _jobId << " in agency: " << e.what();
-    LOG_TOPIC(ERR, Logger::AGENCY) << err.str();
+    LOG_TOPIC(ERR, Logger::SUPERVISION) << err.str();
     finish("DBServers/" + _server, false, err.str());
     _status = FAILED;
   }
@@ -151,7 +151,7 @@ JOB_STATUS RemoveServer::status() {
   write_ret_t res = transact(_agent, trx);
 
   if (res.accepted && res.indices.size() == 1 && res.indices[0] != 0) {
-    LOG_TOPIC(INFO, Logger::AGENCY) << "Have reported " << _server
+    LOG_TOPIC(INFO, Logger::SUPERVISION) << "Have reported " << _server
                                     << " in /Target/CleanedServers";
     if (finish("DBServers/" + _server)) {
       return FINISHED;
@@ -165,7 +165,7 @@ JOB_STATUS RemoveServer::status() {
 // Only through shrink cluster
 bool RemoveServer::create(std::shared_ptr<VPackBuilder> b) {  
 
-  LOG_TOPIC(INFO, Logger::AGENCY) << "Todo: Remove server " + _server;
+  LOG_TOPIC(INFO, Logger::SUPERVISION) << "Todo: Remove server " + _server;
 
   std::string path = toDoPrefix + _jobId;
 
@@ -189,7 +189,7 @@ bool RemoveServer::create(std::shared_ptr<VPackBuilder> b) {
     return true;
   }
 
-  LOG_TOPIC(INFO, Logger::AGENCY) << "Failed to insert job " + _jobId;
+  LOG_TOPIC(INFO, Logger::SUPERVISION) << "Failed to insert job " + _jobId;
   return false;
 }
 
@@ -203,7 +203,7 @@ bool RemoveServer::start() {
     try {
       _snapshot(toDoPrefix + _jobId).toBuilder(todo);
     } catch (std::exception const&) {
-      LOG_TOPIC(INFO, Logger::AGENCY)
+      LOG_TOPIC(INFO, Logger::SUPERVISION)
         << "Failed to get key " + toDoPrefix + _jobId + " from agency snapshot";
       return false;
     }
@@ -255,7 +255,7 @@ bool RemoveServer::start() {
   write_ret_t res = transact(_agent, pending);
 
   if (res.accepted && res.indices.size() == 1 && res.indices[0]) {
-    LOG_TOPIC(INFO, Logger::AGENCY) << "Pending: Removing server " + _server;
+    LOG_TOPIC(INFO, Logger::SUPERVISION) << "Pending: Removing server " + _server;
 
     // Check if we can get things done in the first place
     if (!checkFeasibility()) {
@@ -273,7 +273,7 @@ bool RemoveServer::start() {
     return true;
   }
 
-  LOG_TOPIC(INFO, Logger::AGENCY)
+  LOG_TOPIC(INFO, Logger::SUPERVISION)
       << "Precondition failed for starting job " + _jobId;
 
   return false;
@@ -285,7 +285,7 @@ bool RemoveServer::scheduleAddFollowers() {
 
   // Minimum 1 DB server must remain
   if (servers.size() == 1) {
-    LOG_TOPIC(ERR, Logger::AGENCY) << "DB server " << _server
+    LOG_TOPIC(ERR, Logger::SUPERVISION) << "DB server " << _server
                                    << " is the last standing db server.";
     return false;
   }
@@ -341,7 +341,7 @@ bool RemoveServer::scheduleAddFollowers() {
         // Among those a random destination
         std::string newServer;
         if (servers.empty()) {
-          LOG_TOPIC(ERR, Logger::AGENCY)
+          LOG_TOPIC(ERR, Logger::SUPERVISION)
             << "No servers remain as target for RemoveServer";
           return false;
         }
@@ -361,7 +361,7 @@ bool RemoveServer::scheduleAddFollowers() {
 bool RemoveServer::checkFeasibility() {
   // Server exists
   if (_snapshot.exists("/Plan/DBServers/" + _server).size() != 3) {
-    LOG_TOPIC(ERR, Logger::AGENCY) << "No db server with id " << _server
+    LOG_TOPIC(ERR, Logger::SUPERVISION) << "No db server with id " << _server
                                    << " in plan.";
     return false;
   }
@@ -371,7 +371,7 @@ bool RemoveServer::checkFeasibility() {
     for (auto const& srv :
          VPackArrayIterator(_snapshot("/Target/CleanedServers").slice())) {
       if (srv.copyString() == _server) {
-        LOG_TOPIC(ERR, Logger::AGENCY) << _server
+        LOG_TOPIC(ERR, Logger::SUPERVISION) << _server
                                        << " has been cleaned out already!";
         return false;
       }
@@ -398,7 +398,7 @@ bool RemoveServer::checkFeasibility() {
 
   // Minimum 1 DB server must remain
   if (availServers.size() == 1) {
-    LOG_TOPIC(ERR, Logger::AGENCY) << "DB server " << _server
+    LOG_TOPIC(ERR, Logger::SUPERVISION) << "DB server " << _server
                                    << " is the last standing db server.";
     return false;
   }
@@ -439,7 +439,7 @@ bool RemoveServer::checkFeasibility() {
       factors << std::to_string(factor) << " ";
     }
 
-    LOG_TOPIC(ERR, Logger::AGENCY)
+    LOG_TOPIC(ERR, Logger::SUPERVISION)
         << "Cannot accomodate shards " << collections.str()
         << "with replication factors " << factors.str()
         << "after cleaning out server " << _server;

@@ -48,7 +48,7 @@ FailedServer::FailedServer(Node const& snapshot, AgentInterface* agent,
   } catch (std::exception const& e) {
     std::stringstream err;
     err << "Failed to find job " << _jobId << " in agency: " << e.what();
-    LOG_TOPIC(ERR, Logger::AGENCY) << err.str();
+    LOG_TOPIC(ERR, Logger::SUPERVISION) << err.str();
     finish("DBServers/" + _server, false, err.str());
     _status = FAILED;
   }
@@ -70,7 +70,7 @@ bool FailedServer::start() {
     reason
       << "Server " << _server
       << " is no longer failed. Not starting FailedServer job";
-    LOG_TOPIC(INFO, Logger::AGENCY) << reason.str();
+    LOG_TOPIC(INFO, Logger::SUPERVISION) << reason.str();
     finish("DBServers/" + _server, false, reason.str());
     return false;
   }
@@ -92,7 +92,7 @@ bool FailedServer::start() {
       try {
         _snapshot(toDoPrefix + _jobId).toBuilder(todo);
       } catch (std::exception const&) {
-        LOG_TOPIC(INFO, Logger::AGENCY)
+        LOG_TOPIC(INFO, Logger::SUPERVISION)
           << "Failed to get key " + toDoPrefix + _jobId + " from agency snapshot";
         return false;
       }
@@ -141,7 +141,7 @@ bool FailedServer::start() {
   write_ret_t res = transact(_agent, pending);
 
   if (res.accepted && res.indices.size() == 1 && res.indices[0]) {
-    LOG_TOPIC(DEBUG, Logger::AGENCY)
+    LOG_TOPIC(DEBUG, Logger::SUPERVISION)
       << "Pending job for failed DB Server " << _server;
 
     auto const& databases = _snapshot("/Plan/Collections").children();
@@ -224,7 +224,7 @@ bool FailedServer::start() {
     return true;
   }
 
-  LOG_TOPIC(INFO, Logger::AGENCY)
+  LOG_TOPIC(INFO, Logger::SUPERVISION)
       << "Precondition failed for starting job " + _jobId;
 
   return false;
@@ -232,7 +232,7 @@ bool FailedServer::start() {
 
 bool FailedServer::create(std::shared_ptr<VPackBuilder> envelope) {
 
-  LOG_TOPIC(DEBUG, Logger::AGENCY)
+  LOG_TOPIC(DEBUG, Logger::SUPERVISION)
     << "Todo: Handle failover for db server " + _server;
 
   using namespace std::chrono;
@@ -280,7 +280,7 @@ bool FailedServer::create(std::shared_ptr<VPackBuilder> envelope) {
   if (selfCreate) {
     write_ret_t res = transact(_agent, *_jb);
     if (!res.accepted || res.indices.size() != 1 || res.indices[0] == 0) {
-      LOG_TOPIC(INFO, Logger::AGENCY) << "Failed to insert job " + _jobId;
+      LOG_TOPIC(INFO, Logger::SUPERVISION) << "Failed to insert job " + _jobId;
       return false;
     }
   }
@@ -334,7 +334,7 @@ JOB_STATUS FailedServer::status() {
   // FIXME: thus the deleteTodos here is unnecessary
 
   if (deleteTodos) {
-    LOG_TOPIC(INFO, Logger::AGENCY)
+    LOG_TOPIC(INFO, Logger::SUPERVISION)
       << "Server " << _server << " is healthy again. Will try to delete"
       "any jobs which have not yet started!";
     deleteTodos->close();
@@ -343,7 +343,7 @@ JOB_STATUS FailedServer::status() {
     write_ret_t res = transact(_agent, *deleteTodos);
 
     if (!res.accepted || res.indices.size() != 1 || !res.indices[0]) {
-      LOG_TOPIC(WARN, Logger::AGENCY)
+      LOG_TOPIC(WARN, Logger::SUPERVISION)
         << "Server was healthy. Tried deleting subjobs but failed :(";
       return _status;
     }

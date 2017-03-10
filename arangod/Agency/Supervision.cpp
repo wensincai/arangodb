@@ -518,7 +518,7 @@ std::string Supervision::serverHealth(std::string const& serverName) {
     auto const status = _snapshot(serverStatus).getString();
     return status;
   } catch (...) {
-    LOG_TOPIC(WARN, Logger::AGENCY)
+    LOG_TOPIC(WARN, Logger::SUPERVISION)
         << "Couldn't read server health status for server " << serverName;
     return "";
   }
@@ -527,7 +527,7 @@ std::string Supervision::serverHealth(std::string const& serverName) {
 // Guarded by caller
 void Supervision::handleShutdown() {
   _selfShutdown = true;
-  LOG_TOPIC(DEBUG, Logger::AGENCY) << "Waiting for clients to shut down";
+  LOG_TOPIC(DEBUG, Logger::SUPERVISION) << "Waiting for clients to shut down";
   auto const& serversRegistered =
       _snapshot(currentServersRegisteredPrefix).children();
   bool serversCleared = true;
@@ -536,11 +536,11 @@ void Supervision::handleShutdown() {
       continue;
     }
 
-    LOG_TOPIC(DEBUG, Logger::AGENCY) << "Waiting for " << server.first
+    LOG_TOPIC(DEBUG, Logger::SUPERVISION) << "Waiting for " << server.first
                                      << " to shutdown";
 
     if (serverHealth(server.first) != HEALTH_STATUS_GOOD) {
-      LOG_TOPIC(WARN, Logger::AGENCY) << "Server " << server.first
+      LOG_TOPIC(WARN, Logger::SUPERVISION) << "Server " << server.first
                                       << " did not shutdown properly it seems!";
       continue;
     }
@@ -620,7 +620,7 @@ void Supervision::enforceReplication() {
       try {
         replicationFactor = col("replicationFactor").slice().getUInt();
       } catch (std::exception const&) {
-        LOG_TOPIC(DEBUG, Logger::AGENCY)
+        LOG_TOPIC(DEBUG, Logger::SUPERVISION)
           << "no replicationFactor entry in " << col.toJson();
         continue;
       }
@@ -670,11 +670,12 @@ void Supervision::enforceReplication() {
               }
             }
 
-            AddFollower(
+            #warning AddFollower commented out for now
+            /*AddFollower(
               _snapshot, _agent, std::to_string(_jobId++), "supervision",
               db_.first, col_.first, shard_.first,
               newFollowers).run();
-
+            */
           }
         }
       }
@@ -700,7 +701,7 @@ void Supervision::shrinkCluster() {
   try {
     targetNumDBServers = _snapshot("/Target/NumberOfDBServers").getUInt();
   } catch (std::exception const& e) {
-    LOG_TOPIC(TRACE, Logger::AGENCY)
+    LOG_TOPIC(TRACE, Logger::SUPERVISION)
         << "Targeted number of DB servers not set yet: " << e.what();
     return;
   }
@@ -709,7 +710,7 @@ void Supervision::shrinkCluster() {
   if (targetNumDBServers < availServers.size()) {
     // Minimum 1 DB server must remain
     if (availServers.size() == 1) {
-      LOG_TOPIC(DEBUG, Logger::AGENCY)
+      LOG_TOPIC(DEBUG, Logger::SUPERVISION)
           << "Only one db server left for operation";
       return;
     }
@@ -748,7 +749,7 @@ void Supervision::shrinkCluster() {
             maxReplFact = replFact;
           }
         } catch (std::exception const& e) {
-          LOG_TOPIC(WARN, Logger::AGENCY)
+          LOG_TOPIC(WARN, Logger::SUPERVISION)
             << "Cannot retrieve replication factor for collection "
             << collptr.first << ": " << e.what();
           return;
@@ -774,11 +775,11 @@ void Supervision::shrinkCluster() {
               }
             }
           } catch (std::exception const& e) {
-            LOG_TOPIC(WARN, Logger::AGENCY)
+            LOG_TOPIC(WARN, Logger::SUPERVISION)
                 << "Cannot retrieve shard information for " << collptr.first
                 << ": " << e.what();
           } catch (...) {
-            LOG_TOPIC(WARN, Logger::AGENCY)
+            LOG_TOPIC(WARN, Logger::SUPERVISION)
                 << "Cannot retrieve shard information for " << collptr.first;
           }
         }

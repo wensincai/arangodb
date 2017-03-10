@@ -70,7 +70,7 @@ AddFollower::AddFollower(Node const& snapshot, AgentInterface* agent,
   } catch (std::exception const& e) {
     std::stringstream err;
     err << "Failed to find job " << _jobId << " in agency: " << e.what();
-    LOG_TOPIC(ERR, Logger::AGENCY) << err.str();
+    LOG_TOPIC(ERR, Logger::SUPERVISION) << err.str();
     finish("Shards/" + _shard, false, err.str());
     _status = FAILED;
   }
@@ -83,7 +83,7 @@ void AddFollower::run() {
 }
 
 bool AddFollower::create(std::shared_ptr<VPackBuilder> b) {
-  LOG_TOPIC(INFO, Logger::AGENCY) << "Todo: AddFollower " << _newFollower
+  LOG_TOPIC(INFO, Logger::SUPERVISION) << "Todo: AddFollower " << _newFollower
                                   << " to shard " + _shard;
 
   std::string path, now(timepointToString(std::chrono::system_clock::now()));
@@ -146,7 +146,7 @@ bool AddFollower::create(std::shared_ptr<VPackBuilder> b) {
     return true;
   }
 
-  LOG_TOPIC(INFO, Logger::AGENCY) << "Failed to insert job " + _jobId;
+  LOG_TOPIC(INFO, Logger::SUPERVISION) << "Failed to insert job " + _jobId;
   return false;
 }
 
@@ -191,7 +191,7 @@ bool AddFollower::start() {
     try {
       _snapshot(toDoPrefix + _jobId).toBuilder(todo);
     } catch (std::exception const&) {
-      LOG_TOPIC(INFO, Logger::AGENCY) << "Failed to get key " + toDoPrefix +
+      LOG_TOPIC(INFO, Logger::SUPERVISION) << "Failed to get key " + toDoPrefix +
                                              _jobId + " from agency snapshot";
       return false;
     }
@@ -272,12 +272,12 @@ bool AddFollower::start() {
   write_ret_t res = transact(_agent, pending);
 
   if (res.accepted && res.indices.size() == 1 && res.indices[0]) {
-    LOG_TOPIC(INFO, Logger::AGENCY)
+    LOG_TOPIC(INFO, Logger::SUPERVISION)
       << "Pending: Addfollower " << _newFollower << " to shard " << _shard;
     return true;
   }
 
-  LOG_TOPIC(INFO, Logger::AGENCY) << "Start precondition failed for " + _jobId;
+  LOG_TOPIC(INFO, Logger::SUPERVISION) << "Start precondition failed for " + _jobId;
   return false;
 }
 
