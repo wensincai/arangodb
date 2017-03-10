@@ -171,28 +171,28 @@ SECTION("creating a job should create a job in todo") {
   When(Method(mockAgent, write)).AlwaysDo([&](query_t const& q) -> write_ret_t {
     INFO(q->slice().toJson());
     auto expectedJobKey = "/arango/Target/ToDo/" + jobId;
-    REQUIRE(q->slice().typeName() == "array" );
+    REQUIRE(std::string(q->slice().typeName()) == "array" );
     REQUIRE(q->slice().length() == 1);
-    REQUIRE(q->slice()[0].typeName() == "array");
+    REQUIRE(std::string(q->slice()[0].typeName()) == "array");
     REQUIRE(q->slice()[0].length() == 1); // we always simply override! no preconditions...
-    REQUIRE(q->slice()[0][0].typeName() == "object");
+    REQUIRE(std::string(q->slice()[0][0].typeName()) == "object");
     REQUIRE(q->slice()[0][0].length() == 1); // should ONLY do an entry in todo
-    REQUIRE(q->slice()[0][0].get(expectedJobKey).typeName() == "object");
+    REQUIRE(std::string(q->slice()[0][0].get(expectedJobKey).typeName()) == "object");
 
     auto job = q->slice()[0][0].get(expectedJobKey);
-    REQUIRE(job.get("creator").typeName() == "string");
-    REQUIRE(job.get("type").typeName() == "string");
+    REQUIRE(std::string(job.get("creator").typeName()) == "string");
+    REQUIRE(std::string(job.get("type").typeName()) == "string");
     CHECK(job.get("type").copyString() == "failedLeader");
-    REQUIRE(job.get("database").typeName() == "string");
+    REQUIRE(std::string(job.get("database").typeName()) == "string");
     CHECK(job.get("database").copyString() == DATABASE);
-    REQUIRE(job.get("collection").typeName() == "string");
+    REQUIRE(std::string(job.get("collection").typeName()) == "string");
     CHECK(job.get("collection").copyString() == COLLECTION);
-    REQUIRE(job.get("shard").typeName() == "string");
+    REQUIRE(std::string(job.get("shard").typeName()) == "string");
     CHECK(job.get("shard").copyString() == SHARD);
-    REQUIRE(job.get("fromServer").typeName() == "string");
+    REQUIRE(std::string(job.get("fromServer").typeName()) == "string");
     CHECK(job.get("fromServer").copyString() == SHARD_LEADER);
-    CHECK(job.get("jobId").typeName() == "string");
-    CHECK(job.get("timeCreated").typeName() == "string");
+    CHECK(std::string(job.get("jobId").typeName()) == "string");
+    CHECK(std::string(job.get("timeCreated").typeName()) == "string");
 
     return fakeWriteResult;
   });
@@ -258,17 +258,17 @@ SECTION("if we want to start and the collection went missing from plan (our trut
   Mock<AgentInterface> mockAgent;
   When(Method(mockAgent, write)).AlwaysDo([&](query_t const& q) -> write_ret_t {
     INFO(q->slice().toJson());
-    REQUIRE(q->slice().typeName() == "array" );
+    REQUIRE(std::string(q->slice().typeName()) == "array" );
     REQUIRE(q->slice().length() == 1);
-    REQUIRE(q->slice()[0].typeName() == "array");
+    REQUIRE(std::string(q->slice()[0].typeName()) == "array");
     REQUIRE(q->slice()[0].length() == 1); // we always simply override! no preconditions...
-    REQUIRE(q->slice()[0][0].typeName() == "object");
+    REQUIRE(std::string(q->slice()[0][0].typeName()) == "object");
 
     auto writes = q->slice()[0][0];
-    REQUIRE(writes.get("/arango/Target/ToDo/1").typeName() == "object");
-    REQUIRE(writes.get("/arango/Target/ToDo/1").get("op").typeName() == "string");
+    REQUIRE(std::string(writes.get("/arango/Target/ToDo/1").typeName()) == "object");
+    REQUIRE(std::string(writes.get("/arango/Target/ToDo/1").get("op").typeName()) == "string");
     CHECK(writes.get("/arango/Target/ToDo/1").get("op").copyString() == "delete");
-    CHECK(writes.get("/arango/Target/Finished/1").typeName() == "object");
+    CHECK(std::string(writes.get("/arango/Target/Finished/1").typeName()) == "object");
     return fakeWriteResult;
   });
   When(Method(mockAgent, waitFor)).AlwaysReturn(AgentInterface::raft_commit_t::OK);
@@ -329,17 +329,17 @@ SECTION("if we are supposed to fail a distributeShardsLike job we immediately fa
   Mock<AgentInterface> mockAgent;
   When(Method(mockAgent, write)).AlwaysDo([&](query_t const& q) -> write_ret_t {
     INFO(q->slice().toJson());
-    REQUIRE(q->slice().typeName() == "array" );
+    REQUIRE(std::string(q->slice().typeName()) == "array" );
     REQUIRE(q->slice().length() == 1);
-    REQUIRE(q->slice()[0].typeName() == "array");
+    REQUIRE(std::string(q->slice()[0].typeName()) == "array");
     REQUIRE(q->slice()[0].length() == 1); // we always simply override! no preconditions...
-    REQUIRE(q->slice()[0][0].typeName() == "object");
+    REQUIRE(std::string(q->slice()[0][0].typeName()) == "object");
 
     auto writes = q->slice()[0][0];
-    REQUIRE(writes.get("/arango/Target/ToDo/1").typeName() == "object");
-    REQUIRE(writes.get("/arango/Target/ToDo/1").get("op").typeName() == "string");
+    REQUIRE(std::string(writes.get("/arango/Target/ToDo/1").typeName()) == "object");
+    REQUIRE(std::string(writes.get("/arango/Target/ToDo/1").get("op").typeName()) == "string");
     CHECK(writes.get("/arango/Target/ToDo/1").get("op").copyString() == "delete");
-    CHECK(writes.get("/arango/Target/Failed/1").typeName() == "object");
+    CHECK(std::string(writes.get("/arango/Target/Failed/1").typeName()) == "object");
     return fakeWriteResult;
   });
   When(Method(mockAgent, waitFor)).AlwaysReturn(AgentInterface::raft_commit_t::OK);
@@ -400,17 +400,17 @@ SECTION("if we are supposed to fail a distributeShardsLike job we immediately fa
   Mock<AgentInterface> mockAgent;
   When(Method(mockAgent, write)).AlwaysDo([&](query_t const& q) -> write_ret_t {
     INFO(q->slice().toJson());
-    REQUIRE(q->slice().typeName() == "array" );
+    REQUIRE(std::string(q->slice().typeName()) == "array" );
     REQUIRE(q->slice().length() == 1);
-    REQUIRE(q->slice()[0].typeName() == "array");
+    REQUIRE(std::string(q->slice()[0].typeName()) == "array");
     REQUIRE(q->slice()[0].length() == 1); // we always simply override! no preconditions...
-    REQUIRE(q->slice()[0][0].typeName() == "object");
+    REQUIRE(std::string(q->slice()[0][0].typeName()) == "object");
 
     auto writes = q->slice()[0][0];
-    REQUIRE(writes.get("/arango/Target/ToDo/1").typeName() == "object");
-    REQUIRE(writes.get("/arango/Target/ToDo/1").get("op").typeName() == "string");
+    REQUIRE(std::string(writes.get("/arango/Target/ToDo/1").typeName()) == "object");
+    REQUIRE(std::string(writes.get("/arango/Target/ToDo/1").get("op").typeName()) == "string");
     CHECK(writes.get("/arango/Target/ToDo/1").get("op").copyString() == "delete");
-    CHECK(writes.get("/arango/Target/Failed/1").typeName() == "object");
+    CHECK(std::string(writes.get("/arango/Target/Failed/1").typeName()) == "object");
     return fakeWriteResult;
   });
   When(Method(mockAgent, waitFor)).AlwaysReturn(AgentInterface::raft_commit_t::OK);
@@ -471,17 +471,17 @@ SECTION("if the leader is healthy again we fail the job") {
   Mock<AgentInterface> mockAgent;
   When(Method(mockAgent, write)).AlwaysDo([&](query_t const& q) -> write_ret_t {
     INFO(q->slice().toJson());
-    REQUIRE(q->slice().typeName() == "array" );
+    REQUIRE(std::string(q->slice().typeName()) == "array" );
     REQUIRE(q->slice().length() == 1);
-    REQUIRE(q->slice()[0].typeName() == "array");
+    REQUIRE(std::string(q->slice()[0].typeName()) == "array");
     REQUIRE(q->slice()[0].length() == 1); // we always simply override! no preconditions...
-    REQUIRE(q->slice()[0][0].typeName() == "object");
+    REQUIRE(std::string(q->slice()[0][0].typeName()) == "object");
 
     auto writes = q->slice()[0][0];
-    REQUIRE(writes.get("/arango/Target/ToDo/1").typeName() == "object");
-    REQUIRE(writes.get("/arango/Target/ToDo/1").get("op").typeName() == "string");
+    REQUIRE(std::string(writes.get("/arango/Target/ToDo/1").typeName()) == "object");
+    REQUIRE(std::string(writes.get("/arango/Target/ToDo/1").get("op").typeName()) == "string");
     CHECK(writes.get("/arango/Target/ToDo/1").get("op").copyString() == "delete");
-    CHECK(writes.get("/arango/Target/Failed/1").typeName() == "object");
+    CHECK(std::string(writes.get("/arango/Target/Failed/1").typeName()) == "object");
     return fakeWriteResult;
   });
   When(Method(mockAgent, waitFor)).AlwaysReturn(AgentInterface::raft_commit_t::OK);
@@ -674,13 +674,13 @@ SECTION("abort any moveShard job blocking the shard and start") {
 
   VPackBuilder moveShardBuilder;
   When(Method(moveShardMockAgent, write)).Do([&](query_t const& q) -> write_ret_t {
-    REQUIRE(q->slice().typeName() == "array" );
+    REQUIRE(std::string(q->slice().typeName()) == "array" );
     REQUIRE(q->slice().length() == 1);
-    REQUIRE(q->slice()[0].typeName() == "array");
+    REQUIRE(std::string(q->slice()[0].typeName()) == "array");
     REQUIRE(q->slice()[0].length() > 0); // preconditions!
-    REQUIRE(q->slice()[0][0].typeName() == "object");
+    REQUIRE(std::string(q->slice()[0][0].typeName()) == "object");
 
-    REQUIRE(q->slice()[0][0].get("/arango/Target/ToDo/2").typeName() == "object");
+    REQUIRE(std::string(q->slice()[0][0].get("/arango/Target/ToDo/2").typeName()) == "object");
     moveShardBuilder.add(q->slice()[0][0].get("/arango/Target/ToDo/2"));
 
     return fakeWriteResult;
@@ -742,11 +742,11 @@ SECTION("abort any moveShard job blocking the shard and start") {
   When(Method(mockAgent, write)).Do([&](query_t const& q) -> write_ret_t {
     // check that moveshard is being moved to failed
     INFO("WriteTransaction: " << q->slice().toJson());
-    REQUIRE(q->slice().typeName() == "array" );
+    REQUIRE(std::string(q->slice().typeName()) == "array" );
     REQUIRE(q->slice().length() == 1);
-    REQUIRE(q->slice()[0].typeName() == "array");
-    REQUIRE(q->slice()[0][0].typeName() == "object");
-    REQUIRE(q->slice()[0][0].get("/arango/Target/Failed/2").typeName() == "object");
+    REQUIRE(std::string(q->slice()[0].typeName()) == "array");
+    REQUIRE(std::string(q->slice()[0][0].typeName()) == "object");
+    REQUIRE(std::string(q->slice()[0][0].get("/arango/Target/Failed/2").typeName()) == "object");
     return fakeWriteResult;
   });
   AgentInterface &agent = mockAgent.get();
@@ -765,13 +765,13 @@ SECTION("abort any addFollower job blocking the shard and start") {
   VPackBuilder addFollowerBuilder;
   When(Method(addFollowerMockAgent, write)).Do([&](query_t const& q) -> write_ret_t {
     INFO("WriteTransaction(create): " << q->slice().toJson());
-    REQUIRE(q->slice().typeName() == "array" );
+    REQUIRE(std::string(q->slice().typeName()) == "array" );
     REQUIRE(q->slice().length() == 1);
-    REQUIRE(q->slice()[0].typeName() == "array");
+    REQUIRE(std::string(q->slice()[0].typeName()) == "array");
     REQUIRE(q->slice()[0].length() > 0); // preconditions!
-    REQUIRE(q->slice()[0][0].typeName() == "object");
+    REQUIRE(std::string(q->slice()[0][0].typeName()) == "object");
 
-    REQUIRE(q->slice()[0][0].get("/arango/Target/ToDo/2").typeName() == "object");
+    REQUIRE(std::string(q->slice()[0][0].get("/arango/Target/ToDo/2").typeName()) == "object");
     addFollowerBuilder.add(q->slice()[0][0].get("/arango/Target/ToDo/2"));
 
     return fakeWriteResult;
@@ -833,11 +833,11 @@ SECTION("abort any addFollower job blocking the shard and start") {
   When(Method(mockAgent, write)).Do([&](query_t const& q) -> write_ret_t {
     // check that moveshard is being moved to failed
     INFO("WriteTransaction: " << q->slice().toJson());
-    REQUIRE(q->slice().typeName() == "array" );
+    REQUIRE(std::string(q->slice().typeName()) == "array" );
     REQUIRE(q->slice().length() == 1);
-    REQUIRE(q->slice()[0].typeName() == "array");
-    REQUIRE(q->slice()[0][0].typeName() == "object");
-    REQUIRE(q->slice()[0][0].get("/arango/Target/Failed/2").typeName() == "object");
+    REQUIRE(std::string(q->slice()[0].typeName()) == "array");
+    REQUIRE(std::string(q->slice()[0][0].typeName()) == "object");
+    REQUIRE(std::string(q->slice()[0][0].get("/arango/Target/Failed/2").typeName()) == "object");
     return fakeWriteResult;
   });
   AgentInterface &agent = mockAgent.get();
@@ -899,45 +899,45 @@ SECTION("if everything is fine than the job should be written to pending, adding
   Mock<AgentInterface> mockAgent;
   When(Method(mockAgent, write)).AlwaysDo([&](query_t const& q) -> write_ret_t {
     INFO("WriteTransaction: " << q->slice().toJson());
-    REQUIRE(q->slice().typeName() == "array" );
+    REQUIRE(std::string(q->slice().typeName()) == "array" );
     REQUIRE(q->slice().length() == 1);
-    REQUIRE(q->slice()[0].typeName() == "array");
+    REQUIRE(std::string(q->slice()[0].typeName()) == "array");
     REQUIRE(q->slice()[0].length() == 2); // preconditions!
-    REQUIRE(q->slice()[0][0].typeName() == "object");
-    REQUIRE(q->slice()[0][1].typeName() == "object");
+    REQUIRE(std::string(q->slice()[0][0].typeName()) == "object");
+    REQUIRE(std::string(q->slice()[0][1].typeName()) == "object");
 
     auto writes = q->slice()[0][0];
-    REQUIRE(writes.get("/arango/Target/ToDo/1").typeName() == "object");
-    REQUIRE(writes.get("/arango/Target/ToDo/1").get("op").typeName() == "string");
+    REQUIRE(std::string(writes.get("/arango/Target/ToDo/1").typeName()) == "object");
+    REQUIRE(std::string(writes.get("/arango/Target/ToDo/1").get("op").typeName()) == "string");
     CHECK(writes.get("/arango/Target/ToDo/1").get("op").copyString() == "delete");
-    CHECK(writes.get("/arango/Target/ToDo/1").typeName() == "object");
-    REQUIRE(writes.get("/arango/Target/Pending/1").typeName() == "object");
+    CHECK(std::string(writes.get("/arango/Target/ToDo/1").typeName()) == "object");
+    REQUIRE(std::string(writes.get("/arango/Target/Pending/1").typeName()) == "object");
 
     auto job = writes.get("/arango/Target/Pending/1");
-    REQUIRE(job.get("toServer").typeName() == "string");
+    REQUIRE(std::string(job.get("toServer").typeName()) == "string");
     CHECK(job.get("toServer").copyString() == SHARD_FOLLOWER2);
-    CHECK(job.get("timeStarted").typeName() == "string");
+    CHECK(std::string(job.get("timeStarted").typeName()) == "string");
 
-    REQUIRE(writes.get("/arango/Plan/Collections/" + DATABASE + "/" + COLLECTION + "/servers").typeName() == "array");
+    REQUIRE(std::string(writes.get("/arango/Plan/Collections/" + DATABASE + "/" + COLLECTION + "/servers").typeName()) == "array");
     REQUIRE(writes.get("/arango/Plan/Collections/" + DATABASE + "/" + COLLECTION + "/servers").length() == 3);
-    REQUIRE(writes.get("/arango/Plan/Collections/" + DATABASE + "/" + COLLECTION + "/servers")[0].typeName() == "string");
-    REQUIRE(writes.get("/arango/Plan/Collections/" + DATABASE + "/" + COLLECTION + "/servers")[1].typeName() == "string");
-    REQUIRE(writes.get("/arango/Plan/Collections/" + DATABASE + "/" + COLLECTION + "/servers")[2].typeName() == "string");
+    REQUIRE(std::string(writes.get("/arango/Plan/Collections/" + DATABASE + "/" + COLLECTION + "/servers")[0].typeName()) == "string");
+    REQUIRE(std::string(writes.get("/arango/Plan/Collections/" + DATABASE + "/" + COLLECTION + "/servers")[1].typeName()) == "string");
+    REQUIRE(std::string(writes.get("/arango/Plan/Collections/" + DATABASE + "/" + COLLECTION + "/servers")[2].typeName()) == "string");
     CHECK(writes.get("/arango/Plan/Collections/" + DATABASE + "/" + COLLECTION + "/servers")[0].copyString() == SHARD_FOLLOWER2);
     CHECK(writes.get("/arango/Plan/Collections/" + DATABASE + "/" + COLLECTION + "/servers")[1].copyString() == SHARD_FOLLOWER1);
     CHECK(writes.get("/arango/Plan/Collections/" + DATABASE + "/" + COLLECTION + "/servers")[2].copyString() == SHARD_LEADER);
 
     auto preconditions = q->slice()[0][1];
-    REQUIRE(preconditions.get("/arango/Supervision/Shards/" + SHARD).typeName() == "object");
-    REQUIRE(preconditions.get("/arango/Supervision/Shards/" + SHARD).get("oldEmpty").typeName() == "bool");
+    REQUIRE(std::string(preconditions.get("/arango/Supervision/Shards/" + SHARD).typeName()) == "object");
+    REQUIRE(std::string(preconditions.get("/arango/Supervision/Shards/" + SHARD).get("oldEmpty").typeName()) == "bool");
     CHECK(preconditions.get("/arango/Supervision/Shards/" + SHARD).get("oldEmpty").getBool() == true);
 
-    REQUIRE(preconditions.get("/arango/Plan/Collections/" + DATABASE + "/" + COLLECTION + "/servers").typeName() == "object");
-    REQUIRE(preconditions.get("/arango/Plan/Collections/" + DATABASE + "/" + COLLECTION + "/servers").get("old").typeName() == "array");
+    REQUIRE(std::string(preconditions.get("/arango/Plan/Collections/" + DATABASE + "/" + COLLECTION + "/servers").typeName()) == "object");
+    REQUIRE(std::string(preconditions.get("/arango/Plan/Collections/" + DATABASE + "/" + COLLECTION + "/servers").get("old").typeName()) == "array");
     REQUIRE(preconditions.get("/arango/Plan/Collections/" + DATABASE + "/" + COLLECTION + "/servers").get("old").length() == 3);
-    REQUIRE(preconditions.get("/arango/Plan/Collections/" + DATABASE + "/" + COLLECTION + "/servers").get("old")[0].typeName() == "string");
-    REQUIRE(preconditions.get("/arango/Plan/Collections/" + DATABASE + "/" + COLLECTION + "/servers").get("old")[1].typeName() == "string");
-    REQUIRE(preconditions.get("/arango/Plan/Collections/" + DATABASE + "/" + COLLECTION + "/servers").get("old")[2].typeName() == "string");
+    REQUIRE(std::string(preconditions.get("/arango/Plan/Collections/" + DATABASE + "/" + COLLECTION + "/servers").get("old")[0].typeName()) == "string");
+    REQUIRE(std::string(preconditions.get("/arango/Plan/Collections/" + DATABASE + "/" + COLLECTION + "/servers").get("old")[1].typeName()) == "string");
+    REQUIRE(std::string(preconditions.get("/arango/Plan/Collections/" + DATABASE + "/" + COLLECTION + "/servers").get("old")[2].typeName()) == "string");
     CHECK(preconditions.get("/arango/Plan/Collections/" + DATABASE + "/" + COLLECTION + "/servers").get("old")[0].copyString() == SHARD_LEADER);
     CHECK(preconditions.get("/arango/Plan/Collections/" + DATABASE + "/" + COLLECTION + "/servers").get("old")[1].copyString() == SHARD_FOLLOWER1);
     CHECK(preconditions.get("/arango/Plan/Collections/" + DATABASE + "/" + COLLECTION + "/servers").get("old")[2].copyString() == SHARD_FOLLOWER2);
