@@ -116,7 +116,7 @@ bool Job::finish(std::string const& server, std::string const& shard,
     addPutJobIntoSomewhere(finished, success ? "Finished" : "Failed",
                            pending.slice()[0], reason);
 
-    addRemoveJobFromSomewhere(finished, "Todo", _jobId);
+    addRemoveJobFromSomewhere(finished, "ToDo", _jobId);
     addRemoveJobFromSomewhere(finished, "Pending", _jobId);
 
     // --- Remove blocks if specified:
