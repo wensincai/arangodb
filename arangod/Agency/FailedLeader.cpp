@@ -61,7 +61,7 @@ FailedLeader::FailedLeader(Node const& snapshot, AgentInterface* agent,
   } catch (std::exception const& e) {
     std::stringstream err;
     err << "Failed to find job " << _jobId << " in agency: " << e.what();
-    LOG_TOPIC(ERR, Logger::AGENCY) << err.str();
+    LOG_TOPIC(ERR, Logger::SUPERVISION) << err.str();
     finish("Shards/" + _shard, false, err.str());
     _status = FAILED;
   }
@@ -76,7 +76,7 @@ void FailedLeader::run() {
 bool FailedLeader::create(std::shared_ptr<VPackBuilder> b) {
 
   using namespace std::chrono;
-  LOG_TOPIC(INFO, Logger::AGENCY)
+  LOG_TOPIC(INFO, Logger::SUPERVISION)
     << "Create failedLeader for " + _shard + " from " + _from;
   
   _jb = std::make_shared<Builder>();
@@ -123,7 +123,7 @@ bool FailedLeader::start() {
     _to = commonInSync;
   }
 
-  LOG_TOPIC(INFO, Logger::AGENCY)
+  LOG_TOPIC(INFO, Logger::SUPERVISION)
     << "Start failedLeader for " + _shard + " from " + _from + " to " + _to;  
   
   using namespace std::chrono;
@@ -143,7 +143,7 @@ bool FailedLeader::start() {
       try {
         _snapshot(toDoPrefix + _jobId).toBuilder(todo);
       } catch (std::exception const&) {
-        LOG_TOPIC(INFO, Logger::AGENCY)
+        LOG_TOPIC(INFO, Logger::SUPERVISION)
           << "Failed to get key " + toDoPrefix + _jobId
           + " from agency snapshot";
         return false;
@@ -314,7 +314,7 @@ JOB_STATUS FailedLeader::status() {
     
     write_ret_t res = transact(_agent, del);
     if (finish("Shards/" + shard)) {
-      LOG_TOPIC(INFO, Logger::AGENCY)
+      LOG_TOPIC(INFO, Logger::SUPERVISION)
         << "Finished failedLeader for " + _shard + " from " + _from + " to " + _to;  
         return FINISHED;
     }

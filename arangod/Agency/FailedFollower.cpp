@@ -59,7 +59,7 @@ FailedFollower::FailedFollower(Node const& snapshot, AgentInterface* agent,
   } catch (std::exception const& e) {
     std::stringstream err;
     err << "Failed to find job " << _jobId << " in agency: " << e.what();
-    LOG_TOPIC(ERR, Logger::AGENCY) << err.str();
+    LOG_TOPIC(ERR, Logger::SUPERVISION) << err.str();
     finish("Shards/" + _shard, false, err.str());
     _status = FAILED;
   }
@@ -75,7 +75,7 @@ bool FailedFollower::create(std::shared_ptr<VPackBuilder> envelope) {
 
   using namespace std::chrono;
   
-  LOG_TOPIC(INFO, Logger::AGENCY) << "Todo: Handle follower failover for shard "
+  LOG_TOPIC(INFO, Logger::SUPERVISION) << "Todo: Handle follower failover for shard "
                                   << _shard << " from " << _from << " to " + _to;
 
   auto const& myClones = clones(_snapshot, _database, _collection, _shard);
@@ -135,7 +135,7 @@ bool FailedFollower::start() {
       try {
         _snapshot(toDoPrefix + _jobId).toBuilder(todo);
       } catch (std::exception const&) {
-        LOG_TOPIC(INFO, Logger::AGENCY)
+        LOG_TOPIC(INFO, Logger::SUPERVISION)
           << "Failed to get key " + toDoPrefix + _jobId + " from agency snapshot";
         return false;
       }
@@ -213,12 +213,12 @@ bool FailedFollower::start() {
   write_ret_t res = transact(_agent, pending);
 
   if (res.accepted && res.indices.size() == 1 && res.indices[0]) {
-    LOG_TOPIC(INFO, Logger::AGENCY)
+    LOG_TOPIC(INFO, Logger::SUPERVISION)
       << "Pending: Change followership " + _shard + " from " + _from + " to " + _to;
     return true;
   }
 
-  LOG_TOPIC(INFO, Logger::AGENCY)
+  LOG_TOPIC(INFO, Logger::SUPERVISION)
       << "Precondition failed for starting job " + _jobId;
   return false;
 }
