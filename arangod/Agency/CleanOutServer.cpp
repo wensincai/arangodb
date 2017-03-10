@@ -327,11 +327,9 @@ bool CleanOutServer::scheduleMoveShards(std::shared_ptr<Builder>& trx) {
       
       auto const& collection = *(collptr.second);
       
-      try { // distributeShardsLike entry means we only follow
-        if (collection("distributeShardsLike").slice().copyString() != "") {
-          continue;
-        }
-      } catch (...) {}
+      if (collection.has("distributeShardsLike")) {
+        continue;
+      }
 
       for (auto const& shard : collection("shards").children()) {
         
@@ -356,7 +354,7 @@ bool CleanOutServer::scheduleMoveShards(std::shared_ptr<Builder>& trx) {
           serversCopy.erase(
             std::remove(serversCopy.begin(), serversCopy.end(),
                         dbserver.copyString()),
-            servers.end());
+            serversCopy.end());
         }
 
         // Among those a random destination:
@@ -368,7 +366,7 @@ bool CleanOutServer::scheduleMoveShards(std::shared_ptr<Builder>& trx) {
         }
 
         toServer = serversCopy.at(arangodb::RandomGenerator::interval(
-            0, servers.size()-1));
+            0, serversCopy.size()-1));
 
         // Schedule move into trx:
         MoveShard(_snapshot, _agent, _jobId + "-" + std::to_string(sub++),
