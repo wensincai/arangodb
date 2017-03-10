@@ -69,7 +69,7 @@ SE_BASE=$(( $PORT_OFFSET + 8729 ))
 shutdown() {
     PORT=$1
     echo -n "$PORT "
-    curl -X DELETE http://localhost:$PORT/_admin/shutdown >/dev/null 2>/dev/null
+    curl -X DELETE http://[::1]:$PORT/_admin/shutdown >/dev/null 2>/dev/null
 }
 
 i=0

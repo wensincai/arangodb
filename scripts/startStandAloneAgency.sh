@@ -179,7 +179,7 @@ COMP=200000
 BASE=5000
 
 if [ "$GOSSIP_MODE" = "0" ]; then
-   GOSSIP_PEERS=" --agency.endpoint $TRANSPORT://localhost:$BASE"
+   GOSSIP_PEERS=" --agency.endpoint $TRANSPORT://[::1]:$BASE"
 fi
 
 rm -rf agency
@@ -198,7 +198,7 @@ for aid in "${aaid[@]}"; do
 
   if [ "$GOSSIP_MODE" = "2" ]; then
     nport=$(( $BASE + $(( $(( $aid + 1 )) % 3 ))))
-    GOSSIP_PEERS=" --agency.endpoint $TRANSPORT://localhost:$nport"
+    GOSSIP_PEERS=" --agency.endpoint $TRANSPORT://[::1]:$nport"
   fi
 
   if [ "$GOSSIP_MODE" = "3" ]; then
@@ -206,7 +206,7 @@ for aid in "${aaid[@]}"; do
     for id in "${aaid[@]}"; do
       if [ ! "$id" = "$aid" ]; then
         nport=$(( $BASE + $(( $id )) ))
-        GOSSIP_PEERS+=" --agency.endpoint $TRANSPORT://localhost:$nport"
+        GOSSIP_PEERS+=" --agency.endpoint $TRANSPORT://[::1]:$nport"
       fi
     done
   fi
@@ -216,7 +216,7 @@ for aid in "${aaid[@]}"; do
     -c none \
     --agency.activate true \
     $GOSSIP_PEERS \
-    --agency.my-address $TRANSPORT://localhost:$port \
+    --agency.my-address $TRANSPORT://[::1]:$port \
     --agency.compaction-step-size $COMP \
     --agency.pool-size $POOLSZ \
     --agency.size $NRAGENTS \
@@ -232,14 +232,14 @@ for aid in "${aaid[@]}"; do
     $LOG_LEVEL \
     --log.use-microtime $USE_MICROTIME \
     --server.authentication false \
-    --server.endpoint $TRANSPORT://0.0.0.0:$port \
+    --server.endpoint $TRANSPORT://[::]:$port \
     --server.statistics false \
     $SSLKEYFILE \
     | tee cluster/$PORT.stdout 2>&1 &
   PIDS+=$!
   PIDS+=" "
   if [ "$GOSSIP_MODE" == "1" ]; then
-    GOSSIP_PEERS+=" --agency.endpoint $TRANSPORT://localhost:$port"
+    GOSSIP_PEERS+=" --agency.endpoint $TRANSPORT://[::1]:$port"
   fi
   if [ $count -lt $POOLSZ ]; then
     if isuint $START_DELAYS; then
@@ -258,6 +258,6 @@ done
 
 echo "  done. Your agents are ready at port $BASE onward."
 #echo "Process ids: $PIDS"
-echo "Try ${CURL}localhost:5000/_api/agency/config."
+echo "Try ${CURL}[::1]:5000/_api/agency/config."
 
 
