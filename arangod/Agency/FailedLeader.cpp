@@ -35,14 +35,12 @@ FailedLeader::FailedLeader(Node const& snapshot, AgentInterface* agent,
                            std::string const& jobId, std::string const& creator,
                            std::string const& database,
                            std::string const& collection,
-                           std::string const& shard, std::string const& from,
-                           std::string const& to)
+                           std::string const& shard, std::string const& from)
     : Job(NOTFOUND, snapshot, agent, jobId, creator),
       _database(database),
       _collection(collection),
       _shard(shard),
-      _from(from),
-      _to(to) {}
+      _from(from) {}
 
 FailedLeader::FailedLeader(Node const& snapshot, AgentInterface* agent,
                            JOB_STATUS status, std::string const& jobId)
@@ -79,7 +77,7 @@ bool FailedLeader::create(std::shared_ptr<VPackBuilder> b) {
 
   using namespace std::chrono;
   LOG_TOPIC(INFO, Logger::AGENCY)
-    << "Handle failed Leader for " + _shard + " from " + _from + " to " + _to;
+    << "Create failedLeader for " + _shard + " from " + _from;
   
   _jb = std::make_shared<Builder>();
   { VPackArrayBuilder transaction(_jb.get());
@@ -106,7 +104,6 @@ bool FailedLeader::create(std::shared_ptr<VPackBuilder> b) {
 
 bool FailedLeader::start() {
 
-  
   std::vector<std::string> existing =
     _snapshot.exists(planColPrefix + _database + "/" + _collection + "/" +
                      "distributeShardsLike");
@@ -126,6 +123,9 @@ bool FailedLeader::start() {
     _to = commonInSync;
   }
 
+  LOG_TOPIC(INFO, Logger::AGENCY)
+    << "Start failedLeader for " + _shard + " from " + _from + " to " + _to;  
+  
   using namespace std::chrono;
   
   auto const& current =
@@ -274,7 +274,6 @@ bool FailedLeader::start() {
       << e.what() << __FILE__ << __LINE__; 
   }
   
-  
   return (res.accepted && res.result->slice()[2].getUInt());
   
 }
@@ -315,7 +314,9 @@ JOB_STATUS FailedLeader::status() {
     
     write_ret_t res = transact(_agent, del);
     if (finish("Shards/" + shard)) {
-      return FINISHED;
+      LOG_TOPIC(INFO, Logger::AGENCY)
+        << "Finished failedLeader for " + _shard + " from " + _from + " to " + _to;  
+        return FINISHED;
     }
   }
   

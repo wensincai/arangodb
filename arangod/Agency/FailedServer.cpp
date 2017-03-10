@@ -191,8 +191,7 @@ bool FailedServer::start() {
                     FailedLeader(
                       _snapshot, _agent, _jobId + "-" + std::to_string(sub++),
                       _jobId, database.first, collptr.first,
-                      shard.first, _server,
-                      shard.second->slice()[1].copyString()).run();
+                      shard.first, _server).run();
                     continue;
                   } else {
                     found = true;
