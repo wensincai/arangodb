@@ -49,7 +49,7 @@ struct CleanOutServer : public Job {
 
   // Check if all shards' replication factors can be satisfied after clean out.
   bool checkFeasibility();
-  bool scheduleMoveShards();
+  bool scheduleMoveShards(std::shared_ptr<Builder>& trx);
 
   std::string _server;
 };

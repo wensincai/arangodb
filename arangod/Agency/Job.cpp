@@ -182,13 +182,12 @@ std::vector<std::string> Job::availableServers(Node const& snapshot) {
     }
   } catch (...) {}
 
-  
   // Remove failed servers from list
   try {
     for (auto const& srv :
-           VPackArrayIterator(snapshot(failedServersPrefix).slice())) {
+           VPackObjectIterator(snapshot(failedServersPrefix).slice())) {
       ret.erase(
-        std::remove(ret.begin(), ret.end(), srv.copyString()),
+        std::remove(ret.begin(), ret.end(), srv.key.copyString()),
         ret.end());
     }
   } catch (...) {}

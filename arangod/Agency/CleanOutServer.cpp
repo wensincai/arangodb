@@ -26,6 +26,7 @@
 #include "Agency/AgentInterface.h"
 #include "Agency/Job.h"
 #include "Agency/MoveShard.h"
+#include "Random/RandomGenerator.h"
 
 using namespace arangodb::consensus;
 
@@ -238,7 +239,8 @@ bool CleanOutServer::start() {
   }
 
   // Copy todo to pending
-  Builder todo, pending;
+  auto pending = std::make_shared<Builder>();
+  Builder todo;
 
   // Get todo entry
   { VPackArrayBuilder guard(&todo);
@@ -269,17 +271,17 @@ bool CleanOutServer::start() {
   }
 
   // Enter pending, remove todo, block toserver
-  { VPackArrayBuilder listOfTransactions(&pending);
+  { VPackArrayBuilder listOfTransactions(pending.get());
 
-    { VPackObjectBuilder objectForMutation(&pending);
+    { VPackObjectBuilder objectForMutation(pending.get());
 
-      addPutJobIntoSomewhere(pending, "Pending", todo.slice()[0]);
-      addRemoveJobFromSomewhere(pending, "ToDo", _jobId);
+      addPutJobIntoSomewhere(*pending, "Pending", todo.slice()[0]);
+      addRemoveJobFromSomewhere(*pending, "ToDo", _jobId);
 
-      addBlockServer(pending, _server, _jobId);
+      addBlockServer(*pending, _server, _jobId);
 
       // Schedule shard relocations
-      if (!scheduleMoveShards()) {
+      if (!scheduleMoveShards(pending)) {
         finish("", false, "Could not schedule MoveShard.");
         return false;
       }
@@ -287,16 +289,16 @@ bool CleanOutServer::start() {
     }  // mutation part of transaction done
 
     // Preconditions
-    { VPackObjectBuilder objectForPrecondition(&pending);
-      addPreconditionServerNotBlocked(pending, _server);
-      addPreconditionServerGood(pending, _server);
-      addPreconditionUnchanged(pending, failedServersPrefix, failedServers);
-      addPreconditionUnchanged(pending, cleanedPrefix, cleanedServers);
+    { VPackObjectBuilder objectForPrecondition(pending.get());
+      addPreconditionServerNotBlocked(*pending, _server);
+      addPreconditionServerGood(*pending, _server);
+      addPreconditionUnchanged(*pending, failedServersPrefix, failedServers);
+      addPreconditionUnchanged(*pending, cleanedPrefix, cleanedServers);
     }
   }  // array for transaction done
 
   // Transact to agency
-  write_ret_t res = transact(_agent, pending);
+  write_ret_t res = transact(_agent, *pending);
 
   if (res.accepted && res.indices.size() == 1 && res.indices[0]) {
     LOG_TOPIC(DEBUG, Logger::SUPERVISION) << "Pending: Clean out server "
@@ -311,18 +313,9 @@ bool CleanOutServer::start() {
   return false;
 }
 
-bool CleanOutServer::scheduleMoveShards() {
+bool CleanOutServer::scheduleMoveShards(std::shared_ptr<Builder>& trx) {
 
-  // Use create with builder to schedule jobs in same transaction
- 
   std::vector<std::string> servers = availableServers(_snapshot);
-
-  // Minimum 1 DB server must remain
-  if (servers.size() == 1) {
-    LOG_TOPIC(ERR, Logger::SUPERVISION) << "DB server " << _server
-                                   << " is the last standing db server.";
-    return false;
-  }
 
   Node::Children const& databases = _snapshot("/Plan/Collections").children();
   size_t sub = 0;
@@ -342,12 +335,10 @@ bool CleanOutServer::scheduleMoveShards() {
 
       for (auto const& shard : collection("shards").children()) {
         
-        int found = -1;
-        VPackArrayIterator dbsit(shard.second->slice());
-
         // Only shards, which are affected
+        int found = -1;
         int count = 0;
-        for (auto const& dbserver : dbsit) {
+        for (auto const& dbserver : VPackArrayIterator(shard.second->slice())) {
           if (dbserver.copyString() == _server) {
             found = count;
             break;
@@ -358,43 +349,32 @@ bool CleanOutServer::scheduleMoveShards() {
           continue;
         }
 
+        decltype(servers) serversCopy(servers);  // a copy
+
         // Only destinations, which are not already holding this shard
-        for (auto const& dbserver : dbsit) {
-          servers.erase(
-            std::remove(servers.begin(), servers.end(), dbserver.copyString()),
+        for (auto const& dbserver : VPackArrayIterator(shard.second->slice())) {
+          serversCopy.erase(
+            std::remove(serversCopy.begin(), serversCopy.end(),
+                        dbserver.copyString()),
             servers.end());
         }
 
-        // Among those a random destination
+        // Among those a random destination:
         std::string toServer;
-        if (servers.empty()) {
+        if (serversCopy.empty()) {
           LOG_TOPIC(DEBUG, Logger::SUPERVISION)
             << "No servers remain as target for MoveShard";
           return false;
         }
 
-        // FIXME: use RandomGenerator here
-        try {
-          toServer = servers.at(rand() % servers.size());
-        } catch (...) {
-          LOG_TOPIC(ERR, Logger::SUPERVISION)
-            << "Range error picking destination for shard " + shard.first;
-        }
+        toServer = serversCopy.at(arangodb::RandomGenerator::interval(
+            0, servers.size()-1));
 
-        // FIXME: check conditions: server healthy, not cleaned, not failed,
-        // FIXME: is this doen in checkFeasibility?
-        // FIXME: check shards being locked
-        // FIXME: check servers being locked
-        // FIXME: is it necessary to create all MoveShard jobs in one 
-        // FIXME: transaction? Do we need to check the precondition that
-        // FIXME: the server is not blocked?
-        // FIXME: What if some MoveShard job does not work?
-
-        // Schedule move
+        // Schedule move into trx:
         MoveShard(_snapshot, _agent, _jobId + "-" + std::to_string(sub++),
                   _jobId, database.first, collptr.first,
-                  shard.first, _server, toServer, found == 0).run();
-        
+                  shard.first, _server, toServer, found == 0)
+          .create(trx);
       }
     }
   }
@@ -403,38 +383,19 @@ bool CleanOutServer::scheduleMoveShards() {
 }
 
 bool CleanOutServer::checkFeasibility() {
-  // TODO: Describe the following checks in design doc:
- 
-  std::vector<std::string> availServers;
+  std::vector<std::string> availServers = availableServers(_snapshot);
 
-  // Get servers from plan
-  Node::Children const& dbservers = _snapshot("/Plan/DBServers").children();
-  for (auto const& srv : dbservers) {
-    availServers.push_back(srv.first);
-  }
-
-  // Remove cleaned from ist
-  if (_snapshot.has("/Target/CleanedServers")) {
-    for (auto const& srv :
-           VPackArrayIterator(_snapshot("/Target/CleanedServers").slice())) {
-      availServers.erase(
-        std::remove(
-          availServers.begin(), availServers.end(), srv.copyString()),
-        availServers.end());
-    }
-  }
-
-  // Minimum 1 DB server must remain
+  // Minimum 1 DB server must remain:
   if (availServers.size() == 1) {
     LOG_TOPIC(ERR, Logger::SUPERVISION)
       << "DB server " << _server << " is the last standing db server.";
     return false;
   }
 
-  // Remaning after clean out
+  // Remaining after clean out:
   uint64_t numRemaining = availServers.size() - 1;
 
-  // Find conflictings collections
+  // Find conflicting collections:
   uint64_t maxReplFact = 1;
   std::vector<std::string> tooLargeCollections;
   std::vector<uint64_t> tooLargeFactors;
