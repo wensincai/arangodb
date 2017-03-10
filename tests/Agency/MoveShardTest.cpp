@@ -540,6 +540,49 @@ SECTION("the job should fail if the target server was cleaned out") {
   moveShard.start();
 }
 
+SECTION("the job should fail if the shard distributes its shards like some other") {
+  std::function<std::unique_ptr<VPackBuilder>(VPackSlice const&, std::string const&)> createTestStructure = [&](VPackSlice const& s, std::string const& path) {
+    std::unique_ptr<VPackBuilder> builder;
+    builder.reset(new VPackBuilder());
+    if (s.isObject()) {
+      builder->add(VPackValue(VPackValueType::Object));
+      for (auto const& it: VPackObjectIterator(s)) {
+        auto childBuilder = createTestStructure(it.value, path + "/" + it.key.copyString());
+        if (childBuilder) {
+          builder->add(it.key.copyString(), childBuilder->slice());
+        }
+      }
+
+      if (path == "/arango/Target/ToDo") {
+        builder->add(jobId, createJob(SHARD, SHARD_LEADER, FREE_SERVER).slice());
+      } else if (path == "/arango/Plan/Collections/" + DATABASE + "/" + COLLECTION) {
+        builder->add("distributeShardsLike", VPackValue("PENG"));
+      }
+      builder->close();
+    } else {
+      builder->add(s);
+    }
+    return builder;
+  };
+
+  Mock<AgentInterface> mockAgent;
+  When(Method(mockAgent, write)).AlwaysDo([&](query_t const& q) -> write_ret_t {
+    INFO("WriteTransaction: " << q->slice().toJson());
+    CHECK_FAILURE("ToDo", q);
+    return fakeWriteResult;
+  });
+  When(Method(mockAgent, waitFor)).AlwaysReturn();
+  AgentInterface& agent = mockAgent.get();
+
+  auto builder = createTestStructure(baseStructure.toBuilder().slice(), "");
+  REQUIRE(builder);
+  Node agency = createAgencyFromBuilder(*builder);
+
+  INFO("Agency: " << agency);
+  auto moveShard = MoveShard(agency, &agent, TODO, jobId);
+  moveShard.start();
+}
+
 SECTION("the job should fail if the target server was cleaned out") {
   std::function<std::unique_ptr<VPackBuilder>(VPackSlice const&, std::string const&)> createTestStructure = [&](VPackSlice const& s, std::string const& path) {
     std::unique_ptr<VPackBuilder> builder;
@@ -626,11 +669,11 @@ SECTION("the job should be moved to pending when everything is ok") {
     REQUIRE(std::string(writes.get(sourceKey).typeName()) == "object");
     REQUIRE(std::string(writes.get(sourceKey).get("op").typeName()) == "string");
     CHECK(writes.get(sourceKey).get("op").copyString() == "delete");
-    CHECK(std::string(writes.get("/arango/Target/Pending/1").typeName()) == "object");
-    CHECK(std::string(writes.get("/arango/Target/Pending/1/timeStarted").typeName()) == "object");
     CHECK(writes.get("/arango/Supervision/Shards/" + SHARD).copyString() == "1");
     CHECK(writes.get("/arango/Supervision/DBServer/" + FREE_SERVER).copyString() == "1");
     CHECK(writes.get("/arango/Plan/Version").get("op").copyString() == "increment");
+    CHECK(std::string(writes.get("/arango/Target/Pending/1").typeName()) == "object");
+    CHECK(std::string(writes.get("/arango/Target/Pending/1").get("timeStarted").typeName()) == "string");
 
     auto preconditions = q->slice()[0][1];
     CHECK(preconditions.get("/arango/Target/CleanedServers").get("old").toJson() == "[]");
