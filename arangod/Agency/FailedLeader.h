@@ -36,8 +36,7 @@ struct FailedLeader : public Job {
                std::string const& database = std::string(),
                std::string const& collection = std::string(),
                std::string const& shard = std::string(),
-               std::string const& from = std::string(),
-               std::string const& to = std::string());
+               std::string const& from = std::string());
 
   FailedLeader(Node const& snapshot, AgentInterface* agent,
                JOB_STATUS status, std::string const& jobId);
@@ -55,6 +54,7 @@ struct FailedLeader : public Job {
   std::string _shard;
   std::string _from;
   std::string _to;
+  
 };
 }
 }  // namespaces

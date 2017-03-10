@@ -35,14 +35,12 @@ FailedLeader::FailedLeader(Node const& snapshot, AgentInterface* agent,
                            std::string const& jobId, std::string const& creator,
                            std::string const& database,
                            std::string const& collection,
-                           std::string const& shard, std::string const& from,
-                           std::string const& to)
+                           std::string const& shard, std::string const& from)
     : Job(NOTFOUND, snapshot, agent, jobId, creator),
       _database(database),
       _collection(collection),
       _shard(shard),
-      _from(from),
-      _to(to) {}
+      _from(from) {}
 
 FailedLeader::FailedLeader(Node const& snapshot, AgentInterface* agent,
                            JOB_STATUS status, std::string const& jobId)
@@ -79,7 +77,7 @@ bool FailedLeader::create(std::shared_ptr<VPackBuilder> b) {
 
   using namespace std::chrono;
   LOG_TOPIC(INFO, Logger::AGENCY)
-    << "Handle failed Leader for " + _shard + " from " + _from + " to " + _to;
+    << "Create failedLeader for " + _shard + " from " + _from;
   
   _jb = std::make_shared<Builder>();
   { VPackArrayBuilder transaction(_jb.get());
@@ -98,7 +96,6 @@ bool FailedLeader::create(std::shared_ptr<VPackBuilder> b) {
           "timeCreated", VPackValue(timepointToString(system_clock::now())));
       }}}
   
-
   write_ret_t res = transact(_agent, *_jb);
   
   return (res.accepted && res.indices.size() == 1 && res.indices[0]);
@@ -107,7 +104,6 @@ bool FailedLeader::create(std::shared_ptr<VPackBuilder> b) {
 
 bool FailedLeader::start() {
 
-  
   std::vector<std::string> existing =
     _snapshot.exists(planColPrefix + _database + "/" + _collection + "/" +
                      "distributeShardsLike");
@@ -116,7 +112,7 @@ bool FailedLeader::start() {
   if (existing.size() == 5) {
     finish("Shards/" + _shard, false, "Collection has distributeShardsLike");
   } else if (existing.size() < 4) {
-    finish("Shards/" + _shard, true, "Collection no longer there");
+    finish("Shards/" + _shard, true, "Collection " + _collection + " gone");
   }
 
   std::string commonInSync =
@@ -127,6 +123,9 @@ bool FailedLeader::start() {
     _to = commonInSync;
   }
 
+  LOG_TOPIC(INFO, Logger::AGENCY)
+    << "Start failedLeader for " + _shard + " from " + _from + " to " + _to;  
+  
   using namespace std::chrono;
   
   auto const& current =
@@ -150,7 +149,7 @@ bool FailedLeader::start() {
         return false;
       }
     } else {
-      todo.add(_jb->slice().get(toDoPrefix + _jobId).valueAt(0));
+      todo.add(_jb->slice()[0].get(toDoPrefix + _jobId));
     }}
   
   std::vector<std::string> planv;
@@ -275,7 +274,6 @@ bool FailedLeader::start() {
       << e.what() << __FILE__ << __LINE__; 
   }
   
-  
   return (res.accepted && res.result->slice()[2].getUInt());
   
 }
@@ -295,7 +293,7 @@ JOB_STATUS FailedLeader::status() {
   for (auto const& clone : clones(_snapshot, _database, _collection, _shard)) {
     auto sub = database + "/" + clone.collection;
     if(_snapshot(planColPrefix + sub + "/shards/" + clone.shard).slice()[0] !=
-       _snapshot(curColPrefix + "/" + clone.shard + "/servers").slice()[0]) {
+       _snapshot(curColPrefix + sub + "/" + clone.shard + "/servers").slice()[0]) {
       LOG_TOPIC(DEBUG, Logger::SUPERVISION)
         << "FailedLeader waiting for " << sub + "/" + shard;
       break;
@@ -316,7 +314,9 @@ JOB_STATUS FailedLeader::status() {
     
     write_ret_t res = transact(_agent, del);
     if (finish("Shards/" + shard)) {
-      return FINISHED;
+      LOG_TOPIC(INFO, Logger::AGENCY)
+        << "Finished failedLeader for " + _shard + " from " + _from + " to " + _to;  
+        return FINISHED;
     }
   }
   

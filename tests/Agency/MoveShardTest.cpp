@@ -670,7 +670,7 @@ SECTION("the job should be moved to pending when everything is ok") {
     REQUIRE(std::string(writes.get(sourceKey).get("op").typeName()) == "string");
     CHECK(writes.get(sourceKey).get("op").copyString() == "delete");
     CHECK(writes.get("/arango/Supervision/Shards/" + SHARD).copyString() == "1");
-    CHECK(writes.get("/arango/Supervision/DBServer/" + FREE_SERVER).copyString() == "1");
+    CHECK(writes.get("/arango/Supervision/DBServers/" + FREE_SERVER).copyString() == "1");
     CHECK(writes.get("/arango/Plan/Version").get("op").copyString() == "increment");
     CHECK(std::string(writes.get("/arango/Target/Pending/1").typeName()) == "object");
     CHECK(std::string(writes.get("/arango/Target/Pending/1").get("timeStarted").typeName()) == "string");
