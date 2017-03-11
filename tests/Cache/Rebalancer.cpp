@@ -48,18 +48,16 @@ using namespace arangodb::cache;
 
 TEST_CASE("cache::Rebalancer", "[cache][!hide][longRunning]") {
   SECTION("test rebalancing with PlainCache") {
-    uint64_t initialSize = 16ULL * 1024ULL;
     RandomGenerator::initialize(RandomGenerator::RandomType::MERSENNE);
     MockScheduler scheduler(4);
-    Manager manager(scheduler.ioService(), 128ULL * 1024ULL * 1024ULL);
+    Manager manager(scheduler.ioService(), 128 * 1024 * 1024);
     Rebalancer rebalancer(&manager);
 
     size_t cacheCount = 4;
     size_t threadCount = 4;
     std::vector<std::shared_ptr<Cache>> caches;
     for (size_t i = 0; i < cacheCount; i++) {
-      caches.emplace_back(
-          manager.createCache(CacheType::Plain, initialSize, true));
+      caches.emplace_back(manager.createCache(CacheType::Plain));
     }
 
     bool doneRebalancing = false;
@@ -170,18 +168,16 @@ TEST_CASE("cache::Rebalancer", "[cache][!hide][longRunning]") {
   }
 
   SECTION("test rebalancing with TransactionalCache") {
-    uint64_t initialSize = 16ULL * 1024ULL;
     RandomGenerator::initialize(RandomGenerator::RandomType::MERSENNE);
     MockScheduler scheduler(4);
-    Manager manager(scheduler.ioService(), 128ULL * 1024ULL * 1024ULL);
+    Manager manager(scheduler.ioService(), 128 * 1024 * 1024);
     Rebalancer rebalancer(&manager);
 
     size_t cacheCount = 4;
     size_t threadCount = 4;
     std::vector<std::shared_ptr<Cache>> caches;
     for (size_t i = 0; i < cacheCount; i++) {
-      caches.emplace_back(
-          manager.createCache(CacheType::Transactional, initialSize, true));
+      caches.emplace_back(manager.createCache(CacheType::Transactional));
     }
 
     bool doneRebalancing = false;

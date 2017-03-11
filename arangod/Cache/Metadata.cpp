@@ -22,38 +22,66 @@
 ////////////////////////////////////////////////////////////////////////////////
 
 #include "Cache/Metadata.h"
+#include "Basics/Common.h"
 #include "Cache/Cache.h"
+#include "Cache/Manager.h"
 #include "Cache/State.h"
 
+#include <stdint.h>
+#include <algorithm>
 #include <atomic>
-#include <cstdint>
+
+#include <iostream>  // TODO
 
 using namespace arangodb::cache;
 
 Metadata::Metadata()
-    : _state(), _usage(0), _softLimit(0), _hardLimit(0), _allowGrowth(false) {}
+    : fixedSize(0),
+      tableSize(0),
+      maxSize(0),
+      allocatedSize(0),
+      deservedSize(0),
+      usage(0),
+      softUsageLimit(0),
+      hardUsageLimit(0),
+      _state() {}
 
-Metadata::Metadata(uint64_t limit, bool allowGrowth)
-    : _state(),
-      _usage(0),
-      _softLimit(limit),
-      _hardLimit(limit),
-      _allowGrowth(allowGrowth) {}
+Metadata::Metadata(uint64_t usageLimit, uint64_t fixed, uint64_t table,
+                   uint64_t max)
+    : fixedSize(fixed),
+      tableSize(table),
+      maxSize(max),
+      allocatedSize(usageLimit + fixed + table + Manager::cacheRecordOverhead),
+      deservedSize(allocatedSize),
+      usage(0),
+      softUsageLimit(usageLimit),
+      hardUsageLimit(usageLimit),
+      _state() {
+  TRI_ASSERT(allocatedSize <= maxSize);
+}
 
 Metadata::Metadata(Metadata const& other)
-    : _state(other._state),
-      _usage(other._usage),
-      _softLimit(other._softLimit),
-      _hardLimit(other._hardLimit),
-      _allowGrowth(other._allowGrowth) {}
+    : fixedSize(other.fixedSize),
+      tableSize(other.tableSize),
+      maxSize(other.maxSize),
+      allocatedSize(other.allocatedSize),
+      deservedSize(other.deservedSize),
+      usage(other.usage),
+      softUsageLimit(other.softUsageLimit),
+      hardUsageLimit(other.hardUsageLimit),
+      _state(other._state) {}
 
 Metadata& Metadata::operator=(Metadata const& other) {
   if (this != &other) {
     _state = other._state;
-    _usage = other._usage;
-    _softLimit = other._softLimit;
-    _hardLimit = other._hardLimit;
-    _allowGrowth = other._allowGrowth;
+    fixedSize = other.fixedSize;
+    tableSize = other.tableSize;
+    maxSize = other.maxSize;
+    allocatedSize = other.allocatedSize;
+    deservedSize = other.deservedSize;
+    usage = other.usage;
+    softUsageLimit = other.softUsageLimit;
+    hardUsageLimit = other.hardUsageLimit;
   }
 
   return *this;
@@ -68,33 +96,18 @@ void Metadata::unlock() {
 
 bool Metadata::isLocked() const { return _state.isLocked(); }
 
-uint64_t Metadata::usage() const {
-  TRI_ASSERT(isLocked());
-  return _usage;
-}
-
-uint64_t Metadata::softLimit() const {
-  TRI_ASSERT(isLocked());
-  return _softLimit;
-}
-
-uint64_t Metadata::hardLimit() const {
-  TRI_ASSERT(isLocked());
-  return _hardLimit;
-}
-
 bool Metadata::adjustUsageIfAllowed(int64_t usageChange) {
   TRI_ASSERT(isLocked());
 
   if (usageChange < 0) {
-    _usage -= static_cast<uint64_t>(-usageChange);
+    usage -= static_cast<uint64_t>(-usageChange);
     return true;
   }
 
-  if ((static_cast<uint64_t>(usageChange) + _usage <= _softLimit) ||
-      ((_usage > _softLimit) &&
-       (static_cast<uint64_t>(usageChange) + _usage <= _hardLimit))) {
-    _usage += static_cast<uint64_t>(usageChange);
+  if ((static_cast<uint64_t>(usageChange) + usage <= softUsageLimit) ||
+      ((usage > softUsageLimit) &&
+       (static_cast<uint64_t>(usageChange) + usage <= hardUsageLimit))) {
+    usage += static_cast<uint64_t>(usageChange);
     return true;
   }
 
@@ -103,36 +116,73 @@ bool Metadata::adjustUsageIfAllowed(int64_t usageChange) {
 
 bool Metadata::adjustLimits(uint64_t softLimit, uint64_t hardLimit) {
   TRI_ASSERT(isLocked());
+  uint64_t fixed = tableSize + fixedSize + Manager::cacheRecordOverhead;
+  auto approve = [&]() -> bool {
+    softUsageLimit = softLimit;
+    hardUsageLimit = hardLimit;
+    allocatedSize = hardUsageLimit + fixed;
 
-  if (!_allowGrowth && (hardLimit > _hardLimit)) {
-    return false;
+    return true;
+  };
+
+  // special case: start shrink to minimum, ignore deserved/max (table may be
+  // too big, should shrink during process)
+  if ((softLimit == Cache::minSize) && hardLimit == hardUsageLimit) {
+    return approve();
   }
 
-  if (hardLimit < _usage) {
-    return false;
+  // special case: finalize shrinking case above
+  if ((softLimit == Cache::minSize) && (hardLimit == Cache::minSize) &&
+      (usage < hardLimit)) {
+    return approve();
   }
 
-  _softLimit = softLimit;
-  _hardLimit = hardLimit;
+  // general case: start shrinking
+  if ((hardLimit == hardUsageLimit) && (softLimit < hardLimit) &&
+      (softLimit + fixed <= std::min(deservedSize, maxSize))) {
+    return approve();
+  }
 
-  return true;
+  // general case: finish shrinking
+  if ((softLimit == softUsageLimit) && (softLimit == hardLimit) &&
+      (usage <= hardLimit)) {
+    return approve();
+  }
+
+  // general case: adjust both above usage but below deserved/maxSize
+  if ((softLimit == hardLimit) && (usage <= hardLimit) &&
+      ((hardLimit + fixed) <= std::min(deservedSize, maxSize))) {
+    return approve();
+  }
+
+  return false;
 }
 
-void Metadata::enableGrowth() {
-  TRI_ASSERT(_state.isLocked());
-  _allowGrowth = true;
+uint64_t Metadata::adjustDeserved(uint64_t deserved) {
+  TRI_ASSERT(isLocked());
+  deservedSize = std::min(deserved, maxSize);
+  return deservedSize;
 }
 
-void Metadata::disableGrowth() {
-  TRI_ASSERT(_state.isLocked());
-  _allowGrowth = false;
+uint64_t Metadata::newLimit() {
+  TRI_ASSERT(isLocked());
+  uint64_t fixed = fixedSize + tableSize + Manager::cacheRecordOverhead;
+  return ((Cache::minSize + fixed) >= deservedSize)
+             ? Cache::minSize
+             : std::min((deservedSize - fixed), 4 * hardUsageLimit);
 }
 
-bool Metadata::canGrow() {
-  _state.lock();
-  bool allowed = _allowGrowth;
-  _state.unlock();
-  return allowed;
+bool Metadata::migrationAllowed(uint64_t newTableSize) {
+  TRI_ASSERT(isLocked());
+  return (hardUsageLimit + fixedSize + newTableSize +
+              Manager::cacheRecordOverhead <=
+          std::min(deservedSize, maxSize));
+}
+
+void Metadata::changeTable(uint64_t newTableSize) {
+  tableSize = newTableSize;
+  allocatedSize =
+      hardUsageLimit + fixedSize + tableSize + Manager::cacheRecordOverhead;
 }
 
 bool Metadata::isSet(State::Flag flag) const {

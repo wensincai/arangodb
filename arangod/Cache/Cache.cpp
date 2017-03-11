@@ -39,12 +39,13 @@
 #include <list>
 #include <thread>
 
+#include <iostream>  // TODO
+
 using namespace arangodb::cache;
 
-const uint64_t Cache::minSize = 1024;
-const uint64_t Cache::minLogSize = 10;
+const uint64_t Cache::minSize = 16384;
+const uint64_t Cache::minLogSize = 14;
 
-uint64_t Cache::_evictionStatsCapacity = 1024;
 uint64_t Cache::_findStatsCapacity = 16384;
 
 Cache::ConstructionGuard::ConstructionGuard() {}
@@ -124,10 +125,9 @@ CachedValue* Cache::Finding::copy() const {
 
 Cache::Cache(ConstructionGuard guard, Manager* manager, Metadata metadata,
              std::shared_ptr<Table> table, bool enableWindowedStats,
-             std::function<Table::BucketClearer(Metadata*)> bucketClearer)
+             std::function<Table::BucketClearer(Metadata*)> bucketClearer,
+             size_t slotsPerBucket)
     : _state(),
-      _evictionStats(_evictionStatsCapacity),
-      _insertionCount(0),
       _enableWindowedStats(enableWindowedStats),
       _findStats(nullptr),
       _findHits(0),
@@ -136,11 +136,11 @@ Cache::Cache(ConstructionGuard guard, Manager* manager, Metadata metadata,
       _metadata(metadata),
       _table(table),
       _bucketClearer(bucketClearer(&_metadata)),
+      _slotsPerBucket(slotsPerBucket),
       _openOperations(0),
       _migrateRequestTime(std::chrono::steady_clock::now()),
-      _resizeRequestTime(std::chrono::steady_clock::now()),
-      _lastResizeRequestStatus(true) {
-  _table->registerClearer(_bucketClearer);
+      _resizeRequestTime(std::chrono::steady_clock::now()) {
+  _table->setTypeSpecifics(_bucketClearer, _slotsPerBucket);
   _table->enable();
   if (_enableWindowedStats) {
     try {
@@ -152,12 +152,24 @@ Cache::Cache(ConstructionGuard guard, Manager* manager, Metadata metadata,
   }
 }
 
-uint64_t Cache::limit() {
+uint64_t Cache::size() {
+  uint64_t size = 0;
+  _state.lock();
+  if (isOperational()) {
+    _metadata.lock();
+    size = _metadata.allocatedSize;
+    _metadata.unlock();
+  }
+  _state.unlock();
+  return size;
+}
+
+uint64_t Cache::usageLimit() {
   uint64_t limit = 0;
   _state.lock();
   if (isOperational()) {
     _metadata.lock();
-    limit = _metadata.softLimit();
+    limit = _metadata.softUsageLimit;
     _metadata.unlock();
   }
   _state.unlock();
@@ -169,7 +181,7 @@ uint64_t Cache::usage() {
   _state.lock();
   if (isOperational()) {
     _metadata.lock();
-    usage = _metadata.usage();
+    usage = _metadata.usage;
     _metadata.unlock();
   }
   _state.unlock();
@@ -213,43 +225,6 @@ std::pair<double, double> Cache::hitRates() {
   return std::pair<double, double>(lifetimeRate, windowedRate);
 }
 
-void Cache::disableGrowth() {
-  _metadata.lock();
-  _metadata.disableGrowth();
-  _metadata.unlock();
-}
-
-void Cache::enableGrowth() {
-  _metadata.lock();
-  _metadata.enableGrowth();
-  _metadata.unlock();
-}
-
-bool Cache::resize(uint64_t requestedLimit) {
-  _state.lock();
-  bool allowed = isOperational();
-  bool resized = false;
-  startOperation();
-  _state.unlock();
-
-  if (allowed) {
-    // wait for previous resizes to finish
-    while (true) {
-      _metadata.lock();
-      if (!_metadata.isSet(State::Flag::resizing)) {
-        _metadata.unlock();
-        break;
-      }
-      _metadata.unlock();
-    }
-
-    resized = requestResize(requestedLimit, false);
-  }
-
-  endOperation();
-  return resized;
-}
-
 bool Cache::isResizing() {
   bool resizing = false;
   _state.lock();
@@ -284,63 +259,40 @@ bool Cache::isMigrating() const {
   return _state.isSet(State::Flag::migrating);
 }
 
-bool Cache::requestResize(uint64_t requestedLimit, bool internal) {
-  bool resized = false;
-  int64_t lockTries = internal ? Cache::triesFast : Cache::triesGuarantee;
-  bool ok = _state.lock(lockTries);
+void Cache::requestGrow() {
+  bool ok = canResize();
   if (ok) {
-    if (!internal || (std::chrono::steady_clock::now() > _resizeRequestTime)) {
-      _metadata.lock();
-      uint64_t newLimit =
-          (requestedLimit > 0)
-              ? requestedLimit
-              : (_lastResizeRequestStatus
-                     ? (_metadata.hardLimit() * 2)
-                     : (static_cast<uint64_t>(
-                           static_cast<double>(_metadata.hardLimit()) * 1.25)));
-      bool downsizing = (newLimit < _metadata.hardLimit());
-      _metadata.unlock();
-      if (downsizing || _metadata.canGrow()) {
-        std::tie(resized, _resizeRequestTime) =
-            _manager->requestResize(shared_from_this(), newLimit);
-        _lastResizeRequestStatus = resized;
+    ok = _state.lock(Cache::triesSlow);
+    if (ok) {
+      if (std::chrono::steady_clock::now() > _resizeRequestTime) {
+        _metadata.lock();
+        ok = !_metadata.isSet(State::Flag::resizing);
+        _metadata.unlock();
+        if (ok) {
+          std::tie(ok, _resizeRequestTime) =
+              _manager->requestGrow(shared_from_this());
+        }
       }
+      _state.unlock();
     }
-    _state.unlock();
   }
-  return resized;
 }
 
 void Cache::requestMigrate(uint32_t requestedLogSize) {
-  if ((++_insertionCount & 0xFFF) == 0) {
-    bool ok = canMigrate();
-    if (ok) {
-      auto stats = _evictionStats.getFrequencies();
-      if (((stats->size() == 1) &&
-           ((*stats)[0].first == static_cast<uint8_t>(Stat::insertEviction))) ||
-          ((stats->size() == 2) &&
-           (((*stats)[0].first ==
-             static_cast<uint8_t>(Stat::insertNoEviction)) ||
-            ((*stats)[0].second * 16 > (*stats)[1].second)))) {
-        ok = _state.lock(Cache::triesGuarantee);
-        if (ok) {
-          if (!isMigrating() &&
-              (std::chrono::steady_clock::now() > _migrateRequestTime)) {
-            _metadata.lock();
-            uint32_t newLogSize = (requestedLogSize > 0)
-                                      ? requestedLogSize
-                                      : (_table->logSize() + 1);
-            _metadata.unlock();
-            std::tie(ok, _resizeRequestTime) =
-                _manager->requestMigrate(shared_from_this(), newLogSize);
-            if (ok) {
-              _evictionStats.clear();
-            }
-          }
-          _state.unlock();
-        }
+  bool ok = _state.lock(Cache::triesGuarantee);
+  if (ok) {
+    if (!isMigrating() &&
+        (std::chrono::steady_clock::now() > _migrateRequestTime)) {
+      _metadata.lock();
+      ok = !_metadata.isSet(State::Flag::migrating) &&
+           (requestedLogSize != _table->logSize());
+      _metadata.unlock();
+      if (ok) {
+        std::tie(ok, _resizeRequestTime) =
+            _manager->requestMigrate(shared_from_this(), requestedLogSize);
       }
     }
+    _state.unlock();
   }
 }
 
@@ -355,7 +307,7 @@ void Cache::freeValue(CachedValue* value) {
 bool Cache::reclaimMemory(uint64_t size) {
   _metadata.lock();
   _metadata.adjustUsageIfAllowed(-static_cast<int64_t>(size));
-  bool underLimit = (_metadata.softLimit() >= _metadata.usage());
+  bool underLimit = (_metadata.softUsageLimit >= _metadata.usage);
   _metadata.unlock();
 
   return underLimit;
@@ -368,11 +320,6 @@ uint32_t Cache::hashKey(void const* key, uint32_t keySize) const {
 
 void Cache::recordStat(Stat stat) {
   switch (stat) {
-    case Stat::insertEviction:
-    case Stat::insertNoEviction: {
-      _evictionStats.insertRecord(static_cast<uint8_t>(stat));
-      break;
-    }
     case Stat::findHit: {
       _findHits++;
       if (_enableWindowedStats && _findStats.get() != nullptr) {
@@ -434,6 +381,9 @@ void Cache::shutdown() {
     _manager->reclaimTable(_table);
     _manager->unregisterCache(shared_from_this());
   }
+  _metadata.lock();
+  _metadata.changeTable(0);
+  _metadata.unlock();
   _state.unlock();
 }
 
@@ -442,7 +392,8 @@ bool Cache::canResize() {
   _state.lock();
   if (isOperational()) {
     _metadata.lock();
-    if (_metadata.isSet(State::Flag::resizing)) {
+    if (_metadata.isSet(State::Flag::resizing) ||
+        _metadata.isSet(State::Flag::migrating)) {
       allowed = false;
     }
     _metadata.unlock();
@@ -523,7 +474,7 @@ bool Cache::migrate(std::shared_ptr<Table> newTable) {
     return false;
   }
   startOperation();
-  newTable->registerClearer(_bucketClearer);
+  newTable->setTypeSpecifics(_bucketClearer, _slotsPerBucket);
   newTable->enable();
   _table->setAuxiliary(newTable);
   TRI_ASSERT(!_state.isSet(State::Flag::migrating));
@@ -532,7 +483,8 @@ bool Cache::migrate(std::shared_ptr<Table> newTable) {
 
   // do the actual migration
   for (uint32_t i = 0; i < _table->size(); i++) {
-    migrateBucket(_table->primaryBucket(i), _table->auxiliaryBuckets(i));
+    migrateBucket(_table->primaryBucket(i), _table->auxiliaryBuckets(i),
+                  newTable);
   }
 
   // swap tables
@@ -553,6 +505,7 @@ bool Cache::migrate(std::shared_ptr<Table> newTable) {
   _state.toggleFlag(State::Flag::migrating);
   _state.unlock();
   _metadata.lock();
+  _metadata.changeTable(_table->memoryUsage());
   _metadata.toggleFlag(State::Flag::migrating);
   _metadata.unlock();
 

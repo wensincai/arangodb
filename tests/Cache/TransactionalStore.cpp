@@ -76,8 +76,7 @@ TransactionalStore::TransactionalStore(Manager* manager)
       _writeOptions(rocksdb::WriteOptions()),
       _txOptions(rocksdb::TransactionOptions()) {
   TRI_ASSERT(manager != nullptr);
-  _cache =
-      manager->createCache(CacheType::Transactional, 1024 * 1024, true, true);
+  _cache = manager->createCache(CacheType::Transactional, true);
   TRI_ASSERT(_cache.get() != nullptr);
 
   _directory.appendText(TRI_GetTempPath());

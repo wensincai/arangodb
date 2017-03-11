@@ -126,12 +126,12 @@ class TransactionalCache final : public Cache {
 
   virtual uint64_t freeMemoryFrom(uint32_t hash);
   virtual void migrateBucket(void* sourcePtr,
-                             std::unique_ptr<Table::Subtable> targets);
+                             std::unique_ptr<Table::Subtable> targets,
+                             std::shared_ptr<Table> newTable);
 
   // helpers
-  std::pair<bool, TransactionalBucket*> getBucket(uint32_t hash,
-                                                  int64_t maxTries,
-                                                  bool singleOperation = true);
+  std::tuple<bool, TransactionalBucket*, std::shared_ptr<Table>> getBucket(
+      uint32_t hash, int64_t maxTries, bool singleOperation = true);
   uint32_t getIndex(uint32_t hash, bool useAuxiliary) const;
 
   static Table::BucketClearer bucketClearer(Metadata* metadata);

@@ -108,12 +108,14 @@ class Table : public std::enable_shared_from_this<Table> {
   /// @brief Fetches a pointer to the bucket mapped by the given hash, and locks
   /// it.
   ///
-  /// Returns a nullptr if it could not lock the bucket within maxTries
+  /// Returns nullptrs if it could not lock the bucket within maxTries
   /// attempts. If maxTries is negative, it will not limit the number of
   /// attempts. If the primary bucket is migrated, it will attempt a lookup in
-  /// the auxiliary table.
+  /// the auxiliary table. The second member of the returned pair is the source
+  /// table for the bucket returned as the first member.
   //////////////////////////////////////////////////////////////////////////////
-  void* fetchAndLockBucket(uint32_t hash, int64_t maxTries = -1);
+  std::pair<void*, std::shared_ptr<Table>> fetchAndLockBucket(
+      uint32_t hash, int64_t maxTries = -1);
 
   //////////////////////////////////////////////////////////////////////////////
   /// @brief Sets the auxiliary table.
@@ -138,9 +140,9 @@ class Table : public std::enable_shared_from_this<Table> {
   std::unique_ptr<Table::Subtable> auxiliaryBuckets(uint32_t index);
 
   //////////////////////////////////////////////////////////////////////////////
-  /// @brief Register a function to clear an individual bucket to empty state.
+  /// @brief Set cache-type-specific members.
   //////////////////////////////////////////////////////////////////////////////
-  void registerClearer(BucketClearer clearer);
+  void setTypeSpecifics(BucketClearer clearer, size_t slotsPerBucket);
 
   //////////////////////////////////////////////////////////////////////////////
   /// @brief Reset table to fully empty state. Disables table.
@@ -152,7 +154,33 @@ class Table : public std::enable_shared_from_this<Table> {
   //////////////////////////////////////////////////////////////////////////////
   void enable();
 
+  //////////////////////////////////////////////////////////////////////////////
+  /// @brief Report that a slot was filled.
+  ///
+  /// If this causes the fill ratio to exceed the ideal upper limit, the return
+  /// value will be true, and the cache should request migration to a larger
+  /// table.
+  //////////////////////////////////////////////////////////////////////////////
+  bool slotFilled();
+
+  //////////////////////////////////////////////////////////////////////////////
+  /// @brief Report that a slot was emptied.
+  ///
+  /// If this causes the fill ratio to fall below the ideal lower limit, the
+  /// return value will be true, and the cache should request migration to a
+  /// smaller table.
+  //////////////////////////////////////////////////////////////////////////////
+  bool slotEmptied();
+
+  //////////////////////////////////////////////////////////////////////////////
+  /// @brief Returns the ideal size of the table based on fill ratio.
+  //////////////////////////////////////////////////////////////////////////////
+  uint32_t idealSize() const;
+
  private:
+  static constexpr double idealLowerRatio = 0.125;
+  static constexpr double idealUpperRatio = 0.75;
+
   State _state;
 
   uint32_t _logSize;
@@ -164,6 +192,9 @@ class Table : public std::enable_shared_from_this<Table> {
   std::shared_ptr<Table> _auxiliary;
 
   BucketClearer _bucketClearer;
+
+  uint64_t _slotsTotal;
+  std::atomic<uint64_t> _slotsUsed;
 
  private:
   void disable();

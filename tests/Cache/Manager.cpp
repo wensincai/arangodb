@@ -64,7 +64,6 @@ TEST_CASE("cache::Manager", "[cache][!hide][longRunning]") {
   }
 
   SECTION("test mixed cache types under mixed load") {
-    uint64_t initialSize = 16ULL * 1024ULL;
     RandomGenerator::initialize(RandomGenerator::RandomType::MERSENNE);
     MockScheduler scheduler(4);
     Manager manager(scheduler.ioService(), 1024ULL * 1024ULL * 1024ULL);
@@ -73,8 +72,7 @@ TEST_CASE("cache::Manager", "[cache][!hide][longRunning]") {
     std::vector<std::shared_ptr<Cache>> caches;
     for (size_t i = 0; i < cacheCount; i++) {
       auto res = manager.createCache(
-          ((i % 2 == 0) ? CacheType::Plain : CacheType::Transactional),
-          initialSize, true);
+          ((i % 2 == 0) ? CacheType::Plain : CacheType::Transactional));
       TRI_ASSERT(res);
       caches.emplace_back(res);
     }
@@ -170,14 +168,13 @@ TEST_CASE("cache::Manager", "[cache][!hide][longRunning]") {
   }
 
   SECTION("test manager under cache lifecycle chaos") {
-    uint64_t initialSize = 16ULL * 1024ULL;
     RandomGenerator::initialize(RandomGenerator::RandomType::MERSENNE);
     MockScheduler scheduler(4);
     Manager manager(scheduler.ioService(), 1024ULL * 1024ULL * 1024ULL);
     size_t threadCount = 4;
     uint64_t operationCount = 4ULL * 1024ULL;
 
-    auto worker = [&manager, initialSize, operationCount]() -> void {
+    auto worker = [&manager, operationCount]() -> void {
       std::queue<std::shared_ptr<Cache>> caches;
 
       for (uint64_t i = 0; i < operationCount; i++) {
@@ -185,8 +182,7 @@ TEST_CASE("cache::Manager", "[cache][!hide][longRunning]") {
         switch (r) {
           case 0: {
             auto res = manager.createCache(
-                (i % 2 == 0) ? CacheType::Plain : CacheType::Transactional,
-                initialSize, true);
+                (i % 2 == 0) ? CacheType::Plain : CacheType::Transactional);
             if (res) {
               caches.emplace(res);
             }

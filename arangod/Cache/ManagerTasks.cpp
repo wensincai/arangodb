@@ -56,8 +56,8 @@ void FreeMemoryTask::run() {
     _manager->_state.lock();
     Metadata* metadata = _cache->metadata();
     metadata->lock();
-    uint64_t reclaimed = metadata->hardLimit() - metadata->softLimit();
-    metadata->adjustLimits(metadata->softLimit(), metadata->softLimit());
+    uint64_t reclaimed = metadata->hardUsageLimit - metadata->softUsageLimit;
+    metadata->adjustLimits(metadata->softUsageLimit, metadata->softUsageLimit);
     metadata->toggleFlag(State::Flag::resizing);
     metadata->unlock();
     _manager->_globalAllocation -= reclaimed;

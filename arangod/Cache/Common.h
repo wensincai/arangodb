@@ -44,12 +44,7 @@ enum CacheType { Plain, Transactional };
 ////////////////////////////////////////////////////////////////////////////////
 /// @brief Enum to allow easy statistic recording across classes.
 ////////////////////////////////////////////////////////////////////////////////
-enum class Stat : uint8_t {
-  findHit = 1,
-  findMiss = 2,
-  insertEviction = 3,
-  insertNoEviction = 4
-};
+enum class Stat : uint8_t { findHit = 1, findMiss = 2 };
 
 };  // end namespace cache
 };  // end namespace arangodb

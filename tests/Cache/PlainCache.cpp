@@ -44,49 +44,26 @@ using namespace arangodb::cache;
 
 TEST_CASE("cache::PlainCache", "[cache][!hide][longRunning]") {
   SECTION("test basic cache creation") {
-    Manager manager(nullptr, 1024ULL * 1024ULL);
-    auto cache1 =
-        manager.createCache(CacheType::Plain, 256ULL * 1024ULL, false);
+    Manager manager(nullptr, 1024 * 1024);
+    auto cache1 = manager.createCache(CacheType::Plain, false, 256 * 1024);
     REQUIRE(true);
-    auto cache2 =
-        manager.createCache(CacheType::Plain, 512ULL * 1024ULL, false);
+    auto cache2 = manager.createCache(CacheType::Plain, false, 512 * 1024);
 
-    REQUIRE(0ULL == cache1->usage());
-    REQUIRE(256ULL * 1024ULL == cache1->limit());
-    REQUIRE(0ULL == cache2->usage());
-    REQUIRE(512ULL * 1024ULL > cache2->limit());
+    REQUIRE(0 == cache1->usage());
+    REQUIRE(256 * 1024 >= cache1->size());
+    REQUIRE(0 == cache2->usage());
+    REQUIRE(512 * 1024 >= cache2->size());
 
     manager.destroyCache(cache1);
     manager.destroyCache(cache2);
   }
 
   SECTION("check that insertion works as expected") {
-    uint64_t cacheLimit = 256ULL * 1024ULL;
-    Manager manager(nullptr, 4ULL * cacheLimit);
-    auto cache = manager.createCache(CacheType::Plain, cacheLimit, false);
+    uint64_t cacheLimit = 256 * 1024;
+    Manager manager(nullptr, 4 * cacheLimit);
+    auto cache = manager.createCache(CacheType::Plain, false, cacheLimit);
 
     for (uint64_t i = 0; i < 1024; i++) {
-      CachedValue* value =
-          CachedValue::construct(&i, sizeof(uint64_t), &i, sizeof(uint64_t));
-      bool success = cache->insert(value);
-      REQUIRE(success);
-      auto f = cache->find(&i, sizeof(uint64_t));
-      REQUIRE(f.found());
-    }
-
-    for (uint64_t i = 0; i < 1024; i++) {
-      uint64_t j = 2 * i;
-      CachedValue* value =
-          CachedValue::construct(&i, sizeof(uint64_t), &j, sizeof(uint64_t));
-      bool success = cache->insert(value);
-      REQUIRE(success);
-      auto f = cache->find(&i, sizeof(uint64_t));
-      REQUIRE(f.found());
-      REQUIRE(0 == memcmp(f.value()->value(), &j, sizeof(uint64_t)));
-    }
-
-    uint64_t notInserted = 0;
-    for (uint64_t i = 1024; i < 128 * 1024; i++) {
       CachedValue* value =
           CachedValue::construct(&i, sizeof(uint64_t), &i, sizeof(uint64_t));
       bool success = cache->insert(value);
@@ -95,28 +72,65 @@ TEST_CASE("cache::PlainCache", "[cache][!hide][longRunning]") {
         REQUIRE(f.found());
       } else {
         delete value;
-        notInserted++;
       }
     }
-    REQUIRE(notInserted > 0);
+
+    for (uint64_t i = 0; i < 1024; i++) {
+      uint64_t j = 2 * i;
+      CachedValue* value =
+          CachedValue::construct(&i, sizeof(uint64_t), &j, sizeof(uint64_t));
+      bool success = cache->insert(value);
+      if (success) {
+        auto f = cache->find(&i, sizeof(uint64_t));
+        REQUIRE(f.found());
+        REQUIRE(0 == memcmp(f.value()->value(), &j, sizeof(uint64_t)));
+      } else {
+        delete value;
+      }
+    }
+
+    for (uint64_t i = 1024; i < 256 * 1024; i++) {
+      CachedValue* value =
+          CachedValue::construct(&i, sizeof(uint64_t), &i, sizeof(uint64_t));
+      bool success = cache->insert(value);
+      if (success) {
+        auto f = cache->find(&i, sizeof(uint64_t));
+        REQUIRE(f.found());
+      } else {
+        delete value;
+      }
+    }
+    REQUIRE(cache->size() <= 256 * 1024);
 
     manager.destroyCache(cache);
   }
 
   SECTION("test that removal works as expected") {
-    uint64_t cacheLimit = 256ULL * 1024ULL;
-    Manager manager(nullptr, 4ULL * cacheLimit);
-    auto cache = manager.createCache(CacheType::Plain, cacheLimit, false);
+    uint64_t cacheLimit = 256 * 1024;
+    Manager manager(nullptr, 4 * cacheLimit);
+    auto cache = manager.createCache(CacheType::Plain, false, cacheLimit);
 
     for (uint64_t i = 0; i < 1024; i++) {
       CachedValue* value =
           CachedValue::construct(&i, sizeof(uint64_t), &i, sizeof(uint64_t));
       bool success = cache->insert(value);
-      REQUIRE(success);
-      auto f = cache->find(&i, sizeof(uint64_t));
-      REQUIRE(f.found());
-      REQUIRE(f.value() != nullptr);
-      REQUIRE(f.value()->sameKey(&i, sizeof(uint64_t)));
+      if (success) {
+        auto f = cache->find(&i, sizeof(uint64_t));
+        REQUIRE(f.found());
+        REQUIRE(f.value() != nullptr);
+        REQUIRE(f.value()->sameKey(&i, sizeof(uint64_t)));
+      } else {
+        delete value;
+      }
+    }
+    uint64_t inserted = 0;
+    for (uint64_t j = 0; j < 1024; j++) {
+      auto f = cache->find(&j, sizeof(uint64_t));
+      if (f.found()) {
+        inserted++;
+        REQUIRE(f.value() != nullptr);
+        REQUIRE(f.value()->sameKey(&j, sizeof(uint64_t)));
+      }
     }
 
     // test removal of bogus keys
@@ -124,12 +138,16 @@ TEST_CASE("cache::PlainCache", "[cache][!hide][longRunning]") {
       bool removed = cache->remove(&i, sizeof(uint64_t));
       BOOST_ASSERT(removed);
       // ensure existing keys not removed
+      uint64_t found = 0;
       for (uint64_t j = 0; j < 1024; j++) {
         auto f = cache->find(&j, sizeof(uint64_t));
-        REQUIRE(f.found());
-        REQUIRE(f.value() != nullptr);
-        REQUIRE(f.value()->sameKey(&j, sizeof(uint64_t)));
+        if (f.found()) {
+          found++;
+          REQUIRE(f.value() != nullptr);
+          REQUIRE(f.value()->sameKey(&j, sizeof(uint64_t)));
+        }
       }
+      REQUIRE(inserted == found);
     }
 
     // remove actual keys
@@ -144,13 +162,12 @@ TEST_CASE("cache::PlainCache", "[cache][!hide][longRunning]") {
   }
 
   SECTION("verify that cache can indeed grow when it runs out of space") {
-    uint64_t initialSize = 16ULL * 1024ULL;
-    uint64_t minimumSize = 64ULL * initialSize;
+    uint64_t minimumUsage = 1024 * 1024;
     MockScheduler scheduler(4);
-    Manager manager(scheduler.ioService(), 1024ULL * 1024ULL * 1024ULL);
-    auto cache = manager.createCache(CacheType::Plain, initialSize, true);
+    Manager manager(scheduler.ioService(), 1024 * 1024 * 1024);
+    auto cache = manager.createCache(CacheType::Plain);
 
-    for (uint64_t i = 0; i < 4ULL * 1024ULL * 1024ULL; i++) {
+    for (uint64_t i = 0; i < 4 * 1024 * 1024; i++) {
       CachedValue* value =
           CachedValue::construct(&i, sizeof(uint64_t), &i, sizeof(uint64_t));
       bool success = cache->insert(value);
@@ -159,57 +176,17 @@ TEST_CASE("cache::PlainCache", "[cache][!hide][longRunning]") {
       }
     }
 
-    CHECK(cache->usage() > minimumSize);
+    CHECK(cache->usage() > minimumUsage);
 
     manager.destroyCache(cache);
-  }
-
-  SECTION("test that cache can shrink when requested") {
-    uint64_t initialSize = 16ULL * 1024ULL;
-    RandomGenerator::initialize(RandomGenerator::RandomType::MERSENNE);
-    MockScheduler scheduler(4);
-    Manager manager(scheduler.ioService(), 1024ULL * 1024ULL * 1024ULL);
-    auto cache = manager.createCache(CacheType::Plain, initialSize, true);
-
-    for (uint64_t i = 0; i < 16ULL * 1024ULL * 1024ULL; i++) {
-      CachedValue* value =
-          CachedValue::construct(&i, sizeof(uint64_t), &i, sizeof(uint64_t));
-      bool success = cache->insert(value);
-      if (!success) {
-        delete value;
-      }
-    }
-
-    cache->disableGrowth();
-    uint64_t target = cache->usage() / 2;
-    while (!cache->resize(target)) {
-    };
-
-    for (uint64_t i = 0; i < 16ULL * 1024ULL * 1024ULL; i++) {
-      CachedValue* value =
-          CachedValue::construct(&i, sizeof(uint64_t), &i, sizeof(uint64_t));
-      bool success = cache->insert(value);
-      if (!success) {
-        delete value;
-      }
-    }
-
-    while (cache->isResizing()) {
-    }
-    REQUIRE(cache->usage() <= target);
-
-    manager.destroyCache(cache);
-    RandomGenerator::shutdown();
   }
 
   SECTION("test behavior under mixed load") {
-    uint64_t initialSize = 16ULL * 1024ULL;
     RandomGenerator::initialize(RandomGenerator::RandomType::MERSENNE);
     MockScheduler scheduler(4);
-    Manager manager(scheduler.ioService(), 1024ULL * 1024ULL * 1024ULL);
+    Manager manager(scheduler.ioService(), 1024 * 1024 * 1024);
     size_t threadCount = 4;
-    std::shared_ptr<Cache> cache =
-        manager.createCache(CacheType::Plain, initialSize, true);
+    std::shared_ptr<Cache> cache = manager.createCache(CacheType::Plain);
 
     uint64_t chunkSize = 16 * 1024 * 1024;
     uint64_t initialInserts = 4 * 1024 * 1024;
@@ -294,28 +271,30 @@ TEST_CASE("cache::PlainCache", "[cache][!hide][longRunning]") {
   }
 
   SECTION("test hit rate statistics reporting") {
-    uint64_t cacheLimit = 256ULL * 1024ULL;
-    Manager manager(nullptr, 4ULL * cacheLimit);
-    auto cacheMiss =
-        manager.createCache(CacheType::Plain, cacheLimit, false, true);
-    auto cacheHit =
-        manager.createCache(CacheType::Plain, cacheLimit, false, true);
-    auto cacheMixed =
-        manager.createCache(CacheType::Plain, cacheLimit, false, true);
+    uint64_t cacheLimit = 256 * 1024;
+    Manager manager(nullptr, 4 * cacheLimit);
+    auto cacheMiss = manager.createCache(CacheType::Plain, true, cacheLimit);
+    auto cacheHit = manager.createCache(CacheType::Plain, true, cacheLimit);
+    auto cacheMixed = manager.createCache(CacheType::Plain, true, cacheLimit);
 
     for (uint64_t i = 0; i < 1024; i++) {
       CachedValue* value =
           CachedValue::construct(&i, sizeof(uint64_t), &i, sizeof(uint64_t));
-      bool success = cacheHit->insert(value);
-      REQUIRE(success);
+      if (!cacheHit->insert(value)) {
+        delete value;
+      }
+
       value =
           CachedValue::construct(&i, sizeof(uint64_t), &i, sizeof(uint64_t));
-      success = cacheMiss->insert(value);
-      REQUIRE(success);
+      if (!cacheMiss->insert(value)) {
+        delete value;
+      }
+
       value =
           CachedValue::construct(&i, sizeof(uint64_t), &i, sizeof(uint64_t));
-      success = cacheMixed->insert(value);
-      REQUIRE(success);
+      if (!cacheMixed->insert(value)) {
+        delete value;
+      }
     }
 
     for (uint64_t i = 0; i < 1024; i++) {
@@ -324,10 +303,10 @@ TEST_CASE("cache::PlainCache", "[cache][!hide][longRunning]") {
     {
       auto cacheStats = cacheHit->hitRates();
       auto managerStats = manager.globalHitRates();
-      REQUIRE(cacheStats.first == 100.0);
-      REQUIRE(cacheStats.second == 100.0);
-      REQUIRE(managerStats.first == 100.0);
-      REQUIRE(managerStats.second == 100.0);
+      REQUIRE(cacheStats.first >= 85.0);
+      REQUIRE(cacheStats.second >= 85.0);
+      REQUIRE(managerStats.first >= 85.0);
+      REQUIRE(managerStats.second >= 85.0);
     }
 
     for (uint64_t i = 1024; i < 2048; i++) {
@@ -338,10 +317,10 @@ TEST_CASE("cache::PlainCache", "[cache][!hide][longRunning]") {
       auto managerStats = manager.globalHitRates();
       REQUIRE(cacheStats.first == 0.0);
       REQUIRE(cacheStats.second == 0.0);
-      REQUIRE(managerStats.first > 49.0);
-      REQUIRE(managerStats.first < 51.0);
-      REQUIRE(managerStats.second > 49.0);
-      REQUIRE(managerStats.second < 51.0);
+      REQUIRE(managerStats.first > 40.0);
+      REQUIRE(managerStats.first < 50.0);
+      REQUIRE(managerStats.second > 40.0);
+      REQUIRE(managerStats.second < 50.0);
     }
 
     for (uint64_t i = 0; i < 1024; i++) {
@@ -353,14 +332,14 @@ TEST_CASE("cache::PlainCache", "[cache][!hide][longRunning]") {
     {
       auto cacheStats = cacheMixed->hitRates();
       auto managerStats = manager.globalHitRates();
-      REQUIRE(cacheStats.first > 49.0);
-      REQUIRE(cacheStats.first < 51.0);
-      REQUIRE(cacheStats.second > 49.0);
-      REQUIRE(cacheStats.second < 51.0);
-      REQUIRE(managerStats.first > 49.0);
-      REQUIRE(managerStats.first < 51.0);
-      REQUIRE(managerStats.second > 49.0);
-      REQUIRE(managerStats.second < 51.0);
+      REQUIRE(cacheStats.first > 40.0);
+      REQUIRE(cacheStats.first < 50.0);
+      REQUIRE(cacheStats.second > 40.0);
+      REQUIRE(cacheStats.second < 50.0);
+      REQUIRE(managerStats.first > 40.0);
+      REQUIRE(managerStats.first < 50.0);
+      REQUIRE(managerStats.second > 40.0);
+      REQUIRE(managerStats.second < 50.0);
     }
 
     manager.destroyCache(cacheHit);

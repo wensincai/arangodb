@@ -27,6 +27,8 @@
 
 #include "Cache/Metadata.h"
 #include "Basics/Common.h"
+#include "Cache/PlainCache.h"
+#include "Cache/Table.h"
 
 #include "catch.hpp"
 
@@ -37,70 +39,81 @@ using namespace arangodb::cache;
 
 TEST_CASE("cache::Metadata", "[cache]") {
   SECTION("test basic constructor") {
-    uint64_t limit = 1024;
-    Metadata metadata(limit, true);
-  }
+    uint64_t usageLimit = 1024;
+    uint64_t fixed = 128;
+    uint64_t table = Table::allocationSize(Table::minLogSize);
+    uint64_t max = UINT64_MAX;
+    Metadata metadata(usageLimit, fixed, table, max);
 
-  SECTION("test various getters") {
-    uint64_t dummy;
-    std::shared_ptr<Cache> dummyCache(reinterpret_cast<Cache*>(&dummy),
-                                      [](Cache* p) -> void {});
-    uint64_t limit = 1024;
+    REQUIRE(metadata.fixedSize == fixed);
+    REQUIRE(metadata.tableSize == table);
+    REQUIRE(metadata.maxSize == max);
+    REQUIRE(metadata.allocatedSize > (usageLimit + fixed + table));
+    REQUIRE(metadata.deservedSize == metadata.allocatedSize);
 
-    Metadata metadata(limit, true);
-
-    REQUIRE(metadata.canGrow());
-
-    metadata.lock();
-
-    REQUIRE(limit == metadata.softLimit());
-    REQUIRE(limit == metadata.hardLimit());
-    REQUIRE(static_cast<uint64_t>(0) == metadata.usage());
-
-    metadata.disableGrowth();
-    metadata.unlock();
-
-    REQUIRE(!metadata.canGrow());
+    REQUIRE(metadata.usage == 0);
+    REQUIRE(metadata.softUsageLimit == usageLimit);
+    REQUIRE(metadata.hardUsageLimit == usageLimit);
   }
 
   SECTION("verify usage limits are adjusted and enforced correctly") {
     bool success;
-
-    Metadata metadata(1024, true);
+    uint64_t overhead = 48;
+    Metadata metadata(1024, 0, 0, 2048 + overhead);
 
     metadata.lock();
 
-    success = metadata.adjustUsageIfAllowed(512);
-    REQUIRE(success);
-    success = metadata.adjustUsageIfAllowed(512);
-    REQUIRE(success);
-    success = metadata.adjustUsageIfAllowed(512);
-    REQUIRE(!success);
+    REQUIRE(metadata.adjustUsageIfAllowed(512));
+    REQUIRE(metadata.adjustUsageIfAllowed(512));
+    REQUIRE(!metadata.adjustUsageIfAllowed(512));
 
-    success = metadata.adjustLimits(2048, 2048);
-    REQUIRE(success);
+    REQUIRE(!metadata.adjustLimits(2048, 2048));
+    REQUIRE(metadata.allocatedSize == 1024 + overhead);
+    REQUIRE(metadata.adjustDeserved(2048 + overhead));
+    REQUIRE(metadata.adjustLimits(2048, 2048));
+    REQUIRE(metadata.allocatedSize == 2048 + overhead);
 
-    success = metadata.adjustUsageIfAllowed(1024);
-    REQUIRE(success);
+    REQUIRE(metadata.adjustUsageIfAllowed(1024));
 
-    success = metadata.adjustLimits(1024, 2048);
-    REQUIRE(success);
+    REQUIRE(metadata.adjustLimits(1024, 2048));
+    REQUIRE(metadata.allocatedSize == 2048 + overhead);
 
-    success = metadata.adjustUsageIfAllowed(512);
-    REQUIRE(!success);
-    success = metadata.adjustUsageIfAllowed(-512);
-    REQUIRE(success);
-    success = metadata.adjustUsageIfAllowed(512);
-    REQUIRE(success);
-    success = metadata.adjustUsageIfAllowed(-1024);
-    REQUIRE(success);
-    success = metadata.adjustUsageIfAllowed(512);
-    REQUIRE(!success);
+    REQUIRE(!metadata.adjustUsageIfAllowed(512));
+    REQUIRE(metadata.adjustUsageIfAllowed(-512));
+    REQUIRE(metadata.adjustUsageIfAllowed(512));
+    REQUIRE(metadata.adjustUsageIfAllowed(-1024));
+    REQUIRE(!metadata.adjustUsageIfAllowed(512));
 
-    success = metadata.adjustLimits(1024, 1024);
-    REQUIRE(success);
-    success = metadata.adjustLimits(512, 512);
-    REQUIRE(!success);
+    REQUIRE(metadata.adjustLimits(1024, 1024));
+    REQUIRE(metadata.allocatedSize == 1024 + overhead);
+    REQUIRE(!metadata.adjustLimits(512, 512));
+
+    REQUIRE(!metadata.adjustLimits(2049, 2049));
+    REQUIRE(metadata.allocatedSize == 1024 + overhead);
+
+    metadata.unlock();
+  }
+
+  SECTION("verify table methods work correctly") {
+    bool success;
+    uint64_t overhead = 48;
+    Metadata metadata(1024, 0, 512, 2048 + overhead);
+
+    metadata.lock();
+
+    REQUIRE(!metadata.migrationAllowed(1024));
+    REQUIRE(2048 + overhead == metadata.adjustDeserved(2048 + overhead));
+
+    REQUIRE(metadata.migrationAllowed(1024));
+    metadata.changeTable(1024);
+    REQUIRE(metadata.tableSize == 1024);
+    REQUIRE(metadata.allocatedSize == 2048 + overhead);
+
+    REQUIRE(!metadata.migrationAllowed(1025));
+    REQUIRE(metadata.migrationAllowed(512));
+    metadata.changeTable(512);
+    REQUIRE(metadata.tableSize == 512);
+    REQUIRE(metadata.allocatedSize == 1536 + overhead);
 
     metadata.unlock();
   }

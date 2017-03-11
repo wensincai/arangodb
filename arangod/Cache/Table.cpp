@@ -81,7 +81,9 @@ Table::Table(uint32_t logSize)
       _mask((_size - 1) << _shift),
       _buckets(new GenericBucket[_size]),
       _auxiliary(nullptr),
-      _bucketClearer(defaultClearer) {
+      _bucketClearer(defaultClearer),
+      _slotsTotal(_size),
+      _slotsUsed(0) {
   _state.lock();
   _state.toggleFlag(State::Flag::disabled);
   memset(_buckets.get(), 0, BUCKET_SIZE * _size);
@@ -98,32 +100,38 @@ uint64_t Table::size() const { return _size; }
 
 uint32_t Table::logSize() const { return _logSize; }
 
-void* Table::fetchAndLockBucket(uint32_t hash, int64_t maxTries) {
+std::pair<void*, std::shared_ptr<Table>> Table::fetchAndLockBucket(
+    uint32_t hash, int64_t maxTries) {
   GenericBucket* bucket = nullptr;
+  std::shared_ptr<Table> source(nullptr);
   bool ok = _state.lock(maxTries);
   if (ok) {
     ok = !_state.isSet(State::Flag::disabled);
     if (ok) {
       TRI_ASSERT(_buckets.get() != nullptr);
       bucket = &(_buckets[(hash & _mask) >> _shift]);
+      source = shared_from_this();
       ok = bucket->lock(maxTries);
       if (ok) {
         if (bucket->isMigrated()) {
           bucket->unlock();
           bucket = nullptr;
+          source.reset();
           if (_auxiliary.get() != nullptr) {
-            bucket = reinterpret_cast<GenericBucket*>(
-                _auxiliary->fetchAndLockBucket(hash, maxTries));
+            auto pair = _auxiliary->fetchAndLockBucket(hash, maxTries);
+            bucket = reinterpret_cast<GenericBucket*>(pair.first);
+            source = pair.second;
           }
         }
       } else {
         bucket = nullptr;
+        source.reset();
       }
     }
     _state.unlock();
   }
 
-  return bucket;
+  return std::make_pair(bucket, source);
 }
 
 std::shared_ptr<Table> Table::setAuxiliary(std::shared_ptr<Table> table) {
@@ -180,7 +188,10 @@ std::unique_ptr<Table::Subtable> Table::auxiliaryBuckets(uint32_t index) {
   return std::make_unique<Subtable>(source, base, size, mask, shift);
 }
 
-void Table::registerClearer(BucketClearer clearer) { _bucketClearer = clearer; }
+void Table::setTypeSpecifics(BucketClearer clearer, size_t slotsPerBucket) {
+  _bucketClearer = clearer;
+  _slotsTotal = _size * static_cast<uint64_t>(slotsPerBucket);
+}
 
 void Table::clear() {
   disable();
@@ -191,6 +202,7 @@ void Table::clear() {
     _bucketClearer(&(_buckets[i]));
   }
   _bucketClearer = Table::defaultClearer;
+  _slotsUsed = 0;
 }
 
 void Table::disable() {
@@ -216,6 +228,27 @@ bool Table::isEnabled(int64_t maxTries) {
     _state.unlock();
   }
   return ok;
+}
+
+bool Table::slotFilled() {
+  return ((static_cast<double>(++_slotsUsed) /
+           static_cast<double>(_slotsTotal)) > Table::idealUpperRatio);
+}
+
+bool Table::slotEmptied() {
+  return (((static_cast<double>(--_slotsUsed) /
+            static_cast<double>(_slotsTotal)) < Table::idealLowerRatio) &&
+          (_logSize > Table::minLogSize));
+}
+
+uint32_t Table::idealSize() const {
+  return (((static_cast<double>(_slotsUsed.load()) /
+            static_cast<double>(_slotsTotal)) > Table::idealUpperRatio)
+              ? (logSize() + 1)
+              : (((static_cast<double>(_slotsUsed.load()) /
+                   static_cast<double>(_slotsTotal)) < Table::idealLowerRatio)
+                     ? (logSize() - 1)
+                     : logSize()));
 }
 
 void Table::defaultClearer(void* ptr) {

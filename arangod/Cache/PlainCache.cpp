@@ -46,7 +46,8 @@ Cache::Finding PlainCache::find(void const* key, uint32_t keySize) {
 
   bool ok;
   PlainBucket* bucket;
-  std::tie(ok, bucket) = getBucket(hash, Cache::triesFast);
+  std::shared_ptr<Table> source;
+  std::tie(ok, bucket, source) = getBucket(hash, Cache::triesFast);
 
   if (ok) {
     result.reset(bucket->find(hash, key, keySize));
@@ -65,11 +66,13 @@ bool PlainCache::insert(CachedValue* value) {
 
   bool ok;
   PlainBucket* bucket;
-  std::tie(ok, bucket) = getBucket(hash, Cache::triesFast);
+  std::shared_ptr<Table> source;
+  std::tie(ok, bucket, source) = getBucket(hash, Cache::triesFast);
 
   if (ok) {
     bool allowed = true;
     bool eviction = false;
+    bool maybeMigrate = false;
     int64_t change = static_cast<int64_t>(value->size());
     CachedValue* candidate = bucket->find(hash, value->key(), value->keySize);
 
@@ -77,8 +80,6 @@ bool PlainCache::insert(CachedValue* value) {
       candidate = bucket->evictionCandidate();
       if (candidate == nullptr) {
         allowed = false;
-      } else {
-        eviction = true;
       }
     }
 
@@ -95,18 +96,21 @@ bool PlainCache::insert(CachedValue* value) {
         if (candidate != nullptr) {
           bucket->evict(candidate, true);
           freeValue(candidate);
+          eviction = true;
         }
-        recordStat(eviction ? Stat::insertEviction : Stat::insertNoEviction);
         bucket->insert(hash, value);
         inserted = true;
+        if (!eviction) {
+          maybeMigrate = source->slotFilled();
+        }
       } else {
-        requestResize();  // let function do the hard work
+        requestGrow();  // let function do the hard work
       }
     }
 
     bucket->unlock();
-    if (inserted) {
-      requestMigrate();  // let function do the hard work
+    if (maybeMigrate) {
+      requestMigrate(_table->idealSize());  // let function do the hard work
     }
     endOperation();
   }
@@ -117,11 +121,13 @@ bool PlainCache::insert(CachedValue* value) {
 bool PlainCache::remove(void const* key, uint32_t keySize) {
   TRI_ASSERT(key != nullptr);
   bool removed = false;
+  bool maybeMigrate = false;
   uint32_t hash = hashKey(key, keySize);
 
   bool ok;
   PlainBucket* bucket;
-  std::tie(ok, bucket) = getBucket(hash, Cache::triesSlow);
+  std::shared_ptr<Table> source;
+  std::tie(ok, bucket, source) = getBucket(hash, Cache::triesSlow);
 
   if (ok) {
     CachedValue* candidate = bucket->remove(hash, key, keySize);
@@ -135,10 +141,14 @@ bool PlainCache::remove(void const* key, uint32_t keySize) {
       _metadata.unlock();
 
       freeValue(candidate);
+      maybeMigrate = source->slotEmptied();
     }
 
     removed = true;
     bucket->unlock();
+    if (maybeMigrate) {
+      requestMigrate(_table->idealSize());
+    }
     endOperation();
   }
 
@@ -149,7 +159,6 @@ bool PlainCache::blacklist(void const* key, uint32_t keySize) { return false; }
 
 uint64_t PlainCache::allocationSize(bool enableWindowedStats) {
   return sizeof(PlainCache) +
-         StatBuffer::allocationSize(_evictionStatsCapacity) +
          (enableWindowedStats ? (sizeof(StatBuffer) +
                                  StatBuffer::allocationSize(_findStatsCapacity))
                               : 0);
@@ -166,7 +175,7 @@ PlainCache::PlainCache(Cache::ConstructionGuard guard, Manager* manager,
                        Metadata metadata, std::shared_ptr<Table> table,
                        bool enableWindowedStats)
     : Cache(guard, manager, metadata, table, enableWindowedStats,
-            PlainCache::bucketClearer) {}
+            PlainCache::bucketClearer, PlainBucket::slotsData) {}
 
 PlainCache::~PlainCache() {
   _state.lock();
@@ -182,8 +191,10 @@ PlainCache::~PlainCache() {
 uint64_t PlainCache::freeMemoryFrom(uint32_t hash) {
   uint64_t reclaimed = 0;
   bool ok;
+  bool maybeMigrate = false;
   PlainBucket* bucket;
-  std::tie(ok, bucket) = getBucket(hash, Cache::triesFast, false);
+  std::shared_ptr<Table> source;
+  std::tie(ok, bucket, source) = getBucket(hash, Cache::triesFast, false);
 
   if (ok) {
     // evict LRU freeable value if exists
@@ -193,19 +204,25 @@ uint64_t PlainCache::freeMemoryFrom(uint32_t hash) {
       reclaimed = candidate->size();
       bucket->evict(candidate);
       freeValue(candidate);
+      maybeMigrate = source->slotEmptied();
     }
 
     bucket->unlock();
+  }
+
+  if (maybeMigrate) {
+    requestMigrate(_table->idealSize());
   }
 
   return reclaimed;
 }
 
 void PlainCache::migrateBucket(void* sourcePtr,
-                               std::unique_ptr<Table::Subtable> targets) {
+                               std::unique_ptr<Table::Subtable> targets,
+                               std::shared_ptr<Table> newTable) {
   // lock current bucket
   auto source = reinterpret_cast<PlainBucket*>(sourcePtr);
-  source->lock(-1LL);
+  source->lock(Cache::triesGuarantee);
 
   // lock target bucket(s)
   targets->applyToAllBuckets([](void* ptr) -> bool {
@@ -229,12 +246,14 @@ void PlainCache::migrateBucket(void* sourcePtr,
           uint64_t size = candidate->size();
           freeValue(candidate);
           reclaimMemory(size);
+          newTable->slotEmptied();
         } else {
           haveSpace = false;
         }
       }
       if (haveSpace) {
         targetBucket->insert(hash, value);
+        newTable->slotFilled();
       } else {
         uint64_t size = value->size();
         freeValue(value);
@@ -258,10 +277,10 @@ void PlainCache::migrateBucket(void* sourcePtr,
   source->unlock();
 }
 
-std::pair<bool, PlainBucket*> PlainCache::getBucket(uint32_t hash,
-                                                    int64_t maxTries,
-                                                    bool singleOperation) {
+std::tuple<bool, PlainBucket*, std::shared_ptr<Table>> PlainCache::getBucket(
+    uint32_t hash, int64_t maxTries, bool singleOperation) {
   PlainBucket* bucket = nullptr;
+  std::shared_ptr<Table> source(nullptr);
 
   bool ok = _state.lock(maxTries);
   if (ok) {
@@ -274,8 +293,9 @@ std::pair<bool, PlainBucket*> PlainCache::getBucket(uint32_t hash,
         _manager->reportAccess(shared_from_this());
       }
 
-      bucket = reinterpret_cast<PlainBucket*>(
-          _table->fetchAndLockBucket(hash, maxTries));
+      auto pair = _table->fetchAndLockBucket(hash, maxTries);
+      bucket = reinterpret_cast<PlainBucket*>(pair.first);
+      source = pair.second;
       ok = (bucket != nullptr);
     }
     if (!ok && started) {
@@ -284,7 +304,7 @@ std::pair<bool, PlainBucket*> PlainCache::getBucket(uint32_t hash,
     _state.unlock();
   }
 
-  return std::pair<bool, PlainBucket*>(ok, bucket);
+  return std::make_tuple(ok, bucket, source);
 }
 
 Table::BucketClearer PlainCache::bucketClearer(Metadata* metadata) {

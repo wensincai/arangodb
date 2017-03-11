@@ -45,49 +45,28 @@ using namespace arangodb::cache;
 
 TEST_CASE("cache::TransactionalCache", "[cache][!hide][longRunning]") {
   SECTION("test basic cache construction") {
-    Manager manager(nullptr, 1024ULL * 1024ULL);
+    Manager manager(nullptr, 1024 * 1024);
     auto cache1 =
-        manager.createCache(CacheType::Transactional, 256ULL * 1024ULL, false);
+        manager.createCache(CacheType::Transactional, false, 256 * 1024);
     auto cache2 =
-        manager.createCache(CacheType::Transactional, 512ULL * 1024ULL, false);
+        manager.createCache(CacheType::Transactional, false, 512 * 1024);
 
-    REQUIRE(0ULL == cache1->usage());
-    REQUIRE(256ULL * 1024ULL == cache1->limit());
-    REQUIRE(0ULL == cache2->usage());
-    REQUIRE(512ULL * 1024ULL > cache2->limit());
+    REQUIRE(0 == cache1->usage());
+    REQUIRE(256 * 1024 >= cache1->size());
+    REQUIRE(0 == cache2->usage());
+    REQUIRE(512 * 1024 >= cache2->size());
 
     manager.destroyCache(cache1);
     manager.destroyCache(cache2);
   }
 
   SECTION("verify that insertion works as expected") {
-    uint64_t cacheLimit = 256ULL * 1024ULL;
-    Manager manager(nullptr, 4ULL * cacheLimit);
+    uint64_t cacheLimit = 256 * 1024;
+    Manager manager(nullptr, 4 * cacheLimit);
     auto cache =
-        manager.createCache(CacheType::Transactional, cacheLimit, false);
+        manager.createCache(CacheType::Transactional, false, cacheLimit);
 
     for (uint64_t i = 0; i < 1024; i++) {
-      CachedValue* value =
-          CachedValue::construct(&i, sizeof(uint64_t), &i, sizeof(uint64_t));
-      bool success = cache->insert(value);
-      REQUIRE(success);
-      auto f = cache->find(&i, sizeof(uint64_t));
-      REQUIRE(f.found());
-    }
-
-    for (uint64_t i = 0; i < 1024; i++) {
-      uint64_t j = 2 * i;
-      CachedValue* value =
-          CachedValue::construct(&i, sizeof(uint64_t), &j, sizeof(uint64_t));
-      bool success = cache->insert(value);
-      REQUIRE(success);
-      auto f = cache->find(&i, sizeof(uint64_t));
-      REQUIRE(f.found());
-      REQUIRE(0 == memcmp(f.value()->value(), &j, sizeof(uint64_t)));
-    }
-
-    uint64_t notInserted = 0;
-    for (uint64_t i = 1024; i < 128 * 1024; i++) {
       CachedValue* value =
           CachedValue::construct(&i, sizeof(uint64_t), &i, sizeof(uint64_t));
       bool success = cache->insert(value);
@@ -96,29 +75,66 @@ TEST_CASE("cache::TransactionalCache", "[cache][!hide][longRunning]") {
         REQUIRE(f.found());
       } else {
         delete value;
-        notInserted++;
       }
     }
-    REQUIRE(notInserted > 0);
+
+    for (uint64_t i = 0; i < 1024; i++) {
+      uint64_t j = 2 * i;
+      CachedValue* value =
+          CachedValue::construct(&i, sizeof(uint64_t), &j, sizeof(uint64_t));
+      bool success = cache->insert(value);
+      if (success) {
+        auto f = cache->find(&i, sizeof(uint64_t));
+        REQUIRE(f.found());
+        REQUIRE(0 == memcmp(f.value()->value(), &j, sizeof(uint64_t)));
+      } else {
+        delete value;
+      }
+    }
+
+    for (uint64_t i = 1024; i < 256 * 1024; i++) {
+      CachedValue* value =
+          CachedValue::construct(&i, sizeof(uint64_t), &i, sizeof(uint64_t));
+      bool success = cache->insert(value);
+      if (success) {
+        auto f = cache->find(&i, sizeof(uint64_t));
+        REQUIRE(f.found());
+      } else {
+        delete value;
+      }
+    }
+    REQUIRE(cache->size() <= 256 * 1024);
 
     manager.destroyCache(cache);
   }
 
   SECTION("verify removal works as expected") {
-    uint64_t cacheLimit = 256ULL * 1024ULL;
-    Manager manager(nullptr, 4ULL * cacheLimit);
+    uint64_t cacheLimit = 256 * 1024;
+    Manager manager(nullptr, 4 * cacheLimit);
     auto cache =
-        manager.createCache(CacheType::Transactional, cacheLimit, false);
+        manager.createCache(CacheType::Transactional, false, cacheLimit);
 
     for (uint64_t i = 0; i < 1024; i++) {
       CachedValue* value =
           CachedValue::construct(&i, sizeof(uint64_t), &i, sizeof(uint64_t));
       bool success = cache->insert(value);
-      REQUIRE(success);
-      auto f = cache->find(&i, sizeof(uint64_t));
-      REQUIRE(f.found());
-      REQUIRE(f.value() != nullptr);
-      REQUIRE(f.value()->sameKey(&i, sizeof(uint64_t)));
+      if (success) {
+        auto f = cache->find(&i, sizeof(uint64_t));
+        REQUIRE(f.found());
+        REQUIRE(f.value() != nullptr);
+        REQUIRE(f.value()->sameKey(&i, sizeof(uint64_t)));
+      } else {
+        delete value;
+      }
+    }
+    uint64_t inserted = 0;
+    for (uint64_t j = 0; j < 1024; j++) {
+      auto f = cache->find(&j, sizeof(uint64_t));
+      if (f.found()) {
+        inserted++;
+        REQUIRE(f.value() != nullptr);
+        REQUIRE(f.value()->sameKey(&j, sizeof(uint64_t)));
+      }
     }
 
     // test removal of bogus keys
@@ -126,12 +142,16 @@ TEST_CASE("cache::TransactionalCache", "[cache][!hide][longRunning]") {
       bool removed = cache->remove(&i, sizeof(uint64_t));
       REQUIRE(removed);
       // ensure existing keys not removed
+      uint64_t found = 0;
       for (uint64_t j = 0; j < 1024; j++) {
         auto f = cache->find(&j, sizeof(uint64_t));
-        REQUIRE(f.found());
-        REQUIRE(f.value() != nullptr);
-        REQUIRE(f.value()->sameKey(&j, sizeof(uint64_t)));
+        if (f.found()) {
+          found++;
+          REQUIRE(f.value() != nullptr);
+          REQUIRE(f.value()->sameKey(&j, sizeof(uint64_t)));
+        }
       }
+      REQUIRE(inserted == found);
     }
 
     // remove actual keys
@@ -146,10 +166,10 @@ TEST_CASE("cache::TransactionalCache", "[cache][!hide][longRunning]") {
   }
 
   SECTION("verify blacklisting works as expected") {
-    uint64_t cacheLimit = 256ULL * 1024ULL;
-    Manager manager(nullptr, 4ULL * cacheLimit);
+    uint64_t cacheLimit = 256 * 1024;
+    Manager manager(nullptr, 4 * cacheLimit);
     auto cache =
-        manager.createCache(CacheType::Transactional, cacheLimit, false);
+        manager.createCache(CacheType::Transactional, false, cacheLimit);
 
     Transaction* tx = manager.beginTransaction(false);
 
@@ -157,11 +177,14 @@ TEST_CASE("cache::TransactionalCache", "[cache][!hide][longRunning]") {
       CachedValue* value =
           CachedValue::construct(&i, sizeof(uint64_t), &i, sizeof(uint64_t));
       bool success = cache->insert(value);
-      REQUIRE(success);
-      auto f = cache->find(&i, sizeof(uint64_t));
-      REQUIRE(f.found());
-      REQUIRE(f.value() != nullptr);
-      REQUIRE(f.value()->sameKey(&i, sizeof(uint64_t)));
+      if (success) {
+        auto f = cache->find(&i, sizeof(uint64_t));
+        REQUIRE(f.found());
+        REQUIRE(f.value() != nullptr);
+        REQUIRE(f.value()->sameKey(&i, sizeof(uint64_t)));
+      } else {
+        delete value;
+      }
     }
 
     for (uint64_t i = 512; i < 1024; i++) {
@@ -184,28 +207,32 @@ TEST_CASE("cache::TransactionalCache", "[cache][!hide][longRunning]") {
     manager.endTransaction(tx);
     tx = manager.beginTransaction(false);
 
+    uint64_t reinserted = 0;
     for (uint64_t i = 512; i < 1024; i++) {
       CachedValue* value =
           CachedValue::construct(&i, sizeof(uint64_t), &i, sizeof(uint64_t));
       bool success = cache->insert(value);
-      REQUIRE(success);
-      auto f = cache->find(&i, sizeof(uint64_t));
-      REQUIRE(f.found());
+      if (success) {
+        reinserted++;
+        auto f = cache->find(&i, sizeof(uint64_t));
+        REQUIRE(f.found());
+      } else {
+        delete value;
+      }
     }
+    REQUIRE(reinserted >= 256);
 
     manager.endTransaction(tx);
     manager.destroyCache(cache);
   }
 
   SECTION("verify cache can grow correctly when it runs out of space") {
-    uint64_t initialSize = 16ULL * 1024ULL;
-    uint64_t minimumSize = 64ULL * initialSize;
+    uint64_t minimumUsage = 1024 * 1024;
     MockScheduler scheduler(4);
-    Manager manager(scheduler.ioService(), 1024ULL * 1024ULL * 1024ULL);
-    auto cache =
-        manager.createCache(CacheType::Transactional, initialSize, true);
+    Manager manager(scheduler.ioService(), 1024 * 1024 * 1024);
+    auto cache = manager.createCache(CacheType::Transactional);
 
-    for (uint64_t i = 0; i < 4ULL * 1024ULL * 1024ULL; i++) {
+    for (uint64_t i = 0; i < 4 * 1024 * 1024; i++) {
       CachedValue* value =
           CachedValue::construct(&i, sizeof(uint64_t), &i, sizeof(uint64_t));
       bool success = cache->insert(value);
@@ -214,58 +241,18 @@ TEST_CASE("cache::TransactionalCache", "[cache][!hide][longRunning]") {
       }
     }
 
-    REQUIRE(cache->usage() > minimumSize);
+    REQUIRE(cache->usage() > minimumUsage);
 
     manager.destroyCache(cache);
-  }
-
-  SECTION("verify cache can shrink correctly when requested") {
-    uint64_t initialSize = 16ULL * 1024ULL;
-    RandomGenerator::initialize(RandomGenerator::RandomType::MERSENNE);
-    MockScheduler scheduler(4);
-    Manager manager(scheduler.ioService(), 1024ULL * 1024ULL * 1024ULL);
-    auto cache =
-        manager.createCache(CacheType::Transactional, initialSize, true);
-
-    for (uint64_t i = 0; i < 16ULL * 1024ULL * 1024ULL; i++) {
-      CachedValue* value =
-          CachedValue::construct(&i, sizeof(uint64_t), &i, sizeof(uint64_t));
-      bool success = cache->insert(value);
-      if (!success) {
-        delete value;
-      }
-    }
-
-    cache->disableGrowth();
-    uint64_t target = cache->usage() / 2;
-    while (!cache->resize(target)) {
-    };
-
-    for (uint64_t i = 0; i < 16ULL * 1024ULL * 1024ULL; i++) {
-      CachedValue* value =
-          CachedValue::construct(&i, sizeof(uint64_t), &i, sizeof(uint64_t));
-      bool success = cache->insert(value);
-      if (!success) {
-        delete value;
-      }
-    }
-
-    while (cache->isResizing()) {
-    }
-    REQUIRE(cache->usage() <= target);
-
-    manager.destroyCache(cache);
-    RandomGenerator::shutdown();
   }
 
   SECTION("test behavior under mixed load") {
-    uint64_t initialSize = 16ULL * 1024ULL;
     RandomGenerator::initialize(RandomGenerator::RandomType::MERSENNE);
     MockScheduler scheduler(4);
-    Manager manager(scheduler.ioService(), 1024ULL * 1024ULL * 1024ULL);
+    Manager manager(scheduler.ioService(), 1024 * 1024 * 1024);
     size_t threadCount = 4;
     std::shared_ptr<Cache> cache =
-        manager.createCache(CacheType::Transactional, initialSize, true);
+        manager.createCache(CacheType::Transactional);
 
     uint64_t chunkSize = 16 * 1024 * 1024;
     uint64_t initialInserts = 4 * 1024 * 1024;

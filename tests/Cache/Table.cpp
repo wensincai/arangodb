@@ -60,17 +60,22 @@ TEST_CASE("cache::Table", "[cache]") {
     table->enable();
     for (uint64_t i = 0; i < table->size(); i++) {
       uint32_t hash = static_cast<uint32_t>(i << (32 - Table::minLogSize));
-      auto bucket =
-          reinterpret_cast<PlainBucket*>(table->fetchAndLockBucket(hash, -1));
+      auto pair = table->fetchAndLockBucket(hash, -1);
+      auto bucket = reinterpret_cast<PlainBucket*>(pair.first);
+      auto source = pair.second;
       REQUIRE(bucket != nullptr);
       REQUIRE(bucket->isLocked());
+      REQUIRE(source.get() != nullptr);
+      REQUIRE(source == table);
 
       auto rawBucket = reinterpret_cast<PlainBucket*>(table->primaryBucket(i));
       REQUIRE(bucket == rawBucket);
 
-      auto badBucket =
-          reinterpret_cast<PlainBucket*>(table->fetchAndLockBucket(hash, 10));
+      auto badPair = table->fetchAndLockBucket(hash, 10);
+      auto badBucket = reinterpret_cast<PlainBucket*>(badPair.first);
+      auto badSource = badPair.second;
       REQUIRE(badBucket == nullptr);
+      REQUIRE(badSource.get() == nullptr);
 
       bucket->unlock();
     }
@@ -102,19 +107,24 @@ TEST_CASE("cache::Table", "[cache]") {
       uint32_t hash =
           static_cast<uint32_t>(indexSmall << (32 - small->logSize()));
 
-      auto bucket =
-          reinterpret_cast<PlainBucket*>(small->fetchAndLockBucket(hash, -1));
+      auto pair = small->fetchAndLockBucket(hash, -1);
+      auto bucket = reinterpret_cast<PlainBucket*>(pair.first);
+      auto source = pair.second;
       REQUIRE(bucket ==
               reinterpret_cast<PlainBucket*>(small->primaryBucket(indexSmall)));
       bucket->_state.toggleFlag(State::Flag::migrated);
       bucket->unlock();
+      REQUIRE(source == small);
 
-      bucket =
-          reinterpret_cast<PlainBucket*>(small->fetchAndLockBucket(hash, -1));
+      pair = small->fetchAndLockBucket(hash, -1);
+      bucket = reinterpret_cast<PlainBucket*>(pair.first);
+      source = pair.second;
       REQUIRE(bucket ==
               reinterpret_cast<PlainBucket*>(large->primaryBucket(indexLarge)));
-      auto badBucket = small->fetchAndLockBucket(hash, 10);
-      REQUIRE(badBucket == nullptr);
+      REQUIRE(source == large);
+      pair = small->fetchAndLockBucket(hash, 10);
+      REQUIRE(pair.first == nullptr);
+      REQUIRE(pair.second.get() == nullptr);
       bucket->unlock();
     }
 
@@ -176,6 +186,38 @@ TEST_CASE("cache::Table", "[cache]") {
         return true;
       });
     }
+
+    SECTION("test fill ratio methods") {
+      for (uint64_t i = 0; i < large->size(); i++) {
+        bool res = large->slotFilled();
+        if ((i + 1) <
+            static_cast<uint64_t>(0.125 * static_cast<double>(large->size()))) {
+          REQUIRE(large->idealSize() == large->logSize() - 1);
+          REQUIRE(res == false);
+        } else if ((i + 1) > static_cast<uint64_t>(
+                                 0.75 * static_cast<double>(large->size()))) {
+          REQUIRE(large->idealSize() == large->logSize() + 1);
+          REQUIRE(res == true);
+        } else {
+          REQUIRE(large->idealSize() == large->logSize());
+          REQUIRE(res == false);
+        }
+      }
+      for (uint64_t i = large->size(); i > 0; i--) {
+        bool res = large->slotEmptied();
+        if ((i - 1) <
+            static_cast<uint64_t>(0.125 * static_cast<double>(large->size()))) {
+          REQUIRE(large->idealSize() == large->logSize() - 1);
+          REQUIRE(res == true);
+        } else if ((i - 1) > static_cast<uint64_t>(
+                                 0.75 * static_cast<double>(large->size()))) {
+          REQUIRE(large->idealSize() == large->logSize() + 1);
+          REQUIRE(res == false);
+        } else {
+          REQUIRE(large->idealSize() == large->logSize());
+          REQUIRE(res == false);
+        }
+      }
+    }
   }
-  // TODO: test clearer
 }
