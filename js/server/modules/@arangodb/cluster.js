@@ -1789,13 +1789,13 @@ function moveShard (info) {
     // First translate server names from short names to long names:
     var servers = global.ArangoClusterInfo.getDBServers();
     for (let i = 0; i < servers.length; i++) {
-      if (servers[i].serverId != info.fromServer) {
-        if (servers[i].serverName == info.fromServer) {
+      if (servers[i].serverId !== info.fromServer) {
+        if (servers[i].serverName === info.fromServer) {
           info.fromServer = servers[i].serverId;
         }
       }
-      if (servers[i].serverId != info.toServer) {
-        if (servers[i].serverName == info.toServer) {
+      if (servers[i].serverId !== info.toServer) {
+        if (servers[i].serverName === info.toServer) {
           info.toServer = servers[i].serverId;
         }
       }
