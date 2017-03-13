@@ -140,7 +140,7 @@ struct Job {
     Node const& snap, std::string const& db, std::string const& col,
     std::string const& shrd);
 
-  static std::string findCommonInSyncFollower(
+  static std::string findCommonHealthyInSyncFollower(
     Node const& snap, std::string const& db, std::string const& col,
     std::string const& shrd);
 
