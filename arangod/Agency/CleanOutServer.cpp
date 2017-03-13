@@ -451,14 +451,17 @@ bool CleanOutServer::checkFeasibility() {
 
 void CleanOutServer::abort() {
   // We can assume that the job is either in ToDo or in Pending.
+  Result result;
+
   if (_status == NOTFOUND || _status == FINISHED || _status == FAILED) {
-    return;
+    result = Result(1, "Failed aborting failedServer beyond pending stage");
+    return result;
   }
 
   // Can now only be TODO or PENDING
   if (_status == TODO) {
     finish("", "", false, "job aborted");
-    return;
+    return result;
   }
 
   // Abort all our subjobs:
@@ -477,5 +480,8 @@ void CleanOutServer::abort() {
   }
 
   finish(_server, "", false, "job aborted");
+
+  return result;
+  
 }
 

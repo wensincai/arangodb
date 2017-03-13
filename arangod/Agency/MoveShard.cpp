@@ -658,14 +658,19 @@ JOB_STATUS MoveShard::pendingFollower() {
 }
 
 void MoveShard::abort() {
+
+  Result result;
+  
   // We can assume that the job is either in ToDo or in Pending.
   if (_status == NOTFOUND || _status == FINISHED || _status == FAILED) {
-    return;
+    result = Result(1, "Failed aborting moveShard beyond pending stage");
+    return result;
   }
+  
   // Can now only be TODO or PENDING
   if (_status == TODO) {
     finish("", "", false, "job aborted");
-    return;
+    return result;
   }
 
   // Find the other shards in the same distributeShardsLike group:
@@ -737,7 +742,7 @@ void MoveShard::abort() {
   write_ret_t res = transact(_agent, trx);
 
   if (res.accepted && res.indices.size() == 1 && res.indices[0]) {
-    return;
+    return result;
   }
 
   LOG_TOPIC(ERR, Logger::SUPERVISION) << "Failed to abort job " << _jobId;

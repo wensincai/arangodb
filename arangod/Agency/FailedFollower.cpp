@@ -271,6 +271,8 @@ JOB_STATUS FailedFollower::status() {
 }
 
 void FailedFollower::abort() {
+  Result result;
+  return result;
   // FIXME: TO BE IMPLEMENTED
 }
 
