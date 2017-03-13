@@ -808,7 +808,7 @@ SECTION("abort any addFollower job blocking the shard and start") {
   });
   When(Method(addFollowerMockAgent, waitFor)).Return();
   AgentInterface &addFollowerAgent = addFollowerMockAgent.get();
-  auto addFollower = AddFollower(baseStructure("arango"), &addFollowerAgent, "2", "strunz", DATABASE, COLLECTION, SHARD, {"follower3"});
+  auto addFollower = AddFollower(baseStructure("arango"), &addFollowerAgent, "2", "strunz", DATABASE, COLLECTION, SHARD);
   addFollower.create();
 
   std::string jobId = "1";
