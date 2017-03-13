@@ -356,19 +356,19 @@ SECTION("the job should fail if fromServer does not exist") {
 
   Mock<AgentInterface> mockAgent;
   AgentInterface& agent = mockAgent.get();
-  When(Method(mockAgent, write)).AlwaysDo([&](query_t const& q) -> write_ret_t {
-    INFO("WriteTransaction: " << q->slice().toJson());
-    CHECK_FAILURE("ToDo", q);
-    return fakeWriteResult;
-  });
-  When(Method(mockAgent, waitFor)).AlwaysReturn();
   auto builder = createTestStructure(baseStructure.toBuilder().slice(), "");
   REQUIRE(builder);
   Node agency = createAgencyFromBuilder(*builder);
 
   INFO("Agency: " << agency);
   auto moveShard = MoveShard(agency, &agent, TODO, jobId);
-  moveShard.start();
+  Mock<Job> spy(moveShard);
+  Fake(Method(spy, finish));
+
+  Job& spyMoveShard = spy.get();
+  spyMoveShard.start();
+
+  Verify(Method(spy, finish).Matching([](std::string const& server, std::string const& shard, bool success, std::string const& reason){return !success;}));
 }
 
 SECTION("the job should fail if fromServer is not in plan of the shard") {
@@ -991,7 +991,7 @@ SECTION("if the job is too old it should be aborted to prevent a deadloop") {
   Verify(Method(spy, abort));
 }
 
-SECTION("if the shard is gone abort the job") {
+SECTION("if the collection is gone abort the job") {
   std::function<std::unique_ptr<VPackBuilder>(VPackSlice const&, std::string const&)> createTestStructure = [&](VPackSlice const& s, std::string const& path) {
     std::unique_ptr<VPackBuilder> builder;
     builder.reset(new VPackBuilder());
@@ -999,7 +999,7 @@ SECTION("if the shard is gone abort the job") {
       builder->add(VPackValue(VPackValueType::Object));
       for (auto const& it: VPackObjectIterator(s)) {
         auto childBuilder = createTestStructure(it.value, path + "/" + it.key.copyString());
-        if (childBuilder) {
+        if (childBuilder && !(path == "/arango/Plan/Collections/" + DATABASE && it.key.copyString() == COLLECTION)) {
           builder->add(it.key.copyString(), childBuilder->slice());
         }
       }
@@ -1029,14 +1029,15 @@ SECTION("if the shard is gone abort the job") {
   Mock<AgentInterface> mockAgent;
   AgentInterface& agent = mockAgent.get();
 
+  INFO("Agency: " << agency);
   auto moveShard = MoveShard(agency, &agent, PENDING, jobId);
   Mock<Job> spy(moveShard);
-  Fake(Method(spy, abort));
+  Fake(Method(spy, finish));
 
   Job& spyMoveShard = spy.get();
   spyMoveShard.run();
 
-  Verify(Method(spy, abort));
+  Verify(Method(spy, finish).Matching([](std::string const& server, std::string const& shard, bool success, std::string const& reason){return success;}));
 }
 
 }
