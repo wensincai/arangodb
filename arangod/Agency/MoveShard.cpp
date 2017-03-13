@@ -239,9 +239,8 @@ bool MoveShard::start() {
   }
 
   // Look at Plan:
-  std::string curPath =
-    curColPrefix + _database + "/" + _collection + "/" + _shard + "/servers";
-  
+  std::string planPath =
+    planColPrefix + _database + "/" + _collection + "/shards/" + _shard;
   Slice planned = _snapshot(planPath).slice();
   TRI_ASSERT(planned.isArray());
   
