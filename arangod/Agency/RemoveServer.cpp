@@ -347,9 +347,10 @@ bool RemoveServer::scheduleAddFollowers() {
 
         newServer = servers.at(rand() % servers.size());
 
-        AddFollower(_snapshot, _agent, _jobId + "-" + std::to_string(sub++),
-                    _jobId, database.first, collptr.first,
-                    shard.first, {newServer});
+#warning temporarily disabled
+        // AddFollower(_snapshot, _agent, _jobId + "-" + std::to_string(sub++),
+        //             _jobId, database.first, collptr.first,
+        //             shard.first, {newServer});
       }
     }
   }
