@@ -657,9 +657,9 @@ JOB_STATUS MoveShard::pendingFollower() {
   return PENDING;
 }
 
-void MoveShard::abort() {
+arangodb::Result MoveShard::abort() {
 
-  Result result;
+  arangodb::Result result;
   
   // We can assume that the job is either in ToDo or in Pending.
   if (_status == NOTFOUND || _status == FINISHED || _status == FAILED) {
@@ -741,10 +741,17 @@ void MoveShard::abort() {
 
   write_ret_t res = transact(_agent, trx);
 
-  if (res.accepted && res.indices.size() == 1 && res.indices[0]) {
+  if (!res.accepted) {
+    result =  Result(1, std::string("Lost leadership"));
+    return result;
+  } else if(res.indices[0] == 0) {
+    result =
+      Result(1, std::string("Precondition failed while aborting moveShard job ")
+             + _jobId);
     return result;
   }
 
-  LOG_TOPIC(ERR, Logger::SUPERVISION) << "Failed to abort job " << _jobId;
+  return result;
+
 }
 

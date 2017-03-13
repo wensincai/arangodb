@@ -44,7 +44,7 @@ struct RemoveServer : public Job {
   virtual bool create(std::shared_ptr<VPackBuilder> b = nullptr) override final;
   virtual void run() override final;
   virtual bool start() override final;
-  virtual void abort() override final;
+  virtual Result abort() override final;
   
   // Check if all shards' replication factors can be satisfied after clean out.
   bool checkFeasibility() ;

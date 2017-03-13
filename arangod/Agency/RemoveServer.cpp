@@ -449,7 +449,9 @@ bool RemoveServer::checkFeasibility() {
   return true;
 }
 
-void RemoveServer::abort() {
+arangodb::Result RemoveServer::abort() {
+  arangodb::Result result;
+  return result;
   // TO BE IMPLEMENTED
 }
 

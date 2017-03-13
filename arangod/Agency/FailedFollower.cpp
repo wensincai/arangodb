@@ -270,8 +270,8 @@ JOB_STATUS FailedFollower::status() {
   return _status;
 }
 
-void FailedFollower::abort() {
-  Result result;
+arangodb::Result FailedFollower::abort() {
+  arangodb::Result result;
   return result;
   // FIXME: TO BE IMPLEMENTED
 }

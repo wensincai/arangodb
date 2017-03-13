@@ -334,10 +334,10 @@ JOB_STATUS FailedLeader::status() {
 }
 
 
-Result FailedLeader::abort() {
+arangodb::Result FailedLeader::abort() {
 
   Builder builder;
-  Result result;
+  arangodb::Result result;
 
   { VPackArrayBuilder a(&builder);      
     // Oper: Delete job from todo ONLY!
@@ -355,14 +355,14 @@ Result FailedLeader::abort() {
   auto ret = transact(_agent, builder);
 
   if (!ret.accepted) {
-    result = Result(1, "Lost leadership.");
-  } else if ( ret.indices[0] == 0) {
-    result = Result(
+    result = arangodb::Result(1, "Lost leadership.");
+  } else if (ret.indices[0] == 0) {
+    result = arangodb::Result(
       1, std::string("Cannot abort failedLeader job ")
       + _jobId + " beyond todo stage");
   }
   
-  return res;
+  return result;
   
 }
 

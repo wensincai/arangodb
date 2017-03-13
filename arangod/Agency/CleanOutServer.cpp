@@ -449,7 +449,7 @@ bool CleanOutServer::checkFeasibility() {
   return true;
 }
 
-void CleanOutServer::abort() {
+arangodb::Result CleanOutServer::abort() {
   // We can assume that the job is either in ToDo or in Pending.
   Result result;
 

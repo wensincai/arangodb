@@ -51,7 +51,7 @@ struct AddFollower : public Job {
     override final;
   virtual void run() override final;
   virtual bool start() override final;
-  virtual void abort() override final;
+  virtual Result abort() override final;
 
   std::string _database;
   std::string _collection;

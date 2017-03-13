@@ -283,7 +283,9 @@ JOB_STATUS UnassumedLeadership::status() {
   return _status;
 }
 
-void UnassumedLeadership::abort() {
+arangodb::Result UnassumedLeadership::abort() {
+  Result result;
+  return result;
   // TO BE IMPLEMENTED
 }
 
