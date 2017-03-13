@@ -983,8 +983,8 @@ actions.defineHttp({
     var server = body.server;
     var servers = global.ArangoClusterInfo.getDBServers();
     for (let i = 0; i < servers.length; i++) {
-      if (servers[i].serverId != server) {
-        if (servers[i].serverName == server) {
+      if (servers[i].serverId !== server) {
+        if (servers[i].serverName === server) {
           server = servers[i].serverId;
           break;
         }

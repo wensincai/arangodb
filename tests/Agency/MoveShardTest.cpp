@@ -776,6 +776,7 @@ SECTION("the job should be moved to pending when everything is ok") {
     auto preconditions = q->slice()[0][1];
     CHECK(preconditions.get("/arango/Target/CleanedServers").get("old").toJson() == "[]");
     CHECK(preconditions.get("/arango/Target/FailedServers").get("old").toJson() == "{}");
+    CHECK(preconditions.get("/arango/Supervision/Health/" + FREE_SERVER + "/Status").get("old").copyString() == "GOOD");
     CHECK(preconditions.get("/arango/Supervision/DBServers/" + FREE_SERVER).get("oldEmpty").getBool() == true);
     CHECK(preconditions.get("/arango/Supervision/Shards/" + SHARD).get("oldEmpty").getBool() == true);
     CHECK(preconditions.get("/arango/Plan/Collections/" + DATABASE + "/" + COLLECTION + "/shards/" + SHARD).get("old").toJson() == "[\"" + SHARD_LEADER + "\",\"" + SHARD_FOLLOWER1 + "\"]");
@@ -1132,6 +1133,58 @@ SECTION("if the collection was dropped before the job could be started just fini
 
   Verify(Method(spy, finish).Matching([](std::string const& server, std::string const& shard, bool success, std::string const& reason){return success;}));
 
+}
+
+SECTION("the job should wait until the planned shard situation has been created in Current") {
+  std::function<std::unique_ptr<VPackBuilder>(VPackSlice const&, std::string const&)> createTestStructure = [&](VPackSlice const& s, std::string const& path) {
+    std::unique_ptr<VPackBuilder> builder;
+    builder.reset(new VPackBuilder());
+    if (s.isObject()) {
+      builder->add(VPackValue(VPackValueType::Object));
+      for (auto const& it: VPackObjectIterator(s)) {
+        auto childBuilder = createTestStructure(it.value, path + "/" + it.key.copyString());
+        if (childBuilder) {
+          builder->add(it.key.copyString(), childBuilder->slice());
+        }
+      }
+
+      if (path == "/arango/Target/Pending") {
+        VPackBuilder pendingJob;
+        {
+          VPackObjectBuilder b(&pendingJob);
+          auto plainJob = createJob(COLLECTION, SHARD_FOLLOWER1, FREE_SERVER);
+          for (auto const& it: VPackObjectIterator(plainJob.slice())) {
+            pendingJob.add(it.key.copyString(), it.value);
+          }
+          pendingJob.add("timeCreated", VPackValue(timepointToString(std::chrono::system_clock::now())));
+        }
+        builder->add(jobId, pendingJob.slice());
+      }
+      builder->close();
+    } else {
+      if (path == "/arango/Plan/Collections/" + DATABASE + "/" + COLLECTION + "/shards/" + SHARD) {
+        builder->add(VPackValue(VPackValueType::Array));
+        builder->add(VPackValue(SHARD_LEADER));
+        builder->add(VPackValue(SHARD_FOLLOWER1));
+        builder->add(VPackValue(FREE_SERVER));
+        builder->close();
+      } else {
+        builder->add(s);
+      }
+    }
+    return builder;
+  };
+
+  auto builder = createTestStructure(baseStructure.toBuilder().slice(), "");
+  Node agency = createAgencyFromBuilder(*builder);
+
+  Mock<AgentInterface> mockAgent;
+  // should not write anything because we are not yet in sync
+  AgentInterface& agent = mockAgent.get();
+
+  INFO("Agency: " << agency);
+  auto moveShard = MoveShard(agency, &agent, PENDING, jobId);
+  moveShard.run();
 }
 
 }

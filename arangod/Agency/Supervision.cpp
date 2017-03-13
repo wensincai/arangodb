@@ -31,7 +31,6 @@
 #include "Agency/FailedServer.h"
 #include "Agency/Job.h"
 #include "Agency/JobContext.h"
-#include "Agency/RemoveServer.h"
 #include "Agency/Store.h"
 #include "ApplicationFeatures/ApplicationServer.h"
 #include "Basics/ConditionLocker.h"
@@ -600,16 +599,7 @@ void Supervision::workJobs() {
 
 
 void Supervision::enforceReplication() {
-
-  auto const& todo = _snapshot(toDoPrefix).children();
-  auto const& pending = _snapshot(pendingPrefix).children();
-
-  if (!todo.empty() || !pending.empty()) { // This is low priority
-    return;
-  }
-
   auto const& plannedDBs = _snapshot(planColPrefix).children();
-  auto available = Job::availableServers(_snapshot);
 
   for (const auto& db_ : plannedDBs) { // Planned databases
     auto const& db = *(db_.second);
@@ -627,55 +617,40 @@ void Supervision::enforceReplication() {
 
       // mop: satellites => distribute to every server
       if (replicationFactor == 0) {
+        auto available = Job::availableServers(_snapshot);
         replicationFactor = available.size();
       }
       
-      bool clone = false;
-      try {
-        clone = !col("distributeShardsLike").slice().copyString().empty();
-      } catch (...) {}
-
-      auto const& failed = _snapshot(failedServersPrefix).children();
+      bool clone = col.has("distributeShardsLike");
 
       if (!clone) {
         for (auto const& shard_ : col("shards").children()) { // Pl shards
           auto const& shard = *(shard_.second);
           
           size_t actualReplicationFactor = shard.slice().length();
-          for (const auto& i : VPackArrayIterator(shard.slice())) {
-            if (failed.find(i.copyString())!=failed.end()) {
-              --actualReplicationFactor;
-            }
-          }
-          
-          if (actualReplicationFactor > 0 && // Need at least one survived
-              replicationFactor > actualReplicationFactor && // Planned higher
-              available.size() > shard.slice().length()) { // Any servers available
-            for (auto const& i : VPackArrayIterator(shard.slice())) {
-              available.erase(
-                std::remove(
-                  available.begin(), available.end(), i.copyString()),
-                available.end());
-            }
-            
-            size_t optimal = replicationFactor - actualReplicationFactor;
-            std::vector<std::string> newFollowers;
-            for (size_t i = 0; i < optimal; ++i) {
-              auto randIt = available.begin();
-              std::advance(randIt, std::rand() % available.size());
-              newFollowers.push_back(*randIt);
-              available.erase(randIt);
-              if (available.empty()) {
+          if (actualReplicationFactor < replicationFactor) {
+            // Check that there is not yet an addFollower job in ToDo
+            // for this shard:
+            auto const& todo = _snapshot(toDoPrefix).children();
+            bool found = false;
+            for (auto const& pair : todo) {
+              auto const& job = pair.second;
+              if (job->has("type") &&
+                  (*job)("type").getString() == "addFollower" &&
+                  job->has("shard") &&
+                  (*job)("shard").getString() == shard_.first) {
+                found = true;
+                LOG_TOPIC(DEBUG, Logger::SUPERVISION) << "already found "
+                  "addFollower job in ToDo, not scheduling again for shard "
+                  << shard_.first;
                 break;
               }
             }
-
-            #warning AddFollower commented out for now
-            /*AddFollower(
-              _snapshot, _agent, std::to_string(_jobId++), "supervision",
-              db_.first, col_.first, shard_.first,
-              newFollowers).run();
-            */
+            if (!found) {
+              AddFollower(
+                _snapshot, _agent, std::to_string(_jobId++), "supervision",
+                db_.first, col_.first, shard_.first).run();
+            }
           }
         }
       }
@@ -789,8 +764,11 @@ void Supervision::shrinkCluster() {
     if (uselessFailedServers.size() > 0) {
       // Schedule last server for cleanout
 
-      RemoveServer(_snapshot, _agent, std::to_string(_jobId++), "supervision",
-                   uselessFailedServers.back()).run();
+      LOG_TOPIC(INFO, Logger::SUPERVISION) << "not starting RemoveServer job "
+        "because it is deleted.";
+#warning Disabled because RemoveServer job is deleted.
+      //RemoveServer(_snapshot, _agent, std::to_string(_jobId++), "supervision",
+      //             uselessFailedServers.back()).run();
       return;
     }
     // mop: do not account any failedservers in this calculation..the ones
