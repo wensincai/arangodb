@@ -285,17 +285,22 @@ JOB_STATUS AddFollower::status() {
   return _status;
 }
 
-void AddFollower::abort() {
+arangodb::Result AddFollower::abort() {
+
+  Result result;
   // We can assume that the job is in ToDo or not there:
   if (_status == NOTFOUND || _status == FINISHED || _status == FAILED) {
-    return;
+    result = Result(1, "Failed aborting addFollower job beyond pending stage");
+    return result;
   }
   // Can now only be TODO or PENDING
   if (_status == TODO) {
     finish("", "", false, "job aborted");
-    return;
+    return result;
   }
 
   TRI_ASSERT(false);  // cannot happen, since job moves directly to FINISHED
+  return result;
+  
 }
 

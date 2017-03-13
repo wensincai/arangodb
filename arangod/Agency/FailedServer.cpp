@@ -359,7 +359,9 @@ JOB_STATUS FailedServer::status() {
   return _status;
 }
 
-void FailedServer::abort() {
+arangodb::Result FailedServer::abort() {
+  Result result;
+  return result;
   // FIXME: No abort procedure, simply throw error or so
 }
 

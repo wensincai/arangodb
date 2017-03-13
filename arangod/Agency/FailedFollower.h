@@ -48,7 +48,7 @@ struct FailedFollower : public Job {
   virtual void run() override final;
   virtual bool start() override final;
   virtual JOB_STATUS status() override final;
-  virtual void abort() override final;
+  virtual Result abort() override final;
 
   std::string _database;
   std::string _collection;
