@@ -31,7 +31,6 @@
 #include "Agency/FailedServer.h"
 #include "Agency/Job.h"
 #include "Agency/JobContext.h"
-#include "Agency/RemoveServer.h"
 #include "Agency/Store.h"
 #include "ApplicationFeatures/ApplicationServer.h"
 #include "Basics/ConditionLocker.h"
@@ -765,8 +764,11 @@ void Supervision::shrinkCluster() {
     if (uselessFailedServers.size() > 0) {
       // Schedule last server for cleanout
 
-      RemoveServer(_snapshot, _agent, std::to_string(_jobId++), "supervision",
-                   uselessFailedServers.back()).run();
+      LOG_TOPIC(INFO, Logger::SUPERVISION) << "not starting RemoveServer job "
+        "because it is deleted.";
+#warning Disabled because RemoveServer job is deleted.
+      //RemoveServer(_snapshot, _agent, std::to_string(_jobId++), "supervision",
+      //             uselessFailedServers.back()).run();
       return;
     }
     // mop: do not account any failedservers in this calculation..the ones

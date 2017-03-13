@@ -29,7 +29,6 @@
 #include "Agency/FailedLeader.h"
 #include "Agency/FailedServer.h"
 #include "Agency/MoveShard.h"
-#include "Agency/RemoveServer.h"
 #include "Agency/UnassumedLeadership.h"
 
 using namespace arangodb::consensus;
@@ -57,10 +56,6 @@ JobContext::JobContext (JOB_STATUS status, std::string id, Node const& snapshot,
     _job =
       std::unique_ptr<CleanOutServer>(
         new CleanOutServer(snapshot, agent, status, id));
-  } else if (type == "removeServer") {
-    _job =
-      std::unique_ptr<RemoveServer>(
-        new RemoveServer(snapshot, agent, status, id));
   } else if (type == "moveShard") {
     _job =
       std::unique_ptr<MoveShard>(
