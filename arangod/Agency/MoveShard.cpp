@@ -160,12 +160,12 @@ bool MoveShard::start() {
 
   // Are we distributeShardsLiking other shard? Then fail miserably.
   if (!_snapshot.has(planColPrefix + _database + "/" + _collection)) {
-    finish("", "", false, "collection has been dropped in the meantime");
+    finish("", "", true, "collection has been dropped in the meantime");
     return false;
   }
   Node collection = _snapshot(planColPrefix + _database + "/" + _collection);
   if (collection.has("distributeShardsLike")) {
-    finish("", _shard, false,
+    finish("", "", false,
            "collection must not have 'distributeShardsLike' attribute");
     return false;
   }
@@ -238,16 +238,11 @@ bool MoveShard::start() {
     }
   }
 
-  // DBservers
-  std::string planPath =
-    planColPrefix + _database + "/" + _collection + "/shards/" + _shard;
+  // Look at Plan:
   std::string curPath =
     curColPrefix + _database + "/" + _collection + "/" + _shard + "/servers";
   
-  Slice current = _snapshot(curPath).slice();
   Slice planned = _snapshot(planPath).slice();
-  
-  TRI_ASSERT(current.isArray());
   TRI_ASSERT(planned.isArray());
   
   int found = -1;
