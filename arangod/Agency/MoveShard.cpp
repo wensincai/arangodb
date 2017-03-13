@@ -663,7 +663,8 @@ arangodb::Result MoveShard::abort() {
   
   // We can assume that the job is either in ToDo or in Pending.
   if (_status == NOTFOUND || _status == FINISHED || _status == FAILED) {
-    result = Result(1, "Failed aborting moveShard beyond pending stage");
+    result = Result(TRI_ERROR_SUPERVISION_GENERAL_FAILURE,
+                    "Failed aborting moveShard beyond pending stage");
     return result;
   }
   
@@ -742,11 +743,13 @@ arangodb::Result MoveShard::abort() {
   write_ret_t res = transact(_agent, trx);
 
   if (!res.accepted) {
-    result =  Result(1, std::string("Lost leadership"));
+    result =  Result(TRI_ERROR_SUPERVISION_GENERAL_FAILURE,
+                     std::string("Lost leadership"));
     return result;
   } else if(res.indices[0] == 0) {
     result =
-      Result(1, std::string("Precondition failed while aborting moveShard job ")
+      Result(TRI_ERROR_SUPERVISION_GENERAL_FAILURE,
+             std::string("Precondition failed while aborting moveShard job ")
              + _jobId);
     return result;
   }

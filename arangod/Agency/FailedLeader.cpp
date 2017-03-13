@@ -134,7 +134,8 @@ bool FailedLeader::start() {
     .slice();
   auto const& planned =
     _snapshot(
-      planColPrefix + _database + "/" + _collection + "/shards/" + _shard).slice();
+      planColPrefix + _database + "/" + _collection + "/shards/" + _shard)
+    .slice();
 
   // Get todo entry
   Builder todo;
@@ -156,7 +157,7 @@ bool FailedLeader::start() {
   for (auto const& i : VPackArrayIterator(planned)) {
     auto s = i.copyString();
     if (s != _from && s != _to) {
-      planv.push_back(i.copyString());
+      planv.push_back(s);
     }
   }
 
@@ -355,7 +356,7 @@ arangodb::Result FailedLeader::abort() {
   auto ret = transact(_agent, builder);
 
   if (!ret.accepted) {
-    result = arangodb::Result(1, "Lost leadership.");
+    result = arangodb::Result(TRI_ERROR_SUPERVISION_GENERAL_FAILURE, "Lost leadership.");
   } else if (ret.indices[0] == 0) {
     result = arangodb::Result(
       1, std::string("Cannot abort failedLeader job ")

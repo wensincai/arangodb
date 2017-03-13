@@ -454,7 +454,7 @@ arangodb::Result CleanOutServer::abort() {
   Result result;
 
   if (_status == NOTFOUND || _status == FINISHED || _status == FAILED) {
-    result = Result(1, "Failed aborting failedServer beyond pending stage");
+    result = Result(TRI_ERROR_SUPERVISION_GENERAL_FAILURE, "Failed aborting failedServer beyond pending stage");
     return result;
   }
 

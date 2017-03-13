@@ -135,6 +135,9 @@ struct Job {
   std::string id(std::string const& idOrShortName);
   std::string uuidLookup(std::string const& shortID);
 
+/*  static std::string randomIdleGoodAvailableServers(
+    Node const& snap, std::vector<std::string> const& exclude);*/
+  
   static std::vector<std::string> availableServers(
     const arangodb::consensus::Node&);
 
