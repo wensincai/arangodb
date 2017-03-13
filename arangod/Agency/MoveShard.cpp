@@ -601,6 +601,7 @@ JOB_STATUS MoveShard::pendingFollower() {
       abort();
       return FAILED;
     }
+    return PENDING;
   }
 
   // All in sync, so move on and remove the fromServer, for all shards,
