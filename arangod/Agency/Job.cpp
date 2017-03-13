@@ -279,7 +279,7 @@ bool Job::abortable(Node const& snapshot, std::string const& jobId) {
 
   // We should never get here
   TRI_ASSERT(false);
-  
+  return false;  
 }
 
 void Job::doForAllShards(Node const& snapshot,
