@@ -25,6 +25,7 @@
 
 #include "Agency/Agent.h"
 #include "Agency/Job.h"
+#include "Agency/JobContext.h"
 
 #include <algorithm>
 #include <vector>
@@ -52,10 +53,9 @@ FailedLeader::FailedLeader(Node const& snapshot, AgentInterface* agent,
     _collection = _snapshot(path + "collection").getString();
     _from = _snapshot(path + "fromServer").getString();
     try {
-      // set only if started
+      // set only if already started
       _to = _snapshot(path + "toServer").getString();
-    } catch (StoreException const& e) {
-    }
+    } catch (...) {}
     _shard = _snapshot(path + "shard").getString();
     _creator = _snapshot(path + "creator").getString();
   } catch (std::exception const& e) {
@@ -115,12 +115,12 @@ bool FailedLeader::start() {
     finish("", _shard, true, "Collection " + _collection + " gone");
   }
 
-  std::string commonInSync =
-    findCommonInSyncFollower(_snapshot, _database, _collection, _shard);
-  if (commonInSync.empty()) {
+  auto commonHealthyInSync =
+    findCommonHealthyInSyncFollower(_snapshot, _database, _collection, _shard);
+  if (commonHealthyInSync.empty()) {
     return false;
   } else {
-    _to = commonInSync;
+    _to = commonHealthyInSync;
   }
 
   LOG_TOPIC(INFO, Logger::SUPERVISION)
@@ -224,20 +224,30 @@ bool FailedLeader::start() {
           pending->add("op", VPackValue("increment")); }} // Operations ------
       // Preconditions -------------------------------------------------------
       { VPackObjectBuilder preconditions(pending.get());
-
-        pending->add( // Collection should not have been deleted in the mt
+       // Collection should not have been deleted in the mt
+        pending->add( 
           VPackValue(
             agencyPrefix + planColPrefix + _database + "/" + _collection));
         { VPackObjectBuilder stillExists(pending.get());
           pending->add("oldEmpty", VPackValue(false)); }
-
-        pending->add( // Status should still be failed
+        // Status should still be failed
+        pending->add( 
           VPackValue(agencyPrefix + healthPrefix + _from + "/Status"));
         { VPackObjectBuilder stillExists(pending.get());
           pending->add("old", VPackValue("FAILED")); }
 
       } // Preconditions -----------------------------------------------------
     }}
+  
+  // Abort job blocking server if abortable
+  try {
+    std::string jobId = _snapshot(blockedServersPrefix + _from).getString();
+    if (!abortable(_snapshot, jobId)) {
+      return false;
+    } else {
+      JobContext(PENDING, jobId, _snapshot, _agent).abort();
+    }
+  } catch (...) {}
   
   LOG_TOPIC(DEBUG, Logger::SUPERVISION)
     << "FailedLeader transaction: " << pending->toJson();
@@ -323,8 +333,26 @@ JOB_STATUS FailedLeader::status() {
   return _status;
 }
 
+
 void FailedLeader::abort() {
-  // TO BE IMPLEMENTED
+
+  Builder builder;
+
+  { VPackArrayBuilder a(&builder);      
+    // Oper: Delete job from todo ONLY!
+    { VPackObjectBuilder oper(&builder);
+      builder.add(VPackValue(toDoPrefix + _jobId));
+      { VPackObjectBuilder del(&builder);
+        builder.add("op", VPackValue("delete")); }}
+    // Precond: Just so that we can report?
+    { VPackObjectBuilder prec(&builder);
+      builder.add(VPackValue(toDoPrefix + _jobId));
+      { VPackObjectBuilder old(&builder);
+        builder.add("oldEmpty", VPackValue(false)); }}
+  }
+
+  transact(_agent, builder);
+
 }
 
 
