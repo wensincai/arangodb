@@ -271,52 +271,40 @@ bool FailedFollower::start() {
 }
 
 JOB_STATUS FailedFollower::status() {
-  if (_status != PENDING) {
-    return _status;
-  }
-  // FIXME: this is no more needed because all was done in start()
-  // FIXME: do not wait for in sync any more, so status == PENDING
-  // FIXME: has nothing to do any more
-  // FIXME: do we need a list of shards in FailedServers???
-
-  Node const& job = _snapshot(pendingPrefix + _jobId);
-  std::string database = job("database").toJson(),
-              collection = job("collection").toJson(),
-              shard = job("shard").toJson();
-
-  std::string planPath = planColPrefix + database + "/" + collection +
-                         "/shards/" + shard,
-              curPath = curColPrefix + database + "/" + collection + "/" +
-                        shard + "/servers";
-
-  Node const& planned = _snapshot(planPath);
-  Node const& current = _snapshot(curPath);
-
-  if (compareServerLists(planned.slice(), current.slice())) {
-    // Remove shard from /arango/Target/FailedServers/<server> array
-    Builder del;
-    del.openArray();
-    del.openObject();
-    std::string path = failedServersPrefix + "/" + _from;
-    del.add(path, VPackValue(VPackValueType::Object));
-    del.add("op", VPackValue("erase"));
-    del.add("val", VPackValue(_shard));
-    del.close();
-    del.close();
-    del.close();
-    write_ret_t res = transact(_agent, del);
-
-    if (finish("", shard)) {
-      return FINISHED;
-    }
-  }
-
-  return _status;
+  // We can only be hanging around TODO. start === finished
+  return TODO;
 }
 
 arangodb::Result FailedFollower::abort() {
-  arangodb::Result result;
-  return result;
-  // FIXME: TO BE IMPLEMENTED
-}
 
+  Builder builder;
+  arangodb::Result result;
+
+  { VPackArrayBuilder a(&builder);      
+    // Oper: Delete job from todo ONLY!
+    { VPackObjectBuilder oper(&builder);
+      builder.add(VPackValue(toDoPrefix + _jobId));
+      { VPackObjectBuilder del(&builder);
+        builder.add("op", VPackValue("delete")); }}
+    // Precond: Just so that we can report?
+    { VPackObjectBuilder prec(&builder);
+      builder.add(VPackValue(toDoPrefix + _jobId));
+      { VPackObjectBuilder old(&builder);
+        builder.add("oldEmpty", VPackValue(false)); }}
+  }
+
+  auto ret = transact(_agent, builder);
+
+  if (!ret.accepted) {
+    result = arangodb::Result(
+      TRI_ERROR_SUPERVISION_GENERAL_FAILURE, "Lost leadership.");
+  } else if (ret.indices[0] == 0) {
+    result = arangodb::Result(
+      TRI_ERROR_SUPERVISION_GENERAL_FAILURE,
+      std::string("Cannot abort failedFollower job ") + _jobId
+      + " beyond todo stage");
+  }
+  
+  return result;
+  
+}
