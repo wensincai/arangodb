@@ -64,23 +64,6 @@ Job::~Job() {}
 // this will be initialized in the AgencyFeature
 std::string Job::agencyPrefix = "/arango";
 
-JOB_STATUS Job::exists() const {
-
-  Node const& target = _snapshot("/Target");
-  
-  if (target.exists(std::string("/ToDo/") + _jobId).size() == 2) {
-    return TODO;
-  } else if (target.exists(std::string("/Pending/") + _jobId).size() == 2) {
-    return PENDING;
-  } else if (target.exists(std::string("/Finished/") + _jobId).size() == 2) {
-    return FINISHED;
-  } else if (target.exists(std::string("/Failed/") + _jobId).size() == 2) {
-    return FAILED;
-  }
-  
-  return NOTFOUND;
-}
-
 bool Job::finish(std::string const& server, std::string const& shard,
                  bool success, std::string const& reason) {
   

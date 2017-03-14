@@ -119,8 +119,6 @@ struct Job {
 
   virtual Result abort() = 0;
 
-  virtual JOB_STATUS exists() const;
-
   virtual bool finish(std::string const& server, std::string const& shard,
                       bool success = true,
                       std::string const& reason = std::string());
