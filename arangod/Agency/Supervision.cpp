@@ -31,6 +31,7 @@
 #include "Agency/FailedServer.h"
 #include "Agency/Job.h"
 #include "Agency/JobContext.h"
+#include "Agency/RemoveFollower.h"
 #include "Agency/Store.h"
 #include "ApplicationFeatures/ApplicationServer.h"
 #include "Basics/ConditionLocker.h"
@@ -628,28 +629,35 @@ void Supervision::enforceReplication() {
           auto const& shard = *(shard_.second);
           
           size_t actualReplicationFactor = shard.slice().length();
-          if (actualReplicationFactor < replicationFactor) {
-            // Check that there is not yet an addFollower job in ToDo
-            // for this shard:
+          if (actualReplicationFactor != replicationFactor) {
+            // Check that there is not yet an addFollower or removeFollower
+            // job in ToDo for this shard:
             auto const& todo = _snapshot(toDoPrefix).children();
             bool found = false;
             for (auto const& pair : todo) {
               auto const& job = pair.second;
               if (job->has("type") &&
-                  (*job)("type").getString() == "addFollower" &&
+                  ((*job)("type").getString() == "addFollower" ||
+                   (*job)("type").getString() == "removeFollower") &&
                   job->has("shard") &&
                   (*job)("shard").getString() == shard_.first) {
                 found = true;
                 LOG_TOPIC(DEBUG, Logger::SUPERVISION) << "already found "
-                  "addFollower job in ToDo, not scheduling again for shard "
-                  << shard_.first;
+                  "addFollower or removeFollower job in ToDo, not scheduling "
+                  "again for shard " << shard_.first;
                 break;
               }
             }
             if (!found) {
-              AddFollower(
-                _snapshot, _agent, std::to_string(_jobId++), "supervision",
-                db_.first, col_.first, shard_.first).run();
+              if (actualReplicationFactor < replicationFactor) {
+                AddFollower(
+                  _snapshot, _agent, std::to_string(_jobId++), "supervision",
+                  db_.first, col_.first, shard_.first).run();
+              } else {
+                RemoveFollower(
+                  _snapshot, _agent, std::to_string(_jobId++), "supervision",
+                  db_.first, col_.first, shard_.first).run();
+              }
             }
           }
         }
