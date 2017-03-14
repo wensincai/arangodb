@@ -135,6 +135,13 @@ struct Job {
   std::string id(std::string const& idOrShortName);
   std::string uuidLookup(std::string const& shortID);
 
+  /// @brief Get a random server, which is not blocked, in good condition and
+  ///        excluding "exclude" vector
+  static std::string randomIdleGoodAvailableServer(
+    Node const& snap, std::vector<std::string> const& exclude);
+  static std::string randomIdleGoodAvailableServer(
+    Node const& snap, VPackSlice const& exclude);
+  
   static std::vector<std::string> availableServers(
     const arangodb::consensus::Node&);
 
