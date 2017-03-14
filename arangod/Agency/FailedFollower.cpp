@@ -108,7 +108,6 @@ bool FailedFollower::create(std::shared_ptr<VPackBuilder> envelope) {
 bool FailedFollower::start() {
 
   using namespace std::chrono;
-
   
   std::vector<std::string> existing =
     _snapshot.exists(planColPrefix + _database + "/" + _collection + "/" +
@@ -129,6 +128,15 @@ bool FailedFollower::start() {
       planColPrefix + _database + "/" + _collection + "/shards/" + _shard)
     .slice();
 
+  // Get proper replacement
+  _to = randomIdleGoodAvailableServer(_snapshot, planned);
+  if (_to.empty()) {
+    return false;
+  }
+
+  LOG_TOPIC(INFO, Logger::SUPERVISION)
+    << "Start failedFollower for " + _shard + " from " + _from + " to " + _to;  
+
   // Copy todo to pending
   Builder todo;
   { VPackArrayBuilder a(&todo);
@@ -143,12 +151,6 @@ bool FailedFollower::start() {
     } else {
       todo.add(_jb->slice()[0].get(toDoPrefix + _jobId));
     }}
-
-  // Get proper replacement
-  _to = randomIdleGoodAvailableServer(_snapshot, planned);
-  if (_to.empty()) {
-    return false;
-  }
 
   // Replace from by to in plan and that's it
   Builder ns;
