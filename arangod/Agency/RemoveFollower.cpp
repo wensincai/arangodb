@@ -88,7 +88,7 @@ bool RemoveFollower::create(std::shared_ptr<VPackBuilder> envelope) {
   _jb->add(VPackValue(path));
   { VPackObjectBuilder guard(_jb.get());
     _jb->add("creator", VPackValue(_creator));
-    _jb->add("type", VPackValue("RemoveFollower"));
+    _jb->add("type", VPackValue("removeFollower"));
     _jb->add("database", VPackValue(_database));
     _jb->add("collection", VPackValue(_collection));
     _jb->add("shard", VPackValue(_shard));
