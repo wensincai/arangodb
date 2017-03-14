@@ -139,6 +139,8 @@ struct Job {
   ///        excluding "exclude" vector
   static std::string randomIdleGoodAvailableServer(
     Node const& snap, std::vector<std::string> const& exclude);
+  static std::string randomIdleGoodAvailableServer(
+    Node const& snap, VPackSlice const& exclude);
   
   static std::vector<std::string> availableServers(
     const arangodb::consensus::Node&);

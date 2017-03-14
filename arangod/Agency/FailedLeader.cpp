@@ -111,10 +111,13 @@ bool FailedLeader::start() {
   // Fail if got distributeShardsLike
   if (existing.size() == 5) {
     finish("", _shard, false, "Collection has distributeShardsLike");
-  } else if (existing.size() < 4) {
+  }
+  // Fail if collection gone
+  else if (existing.size() < 4) { 
     finish("", _shard, true, "Collection " + _collection + " gone");
   }
 
+  // Get healthy in Sync follower common to all prototype + clones
   auto commonHealthyInSync =
     findCommonHealthyInSyncFollower(_snapshot, _database, _collection, _shard);
   if (commonHealthyInSync.empty()) {
@@ -127,11 +130,13 @@ bool FailedLeader::start() {
     << "Start failedLeader for " + _shard + " from " + _from + " to " + _to;  
   
   using namespace std::chrono;
-  
+
+  // Current servers vector
   auto const& current =
     _snapshot(
       curColPrefix + _database + "/" + _collection + "/" + _shard + "/servers")
     .slice();
+  // Planned servers vector
   auto const& planned =
     _snapshot(
       planColPrefix + _database + "/" + _collection + "/shards/" + _shard)
@@ -152,13 +157,20 @@ bool FailedLeader::start() {
     } else {
       todo.add(_jb->slice()[0].get(toDoPrefix + _jobId));
     }}
-  
+
+  // New plan vector excluding _to and _from
   std::vector<std::string> planv;
   for (auto const& i : VPackArrayIterator(planned)) {
     auto s = i.copyString();
     if (s != _from && s != _to) {
       planv.push_back(s);
     }
+  }
+
+  // Additional follower, if applicable
+  auto additionalFollower = randomIdleGoodAvailableServer(_snapshot, planned);
+  if (!additionalFollower.empty()) {
+    planv.push_back(additionalFollower);
   }
 
   // Transactions
@@ -290,6 +302,11 @@ bool FailedLeader::start() {
 }
 
 JOB_STATUS FailedLeader::status() {
+
+  if(!_snapshot.has(planColPrefix + _database + "/" + _collection)) {
+    finish("", _shard, true, "Collection " + _collection + " gone");
+    return FINISHED;
+  }
 
   if (_status != PENDING) {
     return _status;

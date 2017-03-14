@@ -187,6 +187,22 @@ std::string Job::randomIdleGoodAvailableServer(
 }
 
 
+std::string Job::randomIdleGoodAvailableServer(Node const& snap,
+                                               Slice const& exclude) {
+
+  std::vector<std::string> ev;
+  if (exclude.isArray()) {
+    for (const auto& s : VPackArrayIterator(exclude)) {
+      if (s.isString()) {
+        ev.push_back(s.copyString());
+      }
+    }
+  }
+  return randomIdleGoodAvailableServer(snap,ev);
+
+}
+
+
 std::vector<std::string> Job::availableServers(Node const& snapshot) {
 
   std::vector<std::string> ret;
