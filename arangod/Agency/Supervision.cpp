@@ -649,6 +649,10 @@ void Supervision::enforceReplication() {
                 break;
               }
             }
+            // Check that shard is not locked:
+            if (_snapshot.has(blockedShardsPrefix + shard_.first)) {
+              found = true;
+            }
             if (!found) {
               if (actualReplicationFactor < replicationFactor) {
                 AddFollower(
