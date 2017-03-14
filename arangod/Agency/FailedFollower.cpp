@@ -79,7 +79,7 @@ bool FailedFollower::create(std::shared_ptr<VPackBuilder> envelope) {
 
   using namespace std::chrono;
   LOG_TOPIC(INFO, Logger::SUPERVISION)
-    << "Create failedLeader for " + _shard + " from " + _from;
+    << "Create failedFollower for " + _shard + " from " + _from;
   
   _jb = std::make_shared<Builder>();
   { VPackArrayBuilder transaction(_jb.get());
@@ -109,6 +109,7 @@ bool FailedFollower::start() {
 
   using namespace std::chrono;
 
+  
   std::vector<std::string> existing =
     _snapshot.exists(planColPrefix + _database + "/" + _collection + "/" +
                      "distributeShardsLike");
@@ -116,10 +117,13 @@ bool FailedFollower::start() {
   // Fail if got distributeShardsLike
   if (existing.size() == 5) {
     finish("", _shard, false, "Collection has distributeShardsLike");
-  } else if (existing.size() < 4) {
+  }
+  // Collection gone
+  else if (existing.size() < 4) {
     finish("", _shard, true, "Collection " + _collection + " gone");
   }
 
+  // Planned servers vector
   auto const& planned =
     _snapshot(
       planColPrefix + _database + "/" + _collection + "/shards/" + _shard)
@@ -137,21 +141,24 @@ bool FailedFollower::start() {
         return false;
       }
     } else {
-    todo.add(_jb->slice().get(toDoPrefix + _jobId).valueAt(0));
+      todo.add(_jb->slice()[0].get(toDoPrefix + _jobId));
     }}
 
-  // Replace from by to in plan and that's it
-  std::vector<std::string> planv;
-  for (auto const& i : VPackArrayIterator(planned)) {
-    auto s = i.copyString();
-    planv.push_back((s != _from) ? s : _to);
-  }
-
-  std::string _to = randomIdleGoodAvailableServer(_snapshot, planv);
+  // Get proper replacement
+  _to = randomIdleGoodAvailableServer(_snapshot, planned);
   if (_to.empty()) {
     return false;
   }
 
+  // Replace from by to in plan and that's it
+  Builder ns;
+  { VPackArrayBuilder servers(&ns);
+    for (auto const& i : VPackArrayIterator(planned)) {
+      auto s = i.copyString();
+      ns.add(VPackValue((s != _from) ? s : _to));
+    }
+  }
+  
   // Transaction
   auto job = std::make_shared<Builder>();
 
@@ -165,38 +172,37 @@ bool FailedFollower::start() {
     { VPackArrayBuilder stillThere(job.get()); // Still failing?
       job->add(VPackValue(agencyPrefix + healthPrefix + _from + "/Status"));}
     
-    // Operations ----------------------------------------------------------
     { VPackArrayBuilder transaction(job.get());
-      // Add finished entry
-      job->add(VPackValue(agencyPrefix + finishedPrefix + _jobId));
-      { VPackObjectBuilder ts(job.get());
-        job->add("timeStarted", // start
-                     VPackValue(timepointToString(system_clock::now())));
-        job->add("timeFinished", // same same :)
-                     VPackValue(timepointToString(system_clock::now())));
-        job->add("toServer", VPackValue(_to)); // toServer
-        for (auto const& obj : VPackObjectIterator(todo.slice()[0])) {
-          job->add(obj.key.copyString(), obj.value);
+        // Operations ----------------------------------------------------------
+      { VPackObjectBuilder operations(job.get());
+        // Add finished entry -----
+        job->add(VPackValue(agencyPrefix + finishedPrefix + _jobId));
+        { VPackObjectBuilder ts(job.get());
+          job->add("timeStarted", // start
+                   VPackValue(timepointToString(system_clock::now())));
+          job->add("timeFinished", // same same :)
+                   VPackValue(timepointToString(system_clock::now())));
+          job->add("toServer", VPackValue(_to)); // toServer
+          for (auto const& obj : VPackObjectIterator(todo.slice()[0])) {
+            job->add(obj.key.copyString(), obj.value);
+          }
         }
-      }
-      // Remove todo entry ------
-      job->add(VPackValue(agencyPrefix + toDoPrefix + _jobId));
-      { VPackObjectBuilder rem(job.get());
-        job->add("op", VPackValue("delete")); }
-      // DB server vector -------
-      Builder ns;
-      { VPackArrayBuilder servers(&ns);
-        ns.add(VPackValue(_to));  
-        for (auto const& i : planv) {
-          ns.add(VPackValue(i));
+        // Remove todo entry ------
+        job->add(VPackValue(agencyPrefix + toDoPrefix + _jobId));
+        { VPackObjectBuilder rem(job.get());
+          job->add("op", VPackValue("delete")); }
+        // Plan change ------------
+        for (auto const& clone :
+               clones(_snapshot, _database, _collection, _shard)) {
+          job->add(
+            agencyPrefix + planColPrefix + _database + "/"
+            + clone.collection + "/shards/" + clone.shard, ns.slice());
         }
-      }
-      for (auto const& clone :
-             clones(_snapshot, _database, _collection, _shard)) {
-        job->add(
-          agencyPrefix + planColPrefix + _database + "/"
-          + clone.collection + "/shards/" + clone.shard, ns.slice());
-      }
+        
+        // Increment Plan/Version -
+        job->add(VPackValue(agencyPrefix + planVersion));
+        { VPackObjectBuilder version(job.get());
+          job->add("op", VPackValue("increment")); }} // Operations ------
       // Preconditions -------------------------------------------------------
       { VPackObjectBuilder preconditions(job.get());
         // Collection should not have been deleted in the mt
@@ -208,11 +214,11 @@ bool FailedFollower::start() {
         // Status should still be failed
         job->add( 
           VPackValue(agencyPrefix + healthPrefix + _from + "/Status"));
-        { VPackObjectBuilder stillExists(job.get());
+        { VPackObjectBuilder stillFailing(job.get());
           job->add("old", VPackValue("FAILED")); }
         
       } // Preconditions -----------------------------------------------------
-      
+        
     }}
   
   // Abort job blocking server if abortable
