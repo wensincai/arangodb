@@ -140,38 +140,52 @@ bool Job::finish(std::string const& server, std::string const& shard,
 }
 
 
-/*
-std::vector<std::string> Job::randomIdleGoodAvailableServers(
+
+std::string Job::randomIdleGoodAvailableServer(
   Node const& snap, std::vector<std::string> const& exclude) {
 
   std::vector<std::string> as = availableServers(snap);
-  auto ex(exclude);
-  std::sort(ex.begin(), ex.end());
   std::string ret;
+  auto ex(exclude);
 
-  // Remove UNGOOD servers from list
+  // ungood;
   try {
-    for (iter = as.begin(); iter != as.end(); ) {
-      if (
-        snapshot(healthPrefix + "/" + srv + "/Status").copyString() != "GOOD") {
-        iter = as.erase(iter); // not invalidating iterators. you gotta  love c++
-      } else {
-        ++iter;
+    for (auto const& srv : snap(healthPrefix).children()) {
+      if ((*srv.second)("Status").toJson() != "GOOD") {
+        ex.push_back(srv.first);
       }
     }
   } catch (...) {}
+  
+  // blocked;
+  try {
+    for (auto const& srv : snap(blockedServersPrefix).children()) {
+      ex.push_back(srv.first);
+    }
+  } catch (...) {}
+ 
 
-  if (as.empty) {
-    return std::string();
-  } else {
-    if (as.size > 1) {
+  // Remove excluded servers
+  std::sort(std::begin(ex), std::end(ex));
+  as.erase(
+    std::remove_if(
+      std::begin(as),std::end(as),
+      [&](std::string const& s){
+        return std::binary_search(
+          std::begin(ex), std::end(ex), s);}), std::end(as));
+  
+  // Choose random server from rest
+  if (!as.empty()) {
+    if (as.size() > 1) {
       std::random_shuffle(as.begin(), as.end());
     }
-    return as.front();
+    ret = as.front();
   }
+
+  return ret;
   
 }
-*/
+
 
 std::vector<std::string> Job::availableServers(Node const& snapshot) {
 

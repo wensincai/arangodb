@@ -147,10 +147,10 @@ bool FailedFollower::start() {
     planv.push_back((s != _from) ? s : _to);
   }
 
-/*  std::string _to = randomGoodIdleServer(_snapshot, planv);
+  std::string _to = randomIdleGoodAvailableServer(_snapshot, planv);
   if (_to.empty()) {
-    return;
-    }*/
+    return false;
+  }
 
   // Transaction
   auto job = std::make_shared<Builder>();
