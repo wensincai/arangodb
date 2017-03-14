@@ -631,14 +631,15 @@ void Supervision::enforceReplication() {
           size_t actualReplicationFactor = shard.slice().length();
           if (actualReplicationFactor != replicationFactor) {
             // Check that there is not yet an addFollower or removeFollower
-            // job in ToDo for this shard:
+            // or moveShard job in ToDo for this shard:
             auto const& todo = _snapshot(toDoPrefix).children();
             bool found = false;
             for (auto const& pair : todo) {
               auto const& job = pair.second;
               if (job->has("type") &&
                   ((*job)("type").getString() == "addFollower" ||
-                   (*job)("type").getString() == "removeFollower") &&
+                   (*job)("type").getString() == "removeFollower" ||
+                   (*job)("type").getString() == "moveShard") &&
                   job->has("shard") &&
                   (*job)("shard").getString() == shard_.first) {
                 found = true;
