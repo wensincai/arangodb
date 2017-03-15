@@ -39,6 +39,9 @@ Returned if the user can be added by the server
 If the JSON representation is malformed or mandatory data is missing
 from the request.
 
+@RESTRETURNCODE{409}
+Returned if a user with the same name already exists.
+
 @EXAMPLES
 
 @EXAMPLE_ARANGOSH_RUN{RestCreateUser}
@@ -79,8 +82,8 @@ REST call.
 
 @RESTRETURNCODES
 
-@RESTRETURNCODE{201}
-Returned if the user can be added by the server
+@RESTRETURNCODE{200}
+Returned if the access permissions were changed successfully.
 
 @RESTRETURNCODE{400}
 If the JSON representation is malformed or mandatory data is missing
@@ -123,20 +126,26 @@ Fetch the list of databases available to the specified *user*. You
 need permission to the *_system* database in order to execute this
 REST call.
 
+The call will return a JSON object with the per-database access
+privileges for the specified user. The *result* object will contain
+the databases names as object keys, and the associated privileges
+for the database as values.
+
 @RESTRETURNCODES
 
 @RESTRETURNCODE{200}
 Returned if the list of available databases can be returned.
 
 @RESTRETURNCODE{400}
-If the access privileges aren't right etc.
+If the access privileges are not right etc.
 
 @EXAMPLES
 
 @EXAMPLE_ARANGOSH_RUN{RestFetchUserDatabaseList}
     var users = require("@arangodb/users");
     var theUser="anotherAdmin@secapp";
-    users.save(theUser, "secret")
+    users.save(theUser, "secret");
+    users.grantDatabase(theUser, "_system", "rw");
 
     var url = "/_api/user/" + theUser + "/database/";
     var response = logCurlRequest('GET', url);

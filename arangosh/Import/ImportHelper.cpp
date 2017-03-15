@@ -156,6 +156,7 @@ ImportHelper::ImportHelper(httpclient::SimpleHttpClient* client,
       _rowsRead(0),
       _rowOffset(0),
       _rowsToSkip(0),
+      _keyColumn(-1),
       _onDuplicateAction("error"),
       _collectionName(),
       _lineBuffer(TRI_UNKNOWN_MEM_ZONE),
@@ -249,10 +250,15 @@ bool ImportHelper::importDelimited(std::string const& collectionName,
       _errorMessage = TRI_LAST_ERROR_STR;
       return false;
     } else if (n == 0) {
+      // we have read the entire file
+      // now have the CSV parser parse an additional new line so it
+      // will definitely process the last line of the input data if
+      // it did not end with a newline
+      TRI_ParseCsvString(&parser, "\n", 1);
       break;
     }
 
-    totalRead += (int64_t)n;
+    totalRead += static_cast<int64_t>(n);
     reportProgress(totalLength, totalRead, nextProgress);
 
     TRI_ParseCsvString(&parser, buffer, n);
@@ -353,7 +359,7 @@ bool ImportHelper::importJson(std::string const& collectionName,
       checkedFront = true;
     }
 
-    totalRead += (int64_t)n;
+    totalRead += static_cast<int64_t>(n);
     reportProgress(totalLength, totalRead, nextProgress);
 
     if (_outputBuffer.length() > _maxUploadSize) {
@@ -481,12 +487,21 @@ void ImportHelper::addField(char const* field, size_t fieldLength, size_t row,
     _lineBuffer.appendChar(',');
   }
 
+  if (_keyColumn == -1 && fieldLength == 4 && memcmp(field, "_key", 4) == 0) {
+    _keyColumn = column;
+  }
+
+  if (_keyColumn == static_cast<decltype(_keyColumn)>(column)) {
+    _lineBuffer.appendJsonEncoded(field, fieldLength);
+    return;
+  }
+
   if (row == 0 + _rowsToSkip || escaped) {
     // head line or escaped value
     _lineBuffer.appendJsonEncoded(field, fieldLength);
     return;
   }
-    
+
   if (!_convert) {
     _lineBuffer.appendText(field, fieldLength);
     return;
@@ -661,7 +676,7 @@ void ImportHelper::sendCsvBuffer() {
   if (!checkCreateCollection()) {
     return;
   }
-    
+
   std::unordered_map<std::string, std::string> headerFields;
   std::string url("/_api/import?" + getCollectionUrlPart() + "&line=" +
                   StringUtils::itoa(_rowOffset) + "&details=true&onDuplicate=" +
@@ -676,7 +691,7 @@ void ImportHelper::sendCsvBuffer() {
   if (_firstChunk && _overwrite) {
     url += "&overwrite=true";
   }
-  
+
   _firstChunk = false;
 
   std::unique_ptr<SimpleHttpResult> result(_client->request(
