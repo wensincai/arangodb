@@ -967,6 +967,8 @@ function updateCurrentForCollections(localErrors, plannedCollections,
   let localDatabases = getLocalDatabases();
   let database;
 
+  let shardMap = getShardMap(plannedCollections);
+
   function assembleLocalCollectionInfo(info, error) {
     if (error.collection) {
       return {
@@ -1089,7 +1091,8 @@ function updateCurrentForCollections(localErrors, plannedCollections,
                 if (currentCollections[database][collection].hasOwnProperty(shard)) {
                   let cur = currentCollections[database][collection][shard];
                   if (!localCollections.hasOwnProperty(shard) &&
-                      cur.servers[0] === ourselves) {
+                      cur.servers[0] === ourselves &&
+                      !shardMap.hasOwnProperty(shard)) {
                     Object.assign(trx, makeDropCurrentEntryCollection(database, collection, shard));
                   }
                 }
