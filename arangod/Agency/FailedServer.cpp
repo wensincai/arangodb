@@ -168,6 +168,8 @@ bool FailedServer::start() {
 
         for (auto const& shard : collection("shards").children()) {
 
+          size_t pos = 0;
+
           for (auto const& it : VPackArrayIterator(shard.second->slice())) {
 
             auto dbs = it.copyString();
@@ -185,6 +187,7 @@ bool FailedServer::start() {
                   shard.first, _server).run();
               }
             }
+            pos++;
           }
         }
       }
