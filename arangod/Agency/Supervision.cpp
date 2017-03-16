@@ -353,9 +353,6 @@ std::vector<check_t> Supervision::checkCoordinators() {
         std::chrono::system_clock::now() -
         stringToTimepoint(lastHeartbeatAcked)).count();
       
-      auto secondsSinceLeader = std::chrono::duration<double>(
-        std::chrono::system_clock::now() - _agent->leaderSince()).count();
-      
       if (elapsed > _gracePeriod || !sync) {
         if (lastStatus == Supervision::HEALTH_STATUS_BAD) {
           report->add("Status", VPackValue(Supervision::HEALTH_STATUS_FAILED));
