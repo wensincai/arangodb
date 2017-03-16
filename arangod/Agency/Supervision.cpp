@@ -277,7 +277,7 @@ std::vector<check_t> Supervision::checkCoordinators() {
   bool foxxmasterOk = false;
   std::vector<std::string> todelete;
   for (auto const& machine : _snapshot(healthPrefix).children()) {
-    if (machine.first.substr(0, 2) == "Co") {
+    if (machine.first.substr(0, 2) == "CR") {
       todelete.push_back(machine.first);
     }
   }
