@@ -262,9 +262,10 @@ void AgencyTransientTransaction::toVelocyPack(VPackBuilder& builder) const {
 }
 
 bool AgencyTransientTransaction::validate(AgencyCommResult const& result) const {
-  return (result.slice().isObject() &&
-          result.slice().hasKey("results") &&
-          result.slice().get("results").isArray());
+  return (result.slice().isArray() &&
+          result.slice().length() > 0 && 
+          result.slice()[0].isBool() &&
+          result.slice()[0].getBool() == true);
 }
 
 // -----------------------------------------------------------------------------

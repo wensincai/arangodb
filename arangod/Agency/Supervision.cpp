@@ -105,33 +105,29 @@ std::vector<check_t> Supervision::checkDBServers() {
       _snapshot(planDBServersPrefix).children();
   auto const& serversRegistered =
       _snapshot(currentServersRegisteredPrefix).children();
-
+  auto secondsSinceLeader = std::chrono::duration<double>(
+    std::chrono::system_clock::now() - _agent->leaderSince()).count();
+  
   std::vector<std::string> todelete;
   for (auto const& machine : _snapshot(healthPrefix).children()) {
     if (machine.first.substr(0, 2) == "DB") {
       todelete.push_back(machine.first);
     }
   }
-
+  
   for (auto const& machine : machinesPlanned) {
-    bool good = false;
-    bool reportPersistent = false;
     std::string lastHeartbeatTime, lastHeartbeatAcked, lastStatus,
-        heartbeatTime, heartbeatStatus, serverID;
-
-    serverID = machine.first;
-    heartbeatTime = _transient(syncPrefix + serverID + "/time").toJson();
-    heartbeatStatus = _transient(syncPrefix + serverID + "/status").toJson();
-
+      heartbeatTime, heartbeatStatus, serverID(machine.first),
+      shortName("Unknown");
+    bool good(false), reportPersistent(false),
+      sync(_transient.has(syncPrefix + serverID));
+    
     todelete.erase(std::remove(todelete.begin(), todelete.end(), serverID),
                    todelete.end());
-
-    std::string shortName = "Unknown";
-    try {
-      shortName = _snapshot(targetShortID + serverID + "/ShortName").toJson();
-    } catch (...) {} 
-
-    try {  // Existing
+    
+    if (sync) {
+      heartbeatTime = _transient(syncPrefix + serverID + "/time").toJson();
+      heartbeatStatus = _transient(syncPrefix + serverID + "/status").toJson();
       lastHeartbeatTime =
         _transient(healthPrefix + serverID + "/LastHeartbeatSent").toJson();
       lastHeartbeatAcked =
@@ -140,7 +136,7 @@ std::vector<check_t> Supervision::checkDBServers() {
       if (lastHeartbeatTime != heartbeatTime) {  // Update
         good = true;
       }
-    } catch (...) {  // New server
+    } else if (secondsSinceLeader < _gracePeriod) {
       good = true;
     }
 
@@ -195,12 +191,9 @@ std::vector<check_t> Supervision::checkDBServers() {
         std::chrono::system_clock::now() -
         stringToTimepoint(lastHeartbeatAcked)).count();
       
-      auto secondsSinceLeader = std::chrono::duration<double>(
-        std::chrono::system_clock::now() - _agent->leaderSince()).count();
-      
       // Failed servers are considered only after having taken on leadership
       // for at least grace period
-      if (elapsed > _gracePeriod && secondsSinceLeader > _gracePeriod) {
+      if (elapsed > _gracePeriod || !sync) {
         if (lastStatus == Supervision::HEALTH_STATUS_BAD) {
           reportPersistent = true;
           report->add("Status", VPackValue(Supervision::HEALTH_STATUS_FAILED));
@@ -272,7 +265,9 @@ std::vector<check_t> Supervision::checkCoordinators() {
       _snapshot(planCoordinatorsPrefix).children();
   auto const& serversRegistered =
       _snapshot(currentServersRegisteredPrefix).children();
-
+  auto secondsSinceLeader = std::chrono::duration<double>(
+    std::chrono::system_clock::now() - _agent->leaderSince()).count();
+  
   std::string currentFoxxmaster;
   try {
     currentFoxxmaster = _snapshot(foxxmaster).getString();
@@ -288,24 +283,21 @@ std::vector<check_t> Supervision::checkCoordinators() {
   }
 
   for (auto const& machine : machinesPlanned) {
-    bool reportPersistent = false;
-    bool good = false;
     std::string lastHeartbeatTime, lastHeartbeatAcked, lastStatus,
-        heartbeatTime, heartbeatStatus, serverID;
-
-    serverID = machine.first;
-    heartbeatTime = _transient(syncPrefix + serverID + "/time").toJson();
-    heartbeatStatus = _transient(syncPrefix + serverID + "/status").toJson();
-
+      heartbeatTime, heartbeatStatus, serverID = machine.first,
+      shortName = "Unknown";
+    
+    bool reportPersistent(false), good(false),
+      sync(_transient.has(syncPrefix + serverID));
+    
     todelete.erase(std::remove(todelete.begin(), todelete.end(), serverID),
                    todelete.end());
+    
+    shortName = _snapshot(targetShortID + serverID + "/ShortName").toJson();
 
-    std::string shortName = "Unknown";
-    try {
-      shortName = _snapshot(targetShortID + serverID + "/ShortName").toJson();
-    } catch (...) {} 
-
-    try {  // Existing
+    if (sync) {
+      heartbeatTime = _transient(syncPrefix + serverID + "/time").toJson();
+      heartbeatStatus = _transient(syncPrefix + serverID + "/status").toJson();
       lastHeartbeatTime =
         _transient(healthPrefix + serverID + "/LastHeartbeatSent").toJson();
       lastHeartbeatAcked =
@@ -314,7 +306,7 @@ std::vector<check_t> Supervision::checkCoordinators() {
       if (lastHeartbeatTime != heartbeatTime) {  // Update
         good = true;
       }
-    } catch (...) {  // New server
+    } else if (secondsSinceLeader < _gracePeriod) {  // New server
       good = true;
     }
 
@@ -364,7 +356,7 @@ std::vector<check_t> Supervision::checkCoordinators() {
       auto secondsSinceLeader = std::chrono::duration<double>(
         std::chrono::system_clock::now() - _agent->leaderSince()).count();
       
-      if (elapsed > _gracePeriod && secondsSinceLeader > _gracePeriod) {
+      if (elapsed > _gracePeriod || !sync) {
         if (lastStatus == Supervision::HEALTH_STATUS_BAD) {
           report->add("Status", VPackValue(Supervision::HEALTH_STATUS_FAILED));
           reportPersistent = true;

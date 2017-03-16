@@ -715,7 +715,7 @@ trans_ret_t Agent::transient(query_t const& queries) {
     // Read and writes
     for (const auto& query : VPackArrayIterator(queries->slice())) {
       if (query[0].isObject()) {
-        _transient.apply(query);
+        ret->add(VPackValue(_transient.apply(query)));
       } else if (query[0].isString()) {
         _transient.read(query, *ret);
       }
