@@ -110,7 +110,7 @@ std::vector<check_t> Supervision::checkDBServers() {
   
   std::vector<std::string> todelete;
   for (auto const& machine : _snapshot(healthPrefix).children()) {
-    if (machine.first.substr(0, 2) == "DB") {
+    if (machine.first.substr(0, 2) == "PR") {
       todelete.push_back(machine.first);
     }
   }
