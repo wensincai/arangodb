@@ -957,7 +957,8 @@ function executePlanForCollections(plannedCollections) {
 // / @brief updateCurrentForCollections
 // /////////////////////////////////////////////////////////////////////////////
 
-function updateCurrentForCollections(localErrors, currentCollections) {
+function updateCurrentForCollections(localErrors, plannedCollections,
+                                                  currentCollections) {
   let ourselves = global.ArangoServerState.id();
 
   let db = require('internal').db;
@@ -1068,7 +1069,7 @@ function updateCurrentForCollections(localErrors, currentCollections) {
   });
 
   // Go through all current databases and collections and remove stuff
-  // if no longer present locally:
+  // if no longer present locally, provided :
   for (database in currentCollections) {
     if (currentCollections.hasOwnProperty(database)) {
       if (localDatabases.hasOwnProperty(database)) {
@@ -1220,7 +1221,8 @@ function migratePrimary(plan, current) {
 
   // diff current and local and prepare agency transactions or whatever
   // to update current. Will report the errors created locally to the agency
-  let trx = updateCurrentForCollections(localErrors, current.Collections);
+  let trx = updateCurrentForCollections(localErrors, plan.Collections,
+                                                     current.Collections);
   if (Object.keys(trx).length > 0) {
     trx[curVersion] = {op: 'increment'};
     trx = [trx];

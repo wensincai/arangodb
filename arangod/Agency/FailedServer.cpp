@@ -28,7 +28,6 @@
 #include "Agency/FailedLeader.h"
 #include "Agency/FailedFollower.h"
 #include "Agency/Job.h"
-#include "Agency/UnassumedLeadership.h"
 
 using namespace arangodb::consensus;
 

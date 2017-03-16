@@ -30,7 +30,6 @@
 #include "Agency/FailedServer.h"
 #include "Agency/MoveShard.h"
 #include "Agency/RemoveFollower.h"
-#include "Agency/UnassumedLeadership.h"
 
 using namespace arangodb::consensus;
 
@@ -69,10 +68,6 @@ JobContext::JobContext (JOB_STATUS status, std::string id, Node const& snapshot,
     _job =
       std::unique_ptr<RemoveFollower>(
         new RemoveFollower(snapshot, agent, status, id));
-  } else if (type == "unassumedLeadership") {
-    _job =
-      std::unique_ptr<UnassumedLeadership>(
-        new UnassumedLeadership(snapshot, agent, status, id));
   } else {
     LOG_TOPIC(ERR, Logger::AGENCY) <<
       "Failed to run supervision job " << type << " with id " << id;

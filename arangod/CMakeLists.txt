@@ -104,7 +104,6 @@ SET(ARANGOD_SOURCES
   Agency/Store.cpp
   Agency/StoreCallback.cpp
   Agency/Supervision.cpp
-  Agency/UnassumedLeadership.cpp
   Agency/v8-agency.cpp
   Aql/Aggregator.cpp
   Aql/AqlItemBlock.cpp
