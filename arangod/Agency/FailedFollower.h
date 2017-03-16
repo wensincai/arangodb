@@ -31,13 +31,13 @@ namespace arangodb {
 namespace consensus {
 
 struct FailedFollower : public Job {
-  FailedFollower(Node const& snapshot, AgentInterface* agent, std::string const& jobId,
+  FailedFollower(Node const& snapshot, AgentInterface* agent,
+                 std::string const& jobId,
                  std::string const& creator = std::string(),
-               std::string const& database = std::string(),
-               std::string const& collection = std::string(),
-               std::string const& shard = std::string(),
-               std::string const& from = std::string(),
-               std::string const& to = std::string());
+                 std::string const& database = std::string(),
+                 std::string const& collection = std::string(),
+                 std::string const& shard = std::string(),
+                 std::string const& from = std::string());
 
   FailedFollower(Node const& snapshot, AgentInterface* agent,
                  JOB_STATUS status, std::string const& jobId);

@@ -35,14 +35,12 @@ FailedFollower::FailedFollower(Node const& snapshot, AgentInterface* agent,
                                std::string const& database,
                                std::string const& collection,
                                std::string const& shard,
-                               std::string const& from,
-                               std::string const& to)
+                               std::string const& from)
     : Job(NOTFOUND, snapshot, agent, jobId, creator),
       _database(database),
       _collection(collection),
       _shard(shard),
-      _from(from),
-      _to(to) {}
+      _from(from) {}
 
 FailedFollower::FailedFollower(Node const& snapshot, AgentInterface* agent,
                                JOB_STATUS status, std::string const& jobId)

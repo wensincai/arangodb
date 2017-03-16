@@ -156,66 +156,35 @@ bool FailedServer::start() {
       for (auto const& collptr : database.second->children()) {
         auto const& collection = *(collptr.second);
 
-        auto const& found = cdatabase.find(collptr.first);
-        if (found != cdatabase.end() && !found->second->children().empty()) {
+        auto const& replicationFactor = collection("replicationFactor");
 
-          auto const& collection = *(collptr.second);
-          auto const& replicationFactor = collection("replicationFactor");
+        if (replicationFactor.slice().getUInt() == 1) {
+          continue;  // no point to try salvaging unreplicated data
+        }
 
-          if (replicationFactor.slice().getUInt() > 1) {
+        if (collection.has("distributeShardsLike")) {
+          continue;  // we only deal with the master
+        }
 
-            bool isClone = false;
-            try { // Clone
-              if(!collection("distributeShardsLike").slice().copyString().empty()) {
-                isClone = true;
-              }
-            } catch (...) {} // Not clone
-            
-            auto available = availableServers(_snapshot);
-              
-            for (auto const& shard : collection("shards").children()) {
+        for (auto const& shard : collection("shards").children()) {
 
-              size_t pos = 0;
-              bool found = false;
-              
-              for (auto const& it : VPackArrayIterator(shard.second->slice())) {
+          for (auto const& it : VPackArrayIterator(shard.second->slice())) {
 
-                auto dbs = it.copyString();
+            auto dbs = it.copyString();
 
-                available.erase(
-                  std::remove(available.begin(), available.end(), dbs),
-                  available.end());
-
-                if (dbs == _server) {
-                  if (pos == 0 && !isClone) {
-                    FailedLeader(
-                      _snapshot, _agent, _jobId + "-" + std::to_string(sub++),
-                      _jobId, database.first, collptr.first,
-                      shard.first, _server).run();
-                    continue;
-                  } else {
-                    found = true;
-                  }
-                }
-                
-                ++pos;
-              }
-
-              if (found && !available.empty() && !isClone) {
-                auto randIt = available.begin();
-                std::advance(randIt, std::rand() % available.size());
+            if (dbs == _server) {
+              if (pos == 0) {
+                FailedLeader(
+                  _snapshot, _agent, _jobId + "-" + std::to_string(sub++),
+                  _jobId, database.first, collptr.first,
+                  shard.first, _server).run();
+              } else {
                 FailedFollower(
                   _snapshot, _agent, _jobId + "-" + std::to_string(sub++),
                   _jobId, database.first, collptr.first,
-                  shard.first, _server, *randIt).run();
+                  shard.first, _server).run();
               }
             }
-          }
-        } else {
-          for (auto const& shard : collection("shards").children()) {
-            UnassumedLeadership(
-              _snapshot, _agent, _jobId + "-" + std::to_string(sub++), _jobId,
-              database.first, collptr.first, shard.first, _server).run();
           }
         }
       }
