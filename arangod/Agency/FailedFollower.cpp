@@ -48,7 +48,7 @@ FailedFollower::FailedFollower(Node const& snapshot, AgentInterface* agent,
 
   // Get job details from agency:
   try {
-    std::string path = pos[status] + _jobId;
+    std::string path = pos[status] + _jobId + "/";
     _database = _snapshot(path + "database").getString();
     _collection = _snapshot(path + "collection").getString();
     _from = _snapshot(path + "fromServer").getString();
