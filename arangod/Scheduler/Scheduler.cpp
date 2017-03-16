@@ -180,7 +180,13 @@ Scheduler::~Scheduler() {
     _threadManager->cancel();
   }
 
-  deleteOldThreads();
+  try {
+    deleteOldThreads();
+  } catch (...) {
+    // probably out of memory here...
+    // must not throw in the dtor
+    LOG(ERR) << "unable to delete old scheduler threads";
+  }
 }
 
 // -----------------------------------------------------------------------------
