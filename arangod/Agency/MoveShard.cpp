@@ -49,13 +49,13 @@ MoveShard::MoveShard(Node const& snapshot, AgentInterface* agent,
   // Get job details from agency:
   try {
     std::string path = pos[status] + _jobId + "/";
-    _database = _snapshot(path + "database").getString();
-    _collection = _snapshot(path + "collection").getString();
-    _from = _snapshot(path + "fromServer").getString();
-    _to = _snapshot(path + "toServer").getString();
-    _shard = _snapshot(path + "shard").getString();
-    _isLeader = _snapshot(path + "isLeader").slice().isTrue();
-    _creator = _snapshot(path + "creator").getString();
+    _database = _snapshot.get(path + "database").getString();
+    _collection = _snapshot.get(path + "collection").getString();
+    _from = _snapshot.get(path + "fromServer").getString();
+    _to = _snapshot.get(path + "toServer").getString();
+    _shard = _snapshot.get(path + "shard").getString();
+    _isLeader = _snapshot.get(path + "isLeader").slice().isTrue();
+    _creator = _snapshot.get(path + "creator").getString();
   } catch (std::exception const& e) {
     std::string err = 
       std::string("Failed to find job ") + _jobId + " in agency: " + e.what();
@@ -91,7 +91,7 @@ bool MoveShard::create(std::shared_ptr<VPackBuilder> envelope) {
   std::string planPath =
       planColPrefix + _database + "/" + _collection + "/shards/" + _shard;
 
-  Slice plan = _snapshot(planPath).slice();
+  Slice plan = _snapshot.get(planPath).slice();
   TRI_ASSERT(plan.isArray());
   TRI_ASSERT(plan[0].isString());
 
@@ -163,7 +163,8 @@ bool MoveShard::start() {
     finish("", "", true, "collection has been dropped in the meantime");
     return false;
   }
-  Node collection = _snapshot(planColPrefix + _database + "/" + _collection);
+  Node collection
+    = _snapshot.get(planColPrefix + _database + "/" + _collection);
   if (collection.has("distributeShardsLike")) {
     finish("", "", false,
            "collection must not have 'distributeShardsLike' attribute");
@@ -196,7 +197,7 @@ bool MoveShard::start() {
   // Check that _to is not in `Target/CleanedServers`:
   VPackBuilder cleanedServersBuilder;
   try {
-    auto cleanedServersNode = _snapshot(cleanedPrefix);
+    auto cleanedServersNode = _snapshot.get(cleanedPrefix);
     cleanedServersNode.toBuilder(cleanedServersBuilder);
   }
   catch (...) {
@@ -220,7 +221,7 @@ bool MoveShard::start() {
   // Check that _to is not in `Target/FailedServers`:
   VPackBuilder failedServersBuilder;
   try {
-    auto failedServersNode = _snapshot(failedServersPrefix);
+    auto failedServersNode = _snapshot.get(failedServersPrefix);
     failedServersNode.toBuilder(failedServersBuilder);
   }
   catch (...) {
@@ -241,7 +242,7 @@ bool MoveShard::start() {
   // Look at Plan:
   std::string planPath =
     planColPrefix + _database + "/" + _collection + "/shards/" + _shard;
-  Slice planned = _snapshot(planPath).slice();
+  Slice planned = _snapshot.get(planPath).slice();
   TRI_ASSERT(planned.isArray());
   
   int found = -1;
@@ -281,7 +282,7 @@ bool MoveShard::start() {
     // in _jb:
     if (_jb == nullptr) {
       try {
-        _snapshot(toDoPrefix + _jobId).toBuilder(todo);
+        _snapshot.get(toDoPrefix + _jobId).toBuilder(todo);
       } catch (std::exception const&) {
         // Just in case, this is never going to happen, since we will only
         // call the start() method if the job is already in ToDo.
@@ -391,7 +392,7 @@ JOB_STATUS MoveShard::pendingLeader() {
   auto considerTimeout = [&]() -> bool {
     // Not yet all in sync, consider timeout:
     std::string timeCreatedString
-      = _snapshot(pendingPrefix + _jobId + "/timeCreated").getString();
+      = _snapshot.get(pendingPrefix + _jobId + "/timeCreated").getString();
     Supervision::TimePoint timeCreated = stringToTimepoint(timeCreatedString);
     Supervision::TimePoint now(std::chrono::system_clock::now());
     if (now - timeCreated > std::chrono::duration<double>(3600.0)) {
@@ -409,7 +410,7 @@ JOB_STATUS MoveShard::pendingLeader() {
   // in the Plan:
   std::string planPath =
     planColPrefix + _database + "/" + _collection + "/shards/" + _shard;
-  Slice plan = _snapshot(planPath).slice();
+  Slice plan = _snapshot.get(planPath).slice();
   Builder trx;
   Builder pre;  // precondition
   bool finishedAfterTransaction = false;
@@ -547,7 +548,7 @@ JOB_STATUS MoveShard::pendingLeader() {
         addPreconditionCollectionStillThere(pre, _database, _collection);
         addRemoveJobFromSomewhere(trx, "Pending", _jobId);
         Builder job;
-        _snapshot(pendingPrefix + _jobId).toBuilder(job);
+        _snapshot.get(pendingPrefix + _jobId).toBuilder(job);
         addPutJobIntoSomewhere(trx, "Finished", job.slice(), "");
         addReleaseShard(trx, _shard);
         addReleaseServer(trx, _to);
@@ -592,7 +593,7 @@ JOB_STATUS MoveShard::pendingFollower() {
   if (done < shardsLikeMe.size()) {
     // Not yet all in sync, consider timeout:
     std::string timeCreatedString
-      = _snapshot(pendingPrefix + _jobId + "/timeCreated").getString();
+      = _snapshot.get(pendingPrefix + _jobId + "/timeCreated").getString();
     Supervision::TimePoint timeCreated = stringToTimepoint(timeCreatedString);
     Supervision::TimePoint now(std::chrono::system_clock::now());
     if (now - timeCreated > std::chrono::duration<double>(3600.0)) {
@@ -635,7 +636,7 @@ JOB_STATUS MoveShard::pendingFollower() {
 
       addRemoveJobFromSomewhere(trx, "Pending", _jobId);
       Builder job;
-      _snapshot(pendingPrefix + _jobId).toBuilder(job);
+      _snapshot.get(pendingPrefix + _jobId).toBuilder(job);
       addPutJobIntoSomewhere(trx, "Finished", job.slice(), "");
       addPreconditionCollectionStillThere(precondition, _database, _collection);
       addReleaseShard(trx, _shard);

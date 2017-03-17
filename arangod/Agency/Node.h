@@ -132,6 +132,9 @@ class Node {
   /// @brief Get node specified by path string
   Node const& operator()(std::string const& path) const;
 
+  /// @brief Get node specified by path string, always throw if not there
+  Node const& get(std::string const& path) const;
+
   /// @brief Remove child by name
   bool removeChild(std::string const& key);
 
