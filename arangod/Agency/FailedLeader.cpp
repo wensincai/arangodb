@@ -137,10 +137,9 @@ bool FailedLeader::start() {
       curColPrefix + _database + "/" + _collection + "/" + _shard + "/servers")
     .slice();
   // Planned servers vector
-  auto const& planned =
-    _snapshot(
-      planColPrefix + _database + "/" + _collection + "/shards/" + _shard)
-    .slice();
+  std::string planPath
+    = planColPrefix + _database + "/" + _collection + "/shards/" + _shard;
+  auto const& planned = _snapshot(planPath).slice();
 
   // Get todo entry
   Builder todo;
@@ -200,10 +199,7 @@ bool FailedLeader::start() {
             pending->add(obj.key.copyString(), obj.value);
           }
         }
-        // Remove todo entry ------
-        pending->add(VPackValue(agencyPrefix + toDoPrefix + _jobId));
-        { VPackObjectBuilder rem(pending.get());
-          pending->add("op", VPackValue("delete")); }
+        addRemoveJobFromSomewhere(*pending, "ToDo", _jobId);
         // DB server vector -------
         Builder ns;
         { VPackArrayBuilder servers(&ns);
@@ -227,30 +223,25 @@ bool FailedLeader::start() {
             agencyPrefix + planColPrefix + _database + "/"
             + clone.collection + "/shards/" + clone.shard, ns.slice());
         }
-        // Block shard ------------
-        pending->add(VPackValue(agencyPrefix + blockedShardsPrefix + _shard));
-        { VPackObjectBuilder block(pending.get());
-          pending->add("jobId", VPackValue(_jobId)); }
-        // Increment Plan/Version -
-        pending->add(VPackValue(agencyPrefix + planVersion));
-        { VPackObjectBuilder version(pending.get());
-          pending->add("op", VPackValue("increment")); }} // Operations ------
+        addBlockShard(*pending, _shard, _jobId);
+        addIncreasePlanVersion(*pending);
+      }
       // Preconditions -------------------------------------------------------
       { VPackObjectBuilder preconditions(pending.get());
-       // Collection should not have been deleted in the mt
-        pending->add( 
-          VPackValue(
-            agencyPrefix + planColPrefix + _database + "/" + _collection));
-        { VPackObjectBuilder stillExists(pending.get());
-          pending->add("oldEmpty", VPackValue(false)); }
+        // Server list in plan still as before:
+        addPreconditionUnchanged(*pending, planPath, planned);
+        // This implies that the collection has not been deleted in the mt
         // Status should still be failed
         pending->add( 
           VPackValue(agencyPrefix + healthPrefix + _from + "/Status"));
         { VPackObjectBuilder stillExists(pending.get());
           pending->add("old", VPackValue("FAILED")); }
-
+        addPreconditionServerNotBlocked(*pending, _to);
+        addPreconditionShardNotBlocked(*pending, _shard);
+        addPreconditionServerGood(*pending, _to);
       } // Preconditions -----------------------------------------------------
-    }}
+    }
+  }
   
   // Abort job blocking server if abortable
   try {
