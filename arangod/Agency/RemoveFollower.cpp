@@ -45,10 +45,10 @@ RemoveFollower::RemoveFollower(Node const& snapshot, AgentInterface* agent,
   // Get job details from agency:
   try {
     std::string path = pos[status] + _jobId + "/";
-    _database = _snapshot(path + "database").getString();
-    _collection = _snapshot(path + "collection").getString();
-    _shard = _snapshot(path + "shard").getString();
-    _creator = _snapshot(path + "creator").getString();
+    _database = _snapshot.get(path + "database").getString();
+    _collection = _snapshot.get(path + "collection").getString();
+    _shard = _snapshot.get(path + "shard").getString();
+    _creator = _snapshot.get(path + "creator").getString();
   } catch (std::exception const& e) {
     std::stringstream err;
     err << "Failed to find job " << _jobId << " in agency: " << e.what();
@@ -126,7 +126,7 @@ bool RemoveFollower::start() {
     finish("", "", true, "collection has been dropped in the meantime");
     return false;
   }
-  Node collection = _snapshot(planColPrefix + _database + "/" + _collection);
+  Node collection = _snapshot.get(planColPrefix + _database + "/" + _collection);
   if (collection.has("distributeShardsLike")) {
     finish("", "", false,
            "collection must not have 'distributeShardsLike' attribute");
@@ -137,13 +137,13 @@ bool RemoveFollower::start() {
   std::string planPath =
       planColPrefix + _database + "/" + _collection + "/shards/" + _shard;
 
-  Slice planned = _snapshot(planPath).slice();
+  Slice planned = _snapshot.get(planPath).slice();
 
   TRI_ASSERT(planned.isArray());
 
   // First check that we still have too many followers for the current
   // `replicationFactor`:
-  size_t desiredReplFactor = collection("replicationFactor").getUInt();
+  size_t desiredReplFactor = collection.get("replicationFactor").getUInt();
   size_t actualReplFactor = planned.length();
   if (actualReplFactor <= desiredReplFactor) {
     finish("", "", true, "job no longer necessary, have few enough replicas");
@@ -289,7 +289,7 @@ bool RemoveFollower::start() {
     // in _jb:
     if (_jb == nullptr) {
       try {
-        _snapshot(toDoPrefix + _jobId).toBuilder(todo);
+        _snapshot.get(toDoPrefix + _jobId).toBuilder(todo);
       } catch (std::exception const&) {
         // Just in case, this is never going to happen, since we will only
         // call the start() method if the job is already in ToDo.
