@@ -376,8 +376,6 @@ JOB_STATUS MoveShard::status() {
   std::string planPath = planColPrefix + _database + "/" + _collection;
   if (!_snapshot.has(planPath)) {
     // Oops, collection is gone, simple finish job:
-    LOG_TOPIC(ERR, Logger::SUPERVISION) << "collection was dropped" 
-      << ": " << __FILE__ << ":" << __LINE__;
     finish("", _shard, true, "collection was dropped");
     return FINISHED;
   }
