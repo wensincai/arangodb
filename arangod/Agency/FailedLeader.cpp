@@ -119,13 +119,14 @@ bool FailedLeader::start() {
 
   // Get healthy in Sync follower common to all prototype + clones
   auto commonHealthyInSync =
-    findCommonHealthyInSyncFollower(_snapshot, _database, _collection, _shard);
+    findNonblockedCommonHealthyInSyncFollower(
+      _snapshot, _database, _collection, _shard);
   if (commonHealthyInSync.empty()) {
     return false;
   } else {
     _to = commonHealthyInSync;
   }
-
+  
   LOG_TOPIC(INFO, Logger::SUPERVISION)
     << "Start failedLeader for " + _shard + " from " + _from + " to " + _to;  
   
@@ -245,7 +246,7 @@ bool FailedLeader::start() {
   
   // Abort job blocking server if abortable
   try {
-    std::string jobId = _snapshot(blockedServersPrefix + _from).getString();
+    std::string jobId = _snapshot(blockedShardsPrefix + _shard).getString();
     if (!abortable(_snapshot, jobId)) {
       return false;
     } else {

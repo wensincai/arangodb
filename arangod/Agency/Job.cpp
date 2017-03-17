@@ -261,7 +261,7 @@ std::vector<Job::shard_t> Job::clones(
 }
 
 
-std::string Job::findCommonHealthyInSyncFollower( // Which is in "GOOD" health
+std::string Job::findNonblockedCommonHealthyInSyncFollower( // Which is in "GOOD" health
   Node const& snap, std::string const& db, std::string const& col,
   std::string const& shrd) {
 
@@ -282,7 +282,9 @@ std::string Job::findCommonHealthyInSyncFollower( // Which is in "GOOD" health
     for (const auto& server : VPackArrayIterator(snap(shardPath).getArray())) {
       auto id = server.copyString();
       if (i++ > 0) { // Skip leader
-        if (good[id] && ++currentServers[id] == nclones) {
+        if (good[id] &&   // Good condition
+            !snap.has(blockedServersPrefix + id) && // Not blocked
+            ++currentServers[id] == nclones) { 
           return server.copyString();
         }
       }
