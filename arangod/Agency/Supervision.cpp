@@ -125,6 +125,8 @@ std::vector<check_t> Supervision::checkDBServers() {
     todelete.erase(std::remove(todelete.begin(), todelete.end(), serverID),
                    todelete.end());
     
+    shortName = _snapshot(targetShortID + serverID + "/ShortName").toJson();
+
     if (sync) {
       heartbeatTime = _transient(syncPrefix + serverID + "/time").toJson();
       heartbeatStatus = _transient(syncPrefix + serverID + "/status").toJson();
