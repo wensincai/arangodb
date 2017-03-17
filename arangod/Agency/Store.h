@@ -33,6 +33,15 @@
 namespace arangodb {
 namespace consensus {
 
+struct check_ret_t {
+  bool success;
+  size_t pos;
+  check_ret_t() : success(false), pos(0) {}
+  check_ret_t(bool s, size_t p = 0) : success(s), pos(p) {}
+  inline bool successful() const { return success; }
+  inline void successful(bool s) { success = s; }
+};
+
 class Agent;
 
 /// @brief Key value tree
@@ -60,7 +69,7 @@ class Store : public arangodb::Thread {
   std::vector<bool> apply(query_t const& query, bool verbose = false);
 
   /// @brief Apply single entry in query
-  bool apply(Slice const& query, bool verbose = false);
+  check_ret_t apply(Slice const& query, bool verbose = false);
 
   /// @brief Apply entry in query
   std::vector<bool> apply(std::vector<Slice> const& query,
@@ -117,7 +126,7 @@ class Store : public arangodb::Thread {
   std::multimap<std::string, std::string> const& observedTable() const;
 
   /// @brief Check precondition
-  bool check(arangodb::velocypack::Slice const&) const;
+  check_ret_t check(arangodb::velocypack::Slice const&) const;
 
   /// @brief Clear entries, whose time to live has expired
   query_t clearExpired() const;

@@ -654,13 +654,15 @@ trans_ret_t Agent::transact(query_t const& queries) {
     
     for (const auto& query : VPackArrayIterator(qs)) {
       if (query[0].isObject()) {
-        if(_spearhead.apply(query)) {
+        check_ret_t res = _spearhead.apply(query); 
+        if(res.successful()) {
           maxind = (query.length() == 3 && query[2].isString()) ?
             _state.log(query[0], term(), query[2].copyString()) :
             _state.log(query[0], term());
           ret->add(VPackValue(maxind));
         } else {
-          ret->add(VPackValue(0));
+          VPackObjectBuilder f(ret.get());
+          ret->add("failed", VPackValue(res.pos));
           ++failed;
         }
       } else if (query[0].isString()) {
@@ -715,7 +717,7 @@ trans_ret_t Agent::transient(query_t const& queries) {
     // Read and writes
     for (const auto& query : VPackArrayIterator(queries->slice())) {
       if (query[0].isObject()) {
-        ret->add(VPackValue(_transient.apply(query)));
+        ret->add(VPackValue(_transient.apply(query).successful()));
       } else if (query[0].isString()) {
         _transient.read(query, *ret);
       }

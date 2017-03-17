@@ -59,7 +59,7 @@ const std::string FREE_SERVER = "free";
 const std::string FREE_SERVER2 = "free2";
 
 const char *agency =
-#include "failedleader.json"
+#include "FailedLeaderTest.json"
 ;
 
 Node createNodeFromBuilder(VPackBuilder const& builder) {
@@ -408,13 +408,12 @@ SECTION("if the leader is healthy again we fail the job") {
   When(Method(mockAgent, transact)).AlwaysDo([&](query_t const& q) -> trans_ret_t {
     INFO(q->slice().toJson());
     REQUIRE(std::string(q->slice().typeName()) == "array" );
-    REQUIRE(q->slice().length() == 2);
+    REQUIRE(q->slice().length() == 1);
     REQUIRE(std::string(q->slice()[0].typeName()) == "array");
-    REQUIRE(q->slice()[0].length() == 3);
-    REQUIRE(std::string(q->slice()[0][0].typeName()) == "string");
-    REQUIRE(std::string(q->slice()[1][0].typeName()) == "object");
+    REQUIRE(q->slice()[0].length() == 2);
+    REQUIRE(std::string(q->slice()[0][0].typeName()) == "object");
 
-    auto writes = q->slice()[1][0];
+    auto writes = q->slice()[0][0];
     REQUIRE(std::string(writes.get("/arango/Target/ToDo/1").typeName()) == "object");
     REQUIRE(std::string(writes.get("/arango/Target/ToDo/1").get("op").typeName()) == "string");
     CHECK(writes.get("/arango/Target/ToDo/1").get("op").copyString() == "delete");
@@ -432,7 +431,7 @@ SECTION("if the leader is healthy again we fail the job") {
   );
   failedLeader.start();
 }
-/*
+
 SECTION("the job must not be started if there is no server that is in sync for every shard") {
   std::string jobId = "1";
 
@@ -890,7 +889,7 @@ SECTION("if everything is fine than the job should be written to pending, adding
   );
   failedLeader.start();
 }
-*/
+
 
 /*
 TEST_CASE( "FailedLeader should fill FailedServers with failed shards", "[agency][supervision]" ) {

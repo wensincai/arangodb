@@ -179,18 +179,6 @@ bool FailedLeader::start() {
   Builder pending;
   
   { VPackArrayBuilder transactions(&pending);
-    
-    { VPackArrayBuilder stillThere(&pending);
-       // Collection still there?
-      pending.add(
-        VPackValue(
-          planColPrefix + _database + "/" + _collection));
-      // Still failing
-      pending.add(VPackValue(healthPrefix + _from + "/Status"));
-      // to server blocked?
-      pending.add(VPackValue(blockedServersPrefix + _to));
-    }
-    
     { VPackArrayBuilder transaction(&pending);
       
       // Operations ----------------------------------------------------------
@@ -234,21 +222,22 @@ bool FailedLeader::start() {
       }
       // Preconditions -------------------------------------------------------
       { VPackObjectBuilder preconditions(&pending);
-        // Server list in plan still as before:
-        addPreconditionUnchanged(pending, planPath, planned);
-        // This implies that the collection has not been deleted in the mt
-        // Status should still be failed
-        pending.add( 
-          VPackValue(healthPrefix + _from + "/Status"));
+        // Failed condition persists
+        pending.add(VPackValue(healthPrefix + _from + "/Status"));
         { VPackObjectBuilder stillExists(&pending);
           pending.add("old", VPackValue("FAILED")); }
-        addPreconditionServerNotBlocked(pending, _to);
-        addPreconditionShardNotBlocked(pending, _shard);
+        // Destination server still in good condition
         addPreconditionServerGood(pending, _to);
+        // Server list in plan still as before
+        addPreconditionUnchanged(pending, planPath, planned);
+        // Destination server should not be blocked by another job
+        addPreconditionServerNotBlocked(pending, _to);
+        // Shard to be handled is block by another job
+        addPreconditionShardNotBlocked(pending, _shard);
       } // Preconditions -----------------------------------------------------
     }
   }
-  
+
   // Abort job blocking server if abortable
   try {
     std::string jobId = _snapshot(blockedShardsPrefix + _shard).getString();
@@ -263,40 +252,42 @@ bool FailedLeader::start() {
     << "FailedLeader transaction: " << pending.toJson();
   
   trans_ret_t res = generalTransaction(_agent, pending);
-
+  
   LOG_TOPIC(DEBUG, Logger::SUPERVISION)
     << "FailedLeader result: " << res.result->toJson();
 
-try {
-    auto exist = res.result->slice()[0].get(
-      std::vector<std::string>(
-        {"arango", "Plan", "Collections", _database, _collection}
-        )).isObject();
-    if (!exist) {
-      finish("", _shard, false, "Collection " + _collection + " gone");
+
+  // Something went south. Let's see
+  auto result = res.result->slice()[0];
+  if (result.isObject()) {
+    TRI_ASSERT(result.hasKey("failed") && result.get("failed").isUInt());
+    auto failed = result.get("failed").getUInt();
+    switch (failed) {
+    case 0:
+      finish("", _shard, false, "Server " + _from + " no longer failing");
       return false;
-    }
-  } catch (std::exception const& e) {
-    LOG_TOPIC(ERR, Logger::SUPERVISION)
-      << "Failed to acquire find " << _from << " in job IDs from agency: "
-      << e.what() << __FILE__ << __LINE__; 
-  }
-  
-  try {
-    auto state = res.result->slice()[0].get(
-      std::vector<std::string>(
-        {"arango", "Supervision", "Health", _from, "Status"})).copyString();
-    if (state != "FAILED") {
-      finish("", _shard, false, _from + " is no longer 'FAILED'");
+    case 1:
+      LOG_TOPIC(DEBUG, Logger::SUPERVISION)
+        << "Destination server " << _to << " not in good condition anymore " << _jobId;
       return false;
-    }
-  } catch (std::exception const& e) {
-    LOG_TOPIC(ERR, Logger::SUPERVISION)
-      << "Failed to acquire find " << _from << " in job IDs from agency: "
-      << e.what() << __FILE__ << __LINE__; 
+    case 2:
+      LOG_TOPIC(DEBUG, Logger::SUPERVISION)
+        << "Plan no longer in sync with snapshot for failedLeader job " << _jobId;
+      return false;
+    case 3:
+      LOG_TOPIC(DEBUG, Logger::SUPERVISION)
+        << "Destination server " << _to << " is block by another job.";
+      return false;
+    case 4:
+      LOG_TOPIC(DEBUG, Logger::SUPERVISION)
+        << "Shard " << _shard << "is still blocked by another unabortable job";
+      return false;
+    default:
+      break;
+    }      
   }
     
-  return (res.accepted && res.result->slice()[1].getUInt());
+  return (res.accepted && res.result->slice()[0].getUInt());
   
 }
 

@@ -168,7 +168,7 @@ std::vector<bool> Store::apply(query_t const& query, bool verbose) {
           break;
         case 2: // precondition + uuid
         case 3:
-          if (check(i[1])) {
+          if (check(i[1]).successful()) {
             success.push_back(applies(i[0]));
           } else {  // precondition failed
             LOG_TOPIC(TRACE, Logger::AGENCY) << "Precondition failed!";
@@ -202,21 +202,22 @@ std::vector<bool> Store::apply(query_t const& query, bool verbose) {
 }
 
 
-/// Apply single query 
-bool Store::apply(Slice const& query, bool verbose) {
+/// Apply single query
+check_ret_t Store::apply(Slice const& query, bool verbose) {
 
-  bool success = false;
+  check_ret_t ret(true);
 
   try {
     MUTEX_LOCKER(storeLocker, _storeLock);
     switch (query.length()) {
     case 1:  // No precondition
-      success = applies(query[0]);
+      applies(query[0]);
       break;
     case 2:  // precondition
     case 3:  // precondition + clientId
-      if (check(query[1])) {
-        success = applies(query[0]);
+      ret = check(query[1]);
+      if (ret.successful()) {
+        applies(query[0]);
       } else {  // precondition failed
         LOG_TOPIC(TRACE, Logger::AGENCY) << "Precondition failed!";
       }
@@ -237,7 +238,7 @@ bool Store::apply(Slice const& query, bool verbose) {
       << __FILE__ << ":" << __LINE__ << " " << e.what();
   }
     
-  return success;
+  return ret;
   
 }
 
@@ -376,13 +377,11 @@ std::vector<bool> Store::apply(
 }
 
 /// Check precodition object
-bool Store::check(VPackSlice const& slice) const {
-  if (!slice.isObject()) {  // Must be object
-    LOG_TOPIC(WARN, Logger::AGENCY) << "Cannot check precondition: "
-                                    << slice.toJson();
-    return false;
-  }
+check_ret_t Store::check(VPackSlice const& slice) const {
 
+  TRI_ASSERT(slice.isObject());
+
+  size_t i = 0;
   for (auto const& precond : VPackObjectIterator(slice)) {  // Preconditions
 
     std::vector<std::string> pv = split(precond.key.copyString(), '/');
@@ -400,26 +399,26 @@ bool Store::check(VPackSlice const& slice) const {
         std::string const& oper = op.key.copyString();
         if (oper == "old") {  // old
           if (node != op.value) {
-            return false;
+            return check_ret_t(false,i);
           }
         } else if (oper == "isArray") {  // isArray
           if (!op.value.isBoolean()) {
             LOG_TOPIC(ERR, Logger::AGENCY)
                 << "Non boolean expression for 'isArray' precondition";
-            return false;
+            return check_ret_t(false,i);
           }
           bool isArray = (node.type() == LEAF && node.slice().isArray());
           if (op.value.getBool() ? !isArray : isArray) {
-            return false;
+            return check_ret_t(false,i);
           }
         } else if (oper == "oldEmpty") {  // isEmpty
           if (!op.value.isBoolean()) {
             LOG_TOPIC(ERR, Logger::AGENCY)
                 << "Non boolsh expression for 'oldEmpty' precondition";
-            return false;
+            return check_ret_t(false,i);
           }
           if (op.value.getBool() ? found : !found) {
-            return false;
+            return check_ret_t(false,i);
           }
         } else if (oper == "in") {  // in
           if (found) {
@@ -436,18 +435,20 @@ bool Store::check(VPackSlice const& slice) const {
               }
             }
           }
-          return false;
+          return check_ret_t(false,i);
         }
       }
     } else {
       if (node != precond.value) {
-        return false;
+        return check_ret_t(false,i);
       }
     }
+    ++i;
   }
 
-  return true;
+  return check_ret_t(true);
 }
+
 
 /// Read queries into result
 std::vector<bool> Store::read(query_t const& queries, query_t& result) const {
