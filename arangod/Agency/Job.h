@@ -126,6 +126,7 @@ struct Job {
 
   virtual bool create(std::shared_ptr<VPackBuilder> b) = 0;
 
+  // Returns if job was actually started (i.e. false if directly failed!)
   virtual bool start() = 0;
 
   static bool abortable(Node const& snapshot, std::string const& jobId);

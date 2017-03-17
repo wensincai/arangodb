@@ -111,10 +111,12 @@ bool FailedLeader::start() {
   // Fail if got distributeShardsLike
   if (existing.size() == 5) {
     finish("", _shard, false, "Collection has distributeShardsLike");
+    return false;
   }
   // Fail if collection gone
   else if (existing.size() < 4) { 
     finish("", _shard, true, "Collection " + _collection + " gone");
+    return false;
   }
 
   // Get healthy in Sync follower common to all prototype + clones

@@ -114,10 +114,12 @@ bool FailedFollower::start() {
   // Fail if got distributeShardsLike
   if (existing.size() == 5) {
     finish("", _shard, false, "Collection has distributeShardsLike");
+    return false;
   }
   // Collection gone
   else if (existing.size() < 4) {
     finish("", _shard, true, "Collection " + _collection + " gone");
+    return false;
   }
 
   // Planned servers vector
