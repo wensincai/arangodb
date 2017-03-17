@@ -171,7 +171,7 @@ struct Job {
   // method adds some attribute/value pairs and leaves the object open:
   static void addIncreasePlanVersion(Builder& trx);
   static void addRemoveJobFromSomewhere(Builder& trx, std::string where,
-    std::string jobId);
+                                        std::string jobId);
   static void addPutJobIntoSomewhere(Builder& trx, std::string where,
     Slice job, std::string reason = "");
   static void addPreconditionCollectionStillThere(Builder& pre,
@@ -192,11 +192,12 @@ struct Job {
 };
 
 inline arangodb::consensus::write_ret_t singleWriteTransaction(
-    AgentInterface* _agent,
-    Builder const& transaction,
-    bool waitForCommit = true) {
+  AgentInterface* _agent,
+  Builder const& transaction,
+  bool waitForCommit = true) {
+  
   query_t envelope = std::make_shared<Builder>();
-
+  
   Slice trx = transaction.slice();
   try {
     { VPackArrayBuilder listOfTrxs(envelope.get());
@@ -215,10 +216,10 @@ inline arangodb::consensus::write_ret_t singleWriteTransaction(
     }
   } catch (std::exception const& e) {
     LOG_TOPIC(ERR, Logger::SUPERVISION)
-        << "Supervision failed to build transaction.";
+      << "Supervision failed to build transaction.";
     LOG_TOPIC(ERR, Logger::SUPERVISION) << e.what() << " " << __FILE__ << __LINE__;
   }
-
+  
   auto ret = _agent->write(envelope);
   if (waitForCommit && !ret.indices.empty()) {
     auto maximum = *std::max_element(ret.indices.begin(), ret.indices.end());
@@ -227,6 +228,48 @@ inline arangodb::consensus::write_ret_t singleWriteTransaction(
     }
   }
   return ret;
+}
+
+inline arangodb::consensus::trans_ret_t generalTransaction(
+  AgentInterface* _agent, Builder const& transaction) {
+  
+  query_t envelope = std::make_shared<Builder>();
+  Slice trx = transaction.slice();
+  
+  try {
+    { VPackArrayBuilder listOfTrxs(envelope.get());
+      for (auto const& singleTrans : VPackArrayIterator(trx)) {
+        
+        TRI_ASSERT(singleTrans.isArray() && singleTrans.length() > 0);
+        if (singleTrans[0].isObject()) {
+          VPackArrayBuilder onePair(envelope.get());
+          { VPackObjectBuilder mutationPart(envelope.get());
+            for (auto const& pair : VPackObjectIterator(singleTrans[0])) {
+              envelope->add(Job::agencyPrefix + pair.key.copyString(), pair.value);
+            }
+          }
+          if (singleTrans.length() > 1) {
+            VPackObjectBuilder preconditionPart(envelope.get());
+            for (auto const& pair : VPackObjectIterator(singleTrans[1])) {
+              envelope->add(Job::agencyPrefix + pair.key.copyString(), pair.value);
+            }
+          }
+        } else if (singleTrans[0].isString()) {
+          VPackArrayBuilder reads(envelope.get());
+          for (auto const& path : VPackArrayIterator(singleTrans)) {
+            envelope->add(VPackValue(Job::agencyPrefix + path.copyString()));
+          }
+        }
+      }
+    }
+  } catch (std::exception const& e) {
+    LOG_TOPIC(ERR, Logger::SUPERVISION)
+      << "Supervision failed to build transaction.";
+    LOG_TOPIC(ERR, Logger::SUPERVISION) << e.what() << " " << __FILE__ << __LINE__;
+  }
+  
+  return _agent->transact(envelope);
+
 }
 
 inline arangodb::consensus::trans_ret_t transient(AgentInterface* _agent,

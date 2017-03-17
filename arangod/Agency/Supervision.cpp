@@ -110,7 +110,7 @@ std::vector<check_t> Supervision::checkDBServers() {
   
   std::vector<std::string> todelete;
   for (auto const& machine : _snapshot(healthPrefix).children()) {
-    if (machine.first.substr(0, 2) == "RP") {
+    if (machine.first.substr(0, 2) == "PR") {
       todelete.push_back(machine.first);
     }
   }
@@ -132,13 +132,13 @@ std::vector<check_t> Supervision::checkDBServers() {
         _transient(healthPrefix + serverID + "/LastHeartbeatSent").toJson();
       lastHeartbeatAcked =
         _transient(healthPrefix + serverID + "/LastHeartbeatAcked").toJson();
+      lastStatus = _transient(healthPrefix + serverID + "/Status").toJson();
       if (lastHeartbeatTime != heartbeatTime) {  // Update
         good = true;
       }
     } else if (secondsSinceLeader < _gracePeriod) {
       good = true;
     }
-    lastStatus = _transient(healthPrefix + serverID + "/Status").toJson();
 
     auto report = std::make_shared<Builder>();
     report->openArray();
@@ -190,10 +190,9 @@ std::vector<check_t> Supervision::checkDBServers() {
       auto elapsed = std::chrono::duration<double>(
         std::chrono::system_clock::now() -
         stringToTimepoint(lastHeartbeatAcked)).count();
-
+      
       // Failed servers are considered only after having taken on leadership
       // for at least grace period
-      LOG_TOPIC(WARN, Logger::SUPERVISION) << serverID << " " << lastStatus << " " << elapsed;
       if (elapsed > _gracePeriod) {
         if (lastStatus == Supervision::HEALTH_STATUS_BAD) {
           reportPersistent = true;
@@ -201,8 +200,6 @@ std::vector<check_t> Supervision::checkDBServers() {
           envelope = std::make_shared<VPackBuilder>();
           FailedServer(_snapshot, _agent, std::to_string(_jobId++),
                        "supervision", serverID).create(envelope);
-        } else {
-          report->add("Status", VPackValue(Supervision::HEALTH_STATUS_BAD));
         }
       } else {
         if (lastStatus != Supervision::HEALTH_STATUS_BAD) {
@@ -356,7 +353,7 @@ std::vector<check_t> Supervision::checkCoordinators() {
         std::chrono::system_clock::now() -
         stringToTimepoint(lastHeartbeatAcked)).count();
       
-      if (elapsed > _gracePeriod) {
+      if (elapsed > _gracePeriod || !sync) {
         if (lastStatus == Supervision::HEALTH_STATUS_BAD) {
           report->add("Status", VPackValue(Supervision::HEALTH_STATUS_FAILED));
           reportPersistent = true;
@@ -881,3 +878,4 @@ void Supervision::missingPrototype() {
     }
   }
 }
+

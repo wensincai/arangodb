@@ -159,57 +159,57 @@ bool FailedFollower::start() {
   }
   
   // Transaction
-  auto job = std::make_shared<Builder>();
+  Builder job;
 
-  { VPackArrayBuilder transactions(job.get());
+  { VPackArrayBuilder transactions(&job);
     
-    { VPackArrayBuilder stillThere(job.get()); // Collection still there?
-      job->add(
+    { VPackArrayBuilder stillThere(&job);
+      // Collection still there?
+      job.add(
         VPackValue(
-          agencyPrefix + planColPrefix + _database + "/" + _collection));}
-
-    { VPackArrayBuilder stillThere(job.get()); // Still failing?
-      job->add(VPackValue(agencyPrefix + healthPrefix + _from + "/Status"));}
+          planColPrefix + _database + "/" + _collection));
+      // Still failing?
+      job.add(VPackValue(healthPrefix + _from + "/Status"));}
     
-    { VPackArrayBuilder transaction(job.get());
+    { VPackArrayBuilder transaction(&job);
         // Operations ----------------------------------------------------------
-      { VPackObjectBuilder operations(job.get());
+      { VPackObjectBuilder operations(&job);
         // Add finished entry -----
-        job->add(VPackValue(agencyPrefix + finishedPrefix + _jobId));
-        { VPackObjectBuilder ts(job.get());
-          job->add("timeStarted", // start
+        job.add(VPackValue(finishedPrefix + _jobId));
+        { VPackObjectBuilder ts(&job);
+          job.add("timeStarted", // start
                    VPackValue(timepointToString(system_clock::now())));
-          job->add("timeFinished", // same same :)
+          job.add("timeFinished", // same same :)
                    VPackValue(timepointToString(system_clock::now())));
-          job->add("toServer", VPackValue(_to)); // toServer
+          job.add("toServer", VPackValue(_to)); // toServer
           for (auto const& obj : VPackObjectIterator(todo.slice()[0])) {
-            job->add(obj.key.copyString(), obj.value);
+            job.add(obj.key.copyString(), obj.value);
           }
         }
-        addRemoveJobFromSomewhere(*job, "ToDo", _jobId);
+        addRemoveJobFromSomewhere(job, "ToDo", _jobId);
         // Plan change ------------
         for (auto const& clone :
                clones(_snapshot, _database, _collection, _shard)) {
-          job->add(
-            agencyPrefix + planColPrefix + _database + "/"
+          job.add(
+            planColPrefix + _database + "/"
             + clone.collection + "/shards/" + clone.shard, ns.slice());
         }
         
-        addIncreasePlanVersion(*job);
+        addIncreasePlanVersion(job);
       }
       // Preconditions -------------------------------------------------------
-      { VPackObjectBuilder preconditions(job.get());
+      { VPackObjectBuilder preconditions(&job);
         // Server list in plan still as before:
-        addPreconditionUnchanged(*job, planPath, planned);
+        addPreconditionUnchanged(job, planPath, planned);
         // This implies that the collection has not been deleted in the mt
         // Status should still be failed
-        job->add( 
-          VPackValue(agencyPrefix + healthPrefix + _from + "/Status"));
-        { VPackObjectBuilder stillFailing(job.get());
-          job->add("old", VPackValue("FAILED")); }
-        addPreconditionServerNotBlocked(*job, _to);
-        addPreconditionShardNotBlocked(*job, _shard);
-        addPreconditionServerGood(*job, _to);
+        job.add( 
+          VPackValue(healthPrefix + _from + "/Status"));
+        { VPackObjectBuilder stillFailing(&job);
+          job.add("old", VPackValue("FAILED")); }
+        addPreconditionServerNotBlocked(job, _to);
+        addPreconditionShardNotBlocked(job, _shard);
+        addPreconditionServerGood(job, _to);
       } // Preconditions -----------------------------------------------------
         
     }
@@ -226,12 +226,12 @@ bool FailedFollower::start() {
   } catch (...) {}
   
   LOG_TOPIC(DEBUG, Logger::SUPERVISION)
-    << "FailedLeader transaction: " << job->toJson();
-  
-  trans_ret_t res = _agent->transact(job);
+    << "FailedFollower start transaction: " << job.toJson();
+                    
+  auto res = generalTransaction(_agent, job);
 
   LOG_TOPIC(DEBUG, Logger::SUPERVISION)
-    << "FailedLeader result: " << job->toJson();
+    << "FailedFollower start result: " << res.result->toJson();
   
   try {
     auto exist = res.result->slice()[0].get(
@@ -248,7 +248,7 @@ bool FailedFollower::start() {
   }
   
   try {
-    auto state = res.result->slice()[1].get(
+    auto state = res.result->slice()[0].get(
       std::vector<std::string>(
         {"arango", "Supervision", "Health", _from, "Status"})).copyString();
     if (state != "FAILED") {
@@ -260,7 +260,7 @@ bool FailedFollower::start() {
       << e.what() << __FILE__ << __LINE__; 
   }
   
-  return (res.accepted && res.result->slice()[2].getUInt());
+  return (res.accepted && res.result->slice()[1].getUInt());
   
 }
 

@@ -174,33 +174,36 @@ bool FailedLeader::start() {
   }
 
   // Transactions
-  auto pending = std::make_shared<Builder>();
+  Builder pending;
   
-  { VPackArrayBuilder transactions(pending.get());
+  { VPackArrayBuilder transactions(&pending);
     
-    { VPackArrayBuilder stillThere(pending.get()); // Collection still there?
-      pending->add(
+    { VPackArrayBuilder stillThere(&pending);
+       // Collection still there?
+      pending.add(
         VPackValue(
-          agencyPrefix + planColPrefix + _database + "/" + _collection));}
+          planColPrefix + _database + "/" + _collection));
+      // Still failing
+      pending.add(VPackValue(healthPrefix + _from + "/Status"));
+      // to server blocked?
+      pending.add(VPackValue(blockedServersPrefix + _to));
+    }
     
-    { VPackArrayBuilder stillThere(pending.get()); // Still failing?
-      pending->add(VPackValue(agencyPrefix + healthPrefix + _from + "/Status"));}
-    
-    { VPackArrayBuilder transaction(pending.get());
+    { VPackArrayBuilder transaction(&pending);
       
       // Operations ----------------------------------------------------------
-      { VPackObjectBuilder operations(pending.get());
+      { VPackObjectBuilder operations(&pending);
         // Add pending entry
-        pending->add(VPackValue(agencyPrefix + pendingPrefix + _jobId));
-        { VPackObjectBuilder ts(pending.get());
-          pending->add("timeStarted", // start
+        pending.add(VPackValue(pendingPrefix + _jobId));
+        { VPackObjectBuilder ts(&pending);
+          pending.add("timeStarted", // start
                        VPackValue(timepointToString(system_clock::now())));
-          pending->add("toServer", VPackValue(_to)); // toServer
+          pending.add("toServer", VPackValue(_to)); // toServer
           for (auto const& obj : VPackObjectIterator(todo.slice()[0])) {
-            pending->add(obj.key.copyString(), obj.value);
+            pending.add(obj.key.copyString(), obj.value);
           }
         }
-        addRemoveJobFromSomewhere(*pending, "ToDo", _jobId);
+        addRemoveJobFromSomewhere(pending, "ToDo", _jobId);
         // DB server vector -------
         Builder ns;
         { VPackArrayBuilder servers(&ns);
@@ -220,26 +223,26 @@ bool FailedLeader::start() {
         }
         for (auto const& clone :
                clones(_snapshot, _database, _collection, _shard)) {
-          pending->add(
-            agencyPrefix + planColPrefix + _database + "/"
+          pending.add(
+            planColPrefix + _database + "/"
             + clone.collection + "/shards/" + clone.shard, ns.slice());
         }
-        addBlockShard(*pending, _shard, _jobId);
-        addIncreasePlanVersion(*pending);
+        addBlockShard(pending, _shard, _jobId);
+        addIncreasePlanVersion(pending);
       }
       // Preconditions -------------------------------------------------------
-      { VPackObjectBuilder preconditions(pending.get());
+      { VPackObjectBuilder preconditions(&pending);
         // Server list in plan still as before:
-        addPreconditionUnchanged(*pending, planPath, planned);
+        addPreconditionUnchanged(pending, planPath, planned);
         // This implies that the collection has not been deleted in the mt
         // Status should still be failed
-        pending->add( 
-          VPackValue(agencyPrefix + healthPrefix + _from + "/Status"));
-        { VPackObjectBuilder stillExists(pending.get());
-          pending->add("old", VPackValue("FAILED")); }
-        addPreconditionServerNotBlocked(*pending, _to);
-        addPreconditionShardNotBlocked(*pending, _shard);
-        addPreconditionServerGood(*pending, _to);
+        pending.add( 
+          VPackValue(healthPrefix + _from + "/Status"));
+        { VPackObjectBuilder stillExists(&pending);
+          pending.add("old", VPackValue("FAILED")); }
+        addPreconditionServerNotBlocked(pending, _to);
+        addPreconditionShardNotBlocked(pending, _shard);
+        addPreconditionServerGood(pending, _to);
       } // Preconditions -----------------------------------------------------
     }
   }
@@ -255,12 +258,12 @@ bool FailedLeader::start() {
   } catch (...) {}
   
   LOG_TOPIC(DEBUG, Logger::SUPERVISION)
-    << "FailedLeader transaction: " << pending->toJson();
+    << "FailedLeader transaction: " << pending.toJson();
   
-  trans_ret_t res = _agent->transact(pending);
+  trans_ret_t res = generalTransaction(_agent, pending);
 
   LOG_TOPIC(DEBUG, Logger::SUPERVISION)
-    << "FailedLeader result: " << pending->toJson();
+    << "FailedLeader result: " << res.result->toJson();
   
   try {
     auto exist = res.result->slice()[0].get(
@@ -277,7 +280,7 @@ bool FailedLeader::start() {
   }
   
   try {
-    auto state = res.result->slice()[1].get(
+    auto state = res.result->slice()[0].get(
       std::vector<std::string>(
         {"arango", "Supervision", "Health", _from, "Status"})).copyString();
     if (state != "FAILED") {
@@ -289,7 +292,7 @@ bool FailedLeader::start() {
       << e.what() << __FILE__ << __LINE__; 
   }
   
-  return (res.accepted && res.result->slice()[2].getUInt());
+  return (res.accepted && res.result->slice()[1].getUInt());
   
 }
 
