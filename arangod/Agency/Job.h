@@ -191,9 +191,10 @@ struct Job {
 
 };
 
-inline arangodb::consensus::write_ret_t transact(AgentInterface* _agent,
-                                                 Builder const& transaction,
-                                                 bool waitForCommit = true) {
+inline arangodb::consensus::write_ret_t singleWriteTransaction(
+    AgentInterface* _agent,
+    Builder const& transaction,
+    bool waitForCommit = true) {
   query_t envelope = std::make_shared<Builder>();
 
   Slice trx = transaction.slice();

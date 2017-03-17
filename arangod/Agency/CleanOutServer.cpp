@@ -43,8 +43,8 @@ CleanOutServer::CleanOutServer(Node const& snapshot, AgentInterface* agent,
   // Get job details from agency:
   try {
     std::string path = pos[status] + _jobId + "/";
-    _server = _snapshot(path + "server").getString();
-    _creator = _snapshot(path + "creator").getString();
+    _server = _snapshot.get(path + "server").getString();
+    _creator = _snapshot.get(path + "creator").getString();
   } catch (std::exception const& e) {
     std::stringstream err;
     err << "Failed to find job " << _jobId << " in agency: " << e.what();
@@ -65,8 +65,8 @@ JOB_STATUS CleanOutServer::status() {
     return _status;
   }
 
-  Node::Children const todos = _snapshot(toDoPrefix).children();
-  Node::Children const pends = _snapshot(pendingPrefix).children();
+  Node::Children const todos = _snapshot.get(toDoPrefix).children();
+  Node::Children const pends = _snapshot.get(pendingPrefix).children();
   size_t found = 0;
 
   for (auto const& subJob : todos) {
@@ -83,7 +83,7 @@ JOB_STATUS CleanOutServer::status() {
   if (found > 0) {  // some subjob still running
     // timeout here:
     std::string timeCreatedString
-      = _snapshot(pendingPrefix + _jobId + "/timeCreated").getString();
+      = _snapshot.get(pendingPrefix + _jobId + "/timeCreated").getString();
     Supervision::TimePoint timeCreated = stringToTimepoint(timeCreatedString);
     Supervision::TimePoint now(std::chrono::system_clock::now());
     if (now - timeCreated > std::chrono::duration<double>(7200.0)) {
@@ -109,14 +109,14 @@ JOB_STATUS CleanOutServer::status() {
       }
       addRemoveJobFromSomewhere(reportTrx, "Pending", _jobId);
       Builder job;
-      _snapshot(pendingPrefix + _jobId).toBuilder(job);
+      _snapshot.get(pendingPrefix + _jobId).toBuilder(job);
       addPutJobIntoSomewhere(reportTrx, "Finished", job.slice(), "");
       addReleaseServer(reportTrx, _server);
     }
   }
 
   // Transact to agency
-  write_ret_t res = transact(_agent, reportTrx);
+  write_ret_t res = singleWriteTransaction(_agent, reportTrx);
 
   if (res.accepted && res.indices.size() == 1 && res.indices[0] != 0) {
     LOG_TOPIC(DEBUG, Logger::SUPERVISION) << "Have reported " << _server
@@ -163,7 +163,7 @@ bool CleanOutServer::create(std::shared_ptr<VPackBuilder> envelope) {
     return true;
   }
 
-  write_ret_t res = transact(_agent, *_jb);
+  write_ret_t res = singleWriteTransaction(_agent, *_jb);
 
   if (res.accepted && res.indices.size() == 1 && res.indices[0]) {
     return true;
@@ -204,7 +204,7 @@ bool CleanOutServer::start() {
   // Check that _to is not in `Target/CleanedServers`:
   VPackBuilder cleanedServersBuilder;
   try {
-    auto cleanedServersNode = _snapshot(cleanedPrefix);
+    auto cleanedServersNode = _snapshot.get(cleanedPrefix);
     cleanedServersNode.toBuilder(cleanedServersBuilder);
   }
   catch (...) {
@@ -227,7 +227,7 @@ bool CleanOutServer::start() {
   // Check that _to is not in `Target/FailedServers`:
   VPackBuilder failedServersBuilder;
   try {
-    auto failedServersNode = _snapshot(failedServersPrefix);
+    auto failedServersNode = _snapshot.get(failedServersPrefix);
     failedServersNode.toBuilder(failedServersBuilder);
   }
   catch (...) {
@@ -262,7 +262,7 @@ bool CleanOutServer::start() {
     // in _jb:
     if (_jb == nullptr) {
       try {
-        _snapshot(toDoPrefix + _jobId).toBuilder(todo);
+        _snapshot.get(toDoPrefix + _jobId).toBuilder(todo);
       } catch (std::exception const&) {
         // Just in case, this is never going to happen, since we will only
         // call the start() method if the job is already in ToDo.
@@ -311,7 +311,7 @@ bool CleanOutServer::start() {
   }  // array for transaction done
 
   // Transact to agency
-  write_ret_t res = transact(_agent, *pending);
+  write_ret_t res = singleWriteTransaction(_agent, *pending);
 
   if (res.accepted && res.indices.size() == 1 && res.indices[0]) {
     LOG_TOPIC(DEBUG, Logger::SUPERVISION) << "Pending: Clean out server "
@@ -330,7 +330,7 @@ bool CleanOutServer::scheduleMoveShards(std::shared_ptr<Builder>& trx) {
 
   std::vector<std::string> servers = availableServers(_snapshot);
 
-  Node::Children const& databases = _snapshot("/Plan/Collections").children();
+  Node::Children const& databases = _snapshot.get("/Plan/Collections").children();
   size_t sub = 0;
 
   for (auto const& database : databases) {
@@ -410,7 +410,7 @@ bool CleanOutServer::checkFeasibility() {
   uint64_t maxReplFact = 1;
   std::vector<std::string> tooLargeCollections;
   std::vector<uint64_t> tooLargeFactors;
-  Node::Children const& databases = _snapshot("/Plan/Collections").children();
+  Node::Children const& databases = _snapshot.get("/Plan/Collections").children();
   for (auto const& database : databases) {
     for (auto const& collptr : database.second->children()) {
       try {
@@ -465,8 +465,8 @@ arangodb::Result CleanOutServer::abort() {
   }
 
   // Abort all our subjobs:
-  Node::Children const todos = _snapshot(toDoPrefix).children();
-  Node::Children const pends = _snapshot(pendingPrefix).children();
+  Node::Children const todos = _snapshot.get(toDoPrefix).children();
+  Node::Children const pends = _snapshot.get(pendingPrefix).children();
 
   for (auto const& subJob : todos) {
     if (!subJob.first.compare(0, _jobId.size() + 1, _jobId + "-")) {

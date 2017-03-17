@@ -137,7 +137,7 @@ bool FailedServer::start() {
 
   
   // Transact to agency
-  write_ret_t res = transact(_agent, pending);
+  write_ret_t res = singleWriteTransaction(_agent, pending);
 
   if (res.accepted && res.indices.size() == 1 && res.indices[0]) {
     LOG_TOPIC(DEBUG, Logger::SUPERVISION)
@@ -249,7 +249,7 @@ bool FailedServer::create(std::shared_ptr<VPackBuilder> envelope) {
   }
 
   if (selfCreate) {
-    write_ret_t res = transact(_agent, *_jb);
+    write_ret_t res = singleWriteTransaction(_agent, *_jb);
     if (!res.accepted || res.indices.size() != 1 || res.indices[0] == 0) {
       LOG_TOPIC(INFO, Logger::SUPERVISION) << "Failed to insert job " + _jobId;
       return false;
@@ -311,7 +311,7 @@ JOB_STATUS FailedServer::status() {
     deleteTodos->close();
     deleteTodos->close();
     // Transact to agency
-    write_ret_t res = transact(_agent, *deleteTodos);
+    write_ret_t res = singleWriteTransaction(_agent, *deleteTodos);
 
     if (!res.accepted || res.indices.size() != 1 || !res.indices[0]) {
       LOG_TOPIC(WARN, Logger::SUPERVISION)

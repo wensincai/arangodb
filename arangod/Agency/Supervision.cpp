@@ -83,7 +83,7 @@ void Supervision::upgradeAgency() {
       builder.close();
       builder.close();
       builder.close();
-      transact(_agent, builder);
+      singleWriteTransaction(_agent, builder);
     }
   } catch (std::exception const&) {
     Builder builder;
@@ -93,7 +93,7 @@ void Supervision::upgradeAgency() {
     builder.close();
     builder.close();
     builder.close();
-    transact(_agent, builder);    
+    singleWriteTransaction(_agent, builder);
   }
 }
 
@@ -182,7 +182,7 @@ std::vector<check_t> Supervision::checkDBServers() {
         del.close();
         del.close();
         del.close();
-        transact(_agent, del);
+        singleWriteTransaction(_agent, del);
       }
       
     } else {
@@ -234,7 +234,7 @@ std::vector<check_t> Supervision::checkDBServers() {
     if (!this->isStopping()) {
       transient(_agent, *report);
       if (reportPersistent) {
-        transact(_agent, *report);
+        singleWriteTransaction(_agent, *report);
       }
     }
     

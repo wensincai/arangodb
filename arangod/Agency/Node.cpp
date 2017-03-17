@@ -308,6 +308,11 @@ Node const& Node::operator()(std::string const& path) const {
   return this->operator()(split(path, '/'));
 }
 
+// Get method which always throws when not found:
+Node const& Node::get(std::string const& path) const {
+  return this->operator()(path);
+}
+
 // lh-store
 Node const& Node::root() const {
   Node *par = _parent, *tmp = nullptr;
