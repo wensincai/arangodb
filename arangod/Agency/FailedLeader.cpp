@@ -266,14 +266,15 @@ bool FailedLeader::start() {
 
   LOG_TOPIC(DEBUG, Logger::SUPERVISION)
     << "FailedLeader result: " << res.result->toJson();
-  
-  try {
+
+try {
     auto exist = res.result->slice()[0].get(
       std::vector<std::string>(
         {"arango", "Plan", "Collections", _database, _collection}
         )).isObject();
     if (!exist) {
       finish("", _shard, false, "Collection " + _collection + " gone");
+      return false;
     }
   } catch (std::exception const& e) {
     LOG_TOPIC(ERR, Logger::SUPERVISION)
@@ -287,13 +288,14 @@ bool FailedLeader::start() {
         {"arango", "Supervision", "Health", _from, "Status"})).copyString();
     if (state != "FAILED") {
       finish("", _shard, false, _from + " is no longer 'FAILED'");
+      return false;
     }
   } catch (std::exception const& e) {
     LOG_TOPIC(ERR, Logger::SUPERVISION)
       << "Failed to acquire find " << _from << " in job IDs from agency: "
       << e.what() << __FILE__ << __LINE__; 
   }
-  
+    
   return (res.accepted && res.result->slice()[1].getUInt());
   
 }

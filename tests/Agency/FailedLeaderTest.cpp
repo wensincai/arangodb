@@ -58,153 +58,47 @@ const std::string SHARD_FOLLOWER2 = "follower2";
 const std::string FREE_SERVER = "free";
 const std::string FREE_SERVER2 = "free2";
 
+const char *agency =
+#include "failedleader.json"
+;
+
 Node createNodeFromBuilder(VPackBuilder const& builder) {
-  Node node("");
 
   VPackBuilder opBuilder;
-  {
-    VPackObjectBuilder a(&opBuilder);
-    opBuilder.add("new", builder.slice());
-  }
-
+  { VPackObjectBuilder a(&opBuilder);
+    opBuilder.add("new", builder.slice()); }
+  
+  Node node("");
   node.handle<SET>(opBuilder.slice());
   return node;
+
 }
 
 Node createRootNode() {
-  Node root("ROOT");
 
+  VPackOptions options;
+  options.checkAttributeUniqueness = true;
+  VPackParser parser(&options);
+  parser.parse(agency);
+  
   VPackBuilder builder;
-  {
-    VPackObjectBuilder a(&builder);
-    builder.add(VPackValue("new"));
-    {
-      VPackObjectBuilder a(&builder);
-      builder.add(VPackValue(PREFIX));
-      {
-        VPackObjectBuilder b(&builder);
-        builder.add(VPackValue("Target"));
-        {
-          VPackObjectBuilder c(&builder);
-          builder.add(VPackValue("ToDo"));
-          {
-            VPackObjectBuilder d(&builder);
-          }
-          builder.add(VPackValue("Finished"));
-          {
-            VPackObjectBuilder d(&builder);
-          }
-          builder.add(VPackValue("Failed"));
-          {
-            VPackObjectBuilder d(&builder);
-          }
-        }
-        builder.add(VPackValue("Current"));
-        {
-          VPackObjectBuilder c(&builder);
-          builder.add(VPackValue("Collections"));
-          {
-            VPackObjectBuilder d(&builder);
-            builder.add(VPackValue(DATABASE));
-            {
-              VPackObjectBuilder e(&builder);
-              builder.add(VPackValue(COLLECTION));
-              {
-                VPackObjectBuilder f(&builder);
-                builder.add(VPackValue(SHARD));
-                {
-                  VPackObjectBuilder f(&builder);
-                  builder.add(VPackValue("servers"));
-                  {
-                    VPackArrayBuilder g(&builder);
-                    builder.add(VPackValue(SHARD_LEADER));
-                    builder.add(VPackValue(SHARD_FOLLOWER1));
-                    builder.add(VPackValue(SHARD_FOLLOWER2));
-                  }
-                }
-              }
-            }
-          }
-        }
-        builder.add(VPackValue("Plan"));
-        {
-          VPackObjectBuilder c(&builder);
-          builder.add(VPackValue("Collections"));
-          {
-            VPackObjectBuilder d(&builder);
-            builder.add(VPackValue(DATABASE));
-            {
-              VPackObjectBuilder e(&builder);
-              builder.add(VPackValue(COLLECTION));
-              {
-                VPackObjectBuilder f(&builder);
-                builder.add(VPackValue("shards"));
-                {
-                  VPackObjectBuilder f(&builder);
-                  builder.add(VPackValue(SHARD));
-                  {
-                    VPackArrayBuilder g(&builder);
-                    builder.add(VPackValue(SHARD_LEADER));
-                    builder.add(VPackValue(SHARD_FOLLOWER1));
-                    builder.add(VPackValue(SHARD_FOLLOWER2));
-                  }
-                }
-              }
-            }
-          }
-          builder.add(VPackValue("DBServers"));
-          {
-            VPackObjectBuilder d(&builder);
-            builder.add(SHARD_LEADER, VPackValue("none"));
-            builder.add(SHARD_FOLLOWER1, VPackValue("none"));
-            builder.add(SHARD_FOLLOWER2, VPackValue("none"));
-            builder.add(FREE_SERVER, VPackValue("none"));
-            builder.add(FREE_SERVER2, VPackValue("none"));
-          }
-        }
-        builder.add(VPackValue("Supervision"));
-        {
-          VPackObjectBuilder c(&builder);
-          builder.add(VPackValue("Health"));
-          {
-            VPackObjectBuilder c(&builder);
-            builder.add(VPackValue(SHARD_LEADER));
-            {
-              VPackObjectBuilder e(&builder);
-              builder.add("Status", VPackValue("FAILED"));
-            }
-            builder.add(VPackValue(SHARD_FOLLOWER1));
-            {
-              VPackObjectBuilder e(&builder);
-              builder.add("Status", VPackValue("GOOD"));
-            }
-            builder.add(VPackValue(SHARD_FOLLOWER2));
-            {
-              VPackObjectBuilder e(&builder);
-              builder.add("Status", VPackValue("GOOD"));
-            }
-          }
-          builder.add(VPackValue("DBServers"));
-          {
-            VPackObjectBuilder c(&builder);
-          }
-          builder.add(VPackValue("Shards"));
-          {
-            VPackObjectBuilder c(&builder);
-          }
-        }
-      }
-    }
-  }
-  root.handle<SET>(builder.slice());
-  return root;
+  builder.add(parser.steal()->slice());
+
+  return createNodeFromBuilder(builder);
+  
 }
 
 TEST_CASE("FailedLeader", "[agency][supervision]") {
-auto baseStructure = createRootNode();
-write_ret_t fakeWriteResult {true, "", std::vector<bool> {true}, std::vector<index_t> {1}};
-trans_ret_t fakeTransResult {true, "", 1, 0, std::make_shared<Builder>()};
 
+  auto baseStructure = createRootNode();
+
+  VPackBuilder builder;
+  baseStructure.toBuilder(builder);
+
+    
+  write_ret_t fakeWriteResult {true, "", std::vector<bool> {true}, std::vector<index_t> {1}};
+  trans_ret_t fakeTransResult {true, "", 1, 0, std::make_shared<Builder>()};
+  
 SECTION("creating a job should create a job in todo") {
   Mock<AgentInterface> mockAgent;
 
