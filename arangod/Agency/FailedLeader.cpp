@@ -96,7 +96,7 @@ bool FailedLeader::create(std::shared_ptr<VPackBuilder> b) {
           "timeCreated", VPackValue(timepointToString(system_clock::now())));
       }}}
   
-  write_ret_t res = transact(_agent, *_jb);
+  write_ret_t res = singleWriteTransaction(_agent, *_jb);
   
   return (res.accepted && res.indices.size() == 1 && res.indices[0]);
   
@@ -331,7 +331,7 @@ JOB_STATUS FailedLeader::status() {
           del.add("val", VPackValue(_shard));
         }}}
     
-    write_ret_t res = transact(_agent, del);
+    write_ret_t res = singleWriteTransaction(_agent, del);
     if (finish("", shard)) {
       LOG_TOPIC(INFO, Logger::SUPERVISION)
         << "Finished failedLeader for " + _shard + " from " + _from + " to " + _to;  
@@ -361,7 +361,7 @@ arangodb::Result FailedLeader::abort() {
         builder.add("oldEmpty", VPackValue(false)); }}
   }
 
-  auto ret = transact(_agent, builder);
+  auto ret = singleWriteTransaction(_agent, builder);
 
   if (!ret.accepted) {
     result = arangodb::Result(TRI_ERROR_SUPERVISION_GENERAL_FAILURE, "Lost leadership.");

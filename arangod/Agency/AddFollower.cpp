@@ -104,7 +104,7 @@ bool AddFollower::create(std::shared_ptr<VPackBuilder> envelope) {
   _jb->close();  // transaction object
   _jb->close();  // close array
 
-  write_ret_t res = transact(_agent, *_jb);
+  write_ret_t res = singleWriteTransaction(_agent, *_jb);
 
   if (res.accepted && res.indices.size() == 1 && res.indices[0]) {
     return true;
@@ -263,7 +263,7 @@ bool AddFollower::start() {
   }  // array for transaction done
   
   // Transact to agency
-  write_ret_t res = transact(_agent, trx);
+  write_ret_t res = singleWriteTransaction(_agent, trx);
 
   if (res.accepted && res.indices.size() == 1 && res.indices[0]) {
     _status = FINISHED;

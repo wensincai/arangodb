@@ -96,7 +96,7 @@ bool FailedFollower::create(std::shared_ptr<VPackBuilder> envelope) {
           "timeCreated", VPackValue(timepointToString(system_clock::now())));
       }}}
   
-  write_ret_t res = transact(_agent, *_jb);
+  write_ret_t res = singleWriteTransaction(_agent, *_jb);
   
   return (res.accepted && res.indices.size() == 1 && res.indices[0]);
 
@@ -287,7 +287,7 @@ arangodb::Result FailedFollower::abort() {
         builder.add("oldEmpty", VPackValue(false)); }}
   }
 
-  auto ret = transact(_agent, builder);
+  auto ret = singleWriteTransaction(_agent, builder);
 
   if (!ret.accepted) {
     result = arangodb::Result(

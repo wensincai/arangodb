@@ -130,7 +130,7 @@ bool MoveShard::create(std::shared_ptr<VPackBuilder> envelope) {
   _jb->close();  // transaction object
   _jb->close();  // close array
 
-  write_ret_t res = transact(_agent, *_jb);
+  write_ret_t res = singleWriteTransaction(_agent, *_jb);
 
   if (res.accepted && res.indices.size() == 1 && res.indices[0]) {
     return true;
@@ -355,7 +355,7 @@ bool MoveShard::start() {
   }  // array for transaction done
 
   // Transact to agency
-  write_ret_t res = transact(_agent, pending);
+  write_ret_t res = singleWriteTransaction(_agent, pending);
 
   if (res.accepted && res.indices.size() == 1 && res.indices[0]) {
     LOG_TOPIC(DEBUG, Logger::SUPERVISION)
@@ -564,7 +564,7 @@ JOB_STATUS MoveShard::pendingLeader() {
   }
 
   // Transact to agency:
-  write_ret_t res = transact(_agent, trx);
+  write_ret_t res = singleWriteTransaction(_agent, trx);
 
   if (res.accepted && res.indices.size() == 1 && res.indices[0]) {
     LOG_TOPIC(DEBUG, Logger::SUPERVISION)
@@ -648,7 +648,7 @@ JOB_STATUS MoveShard::pendingFollower() {
     trx.add(precondition.slice());
   }
 
-  write_ret_t res = transact(_agent, trx);
+  write_ret_t res = singleWriteTransaction(_agent, trx);
 
   if (res.accepted && res.indices.size() == 1 && res.indices[0]) {
     return FINISHED;
@@ -740,7 +740,7 @@ arangodb::Result MoveShard::abort() {
     }
   }
 
-  write_ret_t res = transact(_agent, trx);
+  write_ret_t res = singleWriteTransaction(_agent, trx);
 
   if (!res.accepted) {
     result =  Result(TRI_ERROR_SUPERVISION_GENERAL_FAILURE,
