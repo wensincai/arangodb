@@ -121,10 +121,9 @@ bool FailedFollower::start() {
   }
 
   // Planned servers vector
-  auto const& planned =
-    _snapshot(
-      planColPrefix + _database + "/" + _collection + "/shards/" + _shard)
-    .slice();
+  std::string planPath
+    = planColPrefix + _database + "/" + _collection + "/shards/" + _shard;
+  auto const& planned = _snapshot(planPath).slice();
 
   // Get proper replacement
   _to = randomIdleGoodAvailableServer(_snapshot, planned);
@@ -187,10 +186,7 @@ bool FailedFollower::start() {
             job->add(obj.key.copyString(), obj.value);
           }
         }
-        // Remove todo entry ------
-        job->add(VPackValue(agencyPrefix + toDoPrefix + _jobId));
-        { VPackObjectBuilder rem(job.get());
-          job->add("op", VPackValue("delete")); }
+        addRemoveJobFromSomewhere(*job, "ToDo", _jobId);
         // Plan change ------------
         for (auto const& clone :
                clones(_snapshot, _database, _collection, _shard)) {
@@ -199,27 +195,25 @@ bool FailedFollower::start() {
             + clone.collection + "/shards/" + clone.shard, ns.slice());
         }
         
-        // Increment Plan/Version -
-        job->add(VPackValue(agencyPrefix + planVersion));
-        { VPackObjectBuilder version(job.get());
-          job->add("op", VPackValue("increment")); }} // Operations ------
+        addIncreasePlanVersion(*job);
+      }
       // Preconditions -------------------------------------------------------
       { VPackObjectBuilder preconditions(job.get());
-        // Collection should not have been deleted in the mt
-        job->add( 
-          VPackValue(
-            agencyPrefix + planColPrefix + _database + "/" + _collection));
-        { VPackObjectBuilder stillExists(job.get());
-          job->add("oldEmpty", VPackValue(false)); }
+        // Server list in plan still as before:
+        addPreconditionUnchanged(*job, planPath, planned);
+        // This implies that the collection has not been deleted in the mt
         // Status should still be failed
         job->add( 
           VPackValue(agencyPrefix + healthPrefix + _from + "/Status"));
         { VPackObjectBuilder stillFailing(job.get());
           job->add("old", VPackValue("FAILED")); }
-        
+        addPreconditionServerNotBlocked(*job, _to);
+        addPreconditionShardNotBlocked(*job, _shard);
+        addPreconditionServerGood(*job, _to);
       } // Preconditions -----------------------------------------------------
         
-    }}
+    }
+  }
   
   // Abort job blocking server if abortable
   try {
