@@ -315,7 +315,13 @@ std::string Job::id(std::string const& idOrShortName) {
 
 bool Job::abortable(Node const& snapshot, std::string const& jobId) {
 
-  auto const& job = snapshot(blockedServersPrefix + jobId);
+  if (!snapshot.has(pendingPrefix + jobId)) {
+    return false;
+  }
+  auto const& job = snapshot(pendingPrefix + jobId);
+  if (!job.has("type")) {
+    return false;
+  }
   auto const& type = job("type").getString();
 
   if (type == "failedServer" || type == "failedLeader") {

@@ -118,11 +118,8 @@ bool FailedServer::start() {
       pending.add(VPackValue(toDoPrefix + _jobId));
       { VPackObjectBuilder del(&pending);
         pending.add("op", VPackValue("delete")); }
-      // Block toServer
-      pending.add(VPackValue(blockedServersPrefix + _server));
-      { VPackObjectBuilder block(&pending);
-        pending.add("jobId", VPackValue(_jobId));
-      }
+
+      addBlockServer(pending, _server, _jobId);
     } // <------------ Operations
     
     // Preconditions ----------->
