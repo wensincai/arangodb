@@ -661,8 +661,7 @@ trans_ret_t Agent::transact(query_t const& queries) {
             _state.log(query[0], term());
           ret->add(VPackValue(maxind));
         } else {
-          VPackObjectBuilder f(ret.get());
-          ret->add("failed", VPackValue(res.pos));
+          _spearhead.read(res.failed->slice(), *ret);
           ++failed;
         }
       } else if (query[0].isString()) {
@@ -671,7 +670,7 @@ trans_ret_t Agent::transact(query_t const& queries) {
     }
     
     // (either no writes or all preconditions failed)
-    if (maxind == 0) {
+/*    if (maxind == 0) {
       ret->clear();
       ret->openArray();      
       for (const auto& query : VPackArrayIterator(qs)) {
@@ -681,7 +680,7 @@ trans_ret_t Agent::transact(query_t const& queries) {
           _readDB.read(query, *ret);
         }
       }
-    }
+      }*/
     
   }
   ret->close();

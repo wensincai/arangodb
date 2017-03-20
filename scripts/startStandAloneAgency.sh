@@ -15,6 +15,7 @@ function help() {
   echo "  -g/--gossip-mode   Integer     (0: Announce first endpoint to all"
   echo "                                  1: Grow list of known endpoints for each"
   echo "                                  2: Cyclic        default: 0)"
+  echo "  -b/--offset-ports  Offsetports (default: 0, i.e. A:5001)"
   echo ""
   echo "EXAMPLES:"
   echo "  scripts/startStandaloneAgency.sh"
@@ -103,6 +104,10 @@ while [[ ${1} ]]; do
     -s|--start-delays)
       START_DELAYS=${2}
       shift;;
+    -b|--port-offset)
+      PORT_OFFSET=${2}
+      shift
+      ;;
     -h|--help)
       help; exit 1  
       ;;
@@ -176,7 +181,7 @@ MINP=0.5
 MAXP=2.0
 SFRE=2.5
 COMP=200000
-BASE=5000
+BASE=$(( $PORT_OFFSET + 5000 ))
 
 if [ "$GOSSIP_MODE" = "0" ]; then
    GOSSIP_PEERS=" --agency.endpoint $TRANSPORT://[::1]:$BASE"

@@ -215,7 +215,7 @@ check_ret_t Store::apply(Slice const& query, bool verbose) {
       break;
     case 2:  // precondition
     case 3:  // precondition + clientId
-      ret = check(query[1]);
+      ret = check(query[1], CheckMode::FULL);
       if (ret.successful()) {
         applies(query[0]);
       } else {  // precondition failed
@@ -377,14 +377,16 @@ std::vector<bool> Store::apply(
 }
 
 /// Check precodition object
-check_ret_t Store::check(VPackSlice const& slice) const {
+check_ret_t Store::check(VPackSlice const& slice, CheckMode mode) const {
 
   TRI_ASSERT(slice.isObject());
+  check_ret_t ret;
+  ret.open();
 
-  size_t i = 0;
   for (auto const& precond : VPackObjectIterator(slice)) {  // Preconditions
 
-    std::vector<std::string> pv = split(precond.key.copyString(), '/');
+    std::string key = precond.key.copyString();
+    std::vector<std::string> pv = split(key, '/');
     
     Node node("precond");
 
@@ -399,26 +401,41 @@ check_ret_t Store::check(VPackSlice const& slice) const {
         std::string const& oper = op.key.copyString();
         if (oper == "old") {  // old
           if (node != op.value) {
-            return check_ret_t(false,i);
+            ret.push_back(precond.key);
+            if (mode == FIRST_FAIL) {
+              break;
+            }
           }
         } else if (oper == "isArray") {  // isArray
           if (!op.value.isBoolean()) {
             LOG_TOPIC(ERR, Logger::AGENCY)
-                << "Non boolean expression for 'isArray' precondition";
-            return check_ret_t(false,i);
+              << "Non boolean expression for 'isArray' precondition";
+            ret.push_back(precond.key);
+            if (mode == FIRST_FAIL) {
+              break;
+            }
           }
           bool isArray = (node.type() == LEAF && node.slice().isArray());
           if (op.value.getBool() ? !isArray : isArray) {
-            return check_ret_t(false,i);
+            ret.push_back(precond.key);
+            if (mode == FIRST_FAIL) {
+              break;
+            }
           }
         } else if (oper == "oldEmpty") {  // isEmpty
           if (!op.value.isBoolean()) {
             LOG_TOPIC(ERR, Logger::AGENCY)
                 << "Non boolsh expression for 'oldEmpty' precondition";
-            return check_ret_t(false,i);
+            ret.push_back(precond.key);
+            if (mode == FIRST_FAIL) {
+              break;
+            }
           }
           if (op.value.getBool() ? found : !found) {
-            return check_ret_t(false,i);
+            ret.push_back(precond.key);
+            if (mode == FIRST_FAIL) {
+              break;
+            }
           }
         } else if (oper == "in") {  // in
           if (found) {
@@ -435,18 +452,24 @@ check_ret_t Store::check(VPackSlice const& slice) const {
               }
             }
           }
-          return check_ret_t(false,i);
+          ret.push_back(precond.key);
+          if (mode == FIRST_FAIL) {
+            break;
+          }
         }
       }
     } else {
       if (node != precond.value) {
-        return check_ret_t(false,i);
+        ret.push_back(precond.key);
+        if (mode == FIRST_FAIL) {
+          break;
+        }
       }
     }
-    ++i;
   }
 
-  return check_ret_t(true);
+  ret.close();
+  return ret;
 }
 
 

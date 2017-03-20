@@ -268,8 +268,14 @@ inline arangodb::consensus::trans_ret_t generalTransaction(
       << "Supervision failed to build transaction.";
     LOG_TOPIC(ERR, Logger::SUPERVISION) << e.what() << " " << __FILE__ << __LINE__;
   }
+
+  auto ret = _agent->transact(envelope);
   
-  return _agent->transact(envelope);
+  if (ret.maxind > 0) {
+    _agent->waitFor(ret.maxind);
+  }
+  
+  return ret;
 
 }
 

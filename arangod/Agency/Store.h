@@ -34,13 +34,37 @@ namespace arangodb {
 namespace consensus {
 
 struct check_ret_t {
+
   bool success;
-  size_t pos;
-  check_ret_t() : success(false), pos(0) {}
-  check_ret_t(bool s, size_t p = 0) : success(s), pos(p) {}
+  query_t failed;
+  
+  check_ret_t() : success(true), failed(nullptr) {}
+  
+  check_ret_t(bool s) : success(s) {}
+  
   inline bool successful() const { return success; }
+  
   inline void successful(bool s) { success = s; }
+
+  inline void open() {
+    TRI_ASSERT(failed == nullptr);
+    failed = std::make_shared<VPackBuilder>(); failed->openArray();
+  }
+  
+  inline void push_back(VPackSlice const& key) {
+    TRI_ASSERT(failed != nullptr);
+    success = false;
+    failed->add(key);
+  }
+  
+  inline void close() {
+    TRI_ASSERT(failed != nullptr);
+    failed->close();
+  } 
+  
 };
+
+enum CheckMode {FIRST_FAIL, FULL};
 
 class Agent;
 
@@ -126,7 +150,7 @@ class Store : public arangodb::Thread {
   std::multimap<std::string, std::string> const& observedTable() const;
 
   /// @brief Check precondition
-  check_ret_t check(arangodb::velocypack::Slice const&) const;
+  check_ret_t check(arangodb::velocypack::Slice const&, CheckMode = FIRST_FAIL) const;
 
   /// @brief Clear entries, whose time to live has expired
   query_t clearExpired() const;
