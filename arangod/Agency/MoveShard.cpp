@@ -680,10 +680,11 @@ arangodb::Result MoveShard::abort() {
   Builder trx;  // to build the transaction
 
   // Now look after a PENDING job:
-  if (_isLeader) {
-    { VPackArrayBuilder arrayForTransactionPair(&trx);
-      { VPackObjectBuilder transactionObj(&trx);
-
+  {
+    VPackArrayBuilder arrayForTransactionPair(&trx);
+    {
+      VPackObjectBuilder transactionObj(&trx);
+      if (_isLeader) {
         // All changes to Plan for all shards:
         doForAllShards(_snapshot, _database, shardsLikeMe,
           [this, &trx](Slice plan, Slice current, std::string& planPath) {
@@ -700,20 +701,7 @@ arangodb::Result MoveShard::abort() {
             }
           }
         );
-
-        addRemoveJobFromSomewhere(trx, "Pending", _jobId);
-        Builder job;
-        _snapshot(pendingPrefix + _jobId).toBuilder(job);
-        addPutJobIntoSomewhere(trx, "Failed", job.slice(), "job aborted");
-        addReleaseShard(trx, _shard);
-        addReleaseServer(trx, _to);
-        addIncreasePlanVersion(trx);
-      }
-    }
-  } else {
-    { VPackArrayBuilder arrayForTransactionPair(&trx);
-      { VPackObjectBuilder transactionObj(&trx);
-
+      } else {
         // All changes to Plan for all shards:
         doForAllShards(_snapshot, _database, shardsLikeMe,
           [this, &trx](Slice plan, Slice current, std::string& planPath) {
@@ -728,15 +716,14 @@ arangodb::Result MoveShard::abort() {
             }
           }
         );
-
-        addRemoveJobFromSomewhere(trx, "Pending", _jobId);
-        Builder job;
-        _snapshot(pendingPrefix + _jobId).toBuilder(job);
-        addPutJobIntoSomewhere(trx, "Failed", job.slice(), "job aborted");
-        addReleaseShard(trx, _shard);
-        addReleaseServer(trx, _to);
-        addIncreasePlanVersion(trx);
       }
+      addRemoveJobFromSomewhere(trx, "Pending", _jobId);
+      Builder job;
+      _snapshot(pendingPrefix + _jobId).toBuilder(job);
+      addPutJobIntoSomewhere(trx, "Failed", job.slice(), "job aborted");
+      addReleaseShard(trx, _shard);
+      addReleaseServer(trx, _to);
+      addIncreasePlanVersion(trx);
     }
   }
 
