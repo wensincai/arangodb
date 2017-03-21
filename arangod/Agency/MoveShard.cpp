@@ -670,7 +670,7 @@ arangodb::Result MoveShard::abort() {
   
   // Can now only be TODO or PENDING
   if (_status == TODO) {
-    finish("", "", false, "job aborted");
+    finish("", "", true, "job aborted");
     return result;
   }
 
