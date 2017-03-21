@@ -2132,6 +2132,15 @@ SECTION("if the new leader took over finish the job") {
   Verify(Method(mockAgent,write));
 }
 
+SECTION("calling an unknown job should be possible without throwing exceptions or so") {
+  Mock<AgentInterface> mockAgent;
+  AgentInterface& agent = mockAgent.get();
+  Node agency = createAgencyFromBuilder(baseStructure.toBuilder());
+  INFO("Agency: " << agency);
+
+  CHECK_NOTHROW(MoveShard(agency, &agent, PENDING, "666"));
+}
+
 }
 }
 }
