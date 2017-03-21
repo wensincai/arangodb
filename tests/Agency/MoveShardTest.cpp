@@ -125,6 +125,20 @@ Node createRootNode() {
           {
             VPackArrayBuilder d(&builder);
           }
+          builder.add(VPackValue("MapUniqueToShortID"));
+          {
+            VPackObjectBuilder d(&builder);
+            builder.add(VPackValue(SHARD_LEADER));
+            {
+              VPackObjectBuilder e(&builder);
+              builder.add("ShortName", VPackValue(SHARD_LEADER));
+            }
+            builder.add(VPackValue(SHARD_FOLLOWER1));
+            {
+              VPackObjectBuilder e(&builder);
+              builder.add("ShortName", VPackValue(SHARD_FOLLOWER1));
+            }
+          }
         }
         builder.add(VPackValue("Current"));
         {
@@ -2139,6 +2153,68 @@ SECTION("calling an unknown job should be possible without throwing exceptions o
   INFO("Agency: " << agency);
 
   CHECK_NOTHROW(MoveShard(agency, &agent, PENDING, "666"));
+}
+
+SECTION("it should be possible to create a new moveshard job") {
+  Mock<AgentInterface> mockAgent;
+  When(Method(mockAgent, waitFor)).AlwaysReturn();
+  When(Method(mockAgent, write)).Do([&](query_t const& q) -> write_ret_t {
+    INFO("WriteTransaction: " << q->slice().toJson());
+    REQUIRE(q->slice()[0].length() == 1);
+
+    auto writes = q->slice()[0][0];
+    CHECK(writes.length() == 1);
+    REQUIRE(std::string(writes.get("/arango/Target/ToDo/1").typeName()) == "object");
+    CHECK(writes.get("/arango/Target/ToDo/1").get("database").copyString() == DATABASE);
+    CHECK(writes.get("/arango/Target/ToDo/1").get("collection").copyString() == COLLECTION);
+    CHECK(writes.get("/arango/Target/ToDo/1").get("shard").copyString() == SHARD);
+    CHECK(writes.get("/arango/Target/ToDo/1").get("fromServer").copyString() == SHARD_LEADER);
+    CHECK(writes.get("/arango/Target/ToDo/1").get("toServer").copyString() == SHARD_FOLLOWER1);
+    CHECK(std::string(writes.get("/arango/Target/ToDo/1").get("timeCreated").typeName()) == "string");
+
+    return fakeWriteResult;
+  });
+  AgentInterface& agent = mockAgent.get();
+
+  Node agency = createAgencyFromBuilder(baseStructure.toBuilder());
+  INFO("Agency: " << agency);
+
+  auto moveShard = MoveShard(agency, &agent, jobId, "hans", DATABASE, COLLECTION, SHARD, SHARD_LEADER, SHARD_FOLLOWER1, true);
+  moveShard.create(nullptr);
+  Verify(Method(mockAgent,write));
+}
+
+SECTION("it should be possible to create a new moveshard job within an envelope") {
+  Mock<AgentInterface> mockAgent;
+  AgentInterface& agent = mockAgent.get();
+
+  Node agency = createAgencyFromBuilder(baseStructure.toBuilder());
+  INFO("Agency: " << agency);
+
+  auto moveShard = MoveShard(agency, &agent, jobId, "hans", DATABASE, COLLECTION, SHARD, SHARD_LEADER, SHARD_FOLLOWER1, true);
+
+  auto builder = std::make_shared<VPackBuilder>();
+  builder->openObject();
+  moveShard.create(builder);
+  builder->close();
+
+  REQUIRE(std::string(builder->slice().get("/Target/ToDo/1").typeName()) == "object");
+}
+
+SECTION("whenever someone tries to create a useless job it should be created in Failed") {
+  Mock<AgentInterface> mockAgent;
+  AgentInterface& agent = mockAgent.get();
+
+  Node agency = createAgencyFromBuilder(baseStructure.toBuilder());
+  INFO("Agency: " << agency);
+
+  auto moveShard = MoveShard(agency, &agent, jobId, "hans", DATABASE, COLLECTION, SHARD, SHARD_LEADER, SHARD_LEADER, true);
+  auto builder = std::make_shared<VPackBuilder>();
+  builder->openObject();
+  moveShard.create(builder);
+  builder->close();
+
+  REQUIRE(std::string(builder->slice().get("/Target/Failed/1").typeName()) == "object");
 }
 
 }
