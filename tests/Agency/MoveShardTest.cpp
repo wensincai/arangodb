@@ -58,6 +58,10 @@ namespace arangodb {
 namespace tests {
 namespace move_shard_test {
 
+const char *agency =
+#include "MoveShardTest.json"
+;
+
 Node createAgencyFromBuilder(VPackBuilder const& builder) {
   Node node("");
 
@@ -87,158 +91,17 @@ Node createAgencyFromBuilder(VPackBuilder const& builder) {
     CHECK(std::string(writes.get("/arango/Target/Failed/1").typeName()) == "object");
 
 Node createRootNode() {
-  Node root("ROOT");
 
+  VPackOptions options;
+  options.checkAttributeUniqueness = true;
+  VPackParser parser(&options);
+  parser.parse(agency);
+  
   VPackBuilder builder;
-  {
-    VPackObjectBuilder a(&builder);
-    builder.add(VPackValue("new"));
-    {
-      VPackObjectBuilder a(&builder);
-      builder.add(VPackValue(PREFIX));
-      {
-        VPackObjectBuilder b(&builder);
-        builder.add(VPackValue("Target"));
-        {
-          VPackObjectBuilder c(&builder);
-          builder.add(VPackValue("ToDo"));
-          {
-            VPackObjectBuilder d(&builder);
-          }
-          builder.add(VPackValue("Pending"));
-          {
-            VPackObjectBuilder d(&builder);
-          }
-          builder.add(VPackValue("Finished"));
-          {
-            VPackObjectBuilder d(&builder);
-          }
-          builder.add(VPackValue("Failed"));
-          {
-            VPackObjectBuilder d(&builder);
-          }
-          builder.add(VPackValue("FailedServers"));
-          {
-            VPackObjectBuilder d(&builder);
-          }
-          builder.add(VPackValue("CleanedServers"));
-          {
-            VPackArrayBuilder d(&builder);
-          }
-          builder.add(VPackValue("MapUniqueToShortID"));
-          {
-            VPackObjectBuilder d(&builder);
-            builder.add(VPackValue(SHARD_LEADER));
-            {
-              VPackObjectBuilder e(&builder);
-              builder.add("ShortName", VPackValue(SHARD_LEADER));
-            }
-            builder.add(VPackValue(SHARD_FOLLOWER1));
-            {
-              VPackObjectBuilder e(&builder);
-              builder.add("ShortName", VPackValue(SHARD_FOLLOWER1));
-            }
-          }
-        }
-        builder.add(VPackValue("Current"));
-        {
-          VPackObjectBuilder c(&builder);
-          builder.add(VPackValue("Collections"));
-          {
-            VPackObjectBuilder d(&builder);
-            builder.add(VPackValue(DATABASE));
-            {
-              VPackObjectBuilder e(&builder);
-              builder.add(VPackValue(COLLECTION));
-              {
-                VPackObjectBuilder f(&builder);
-                builder.add(VPackValue(SHARD));
-                {
-                  VPackObjectBuilder f(&builder);
-                  builder.add(VPackValue("servers"));
-                  {
-                    VPackArrayBuilder g(&builder);
-                    builder.add(VPackValue(SHARD_LEADER));
-                    builder.add(VPackValue(SHARD_FOLLOWER1));
-                  }
-                }
-              }
-            }
-          }
-        }
-        builder.add(VPackValue("Plan"));
-        {
-          VPackObjectBuilder c(&builder);
-          builder.add(VPackValue("Collections"));
-          {
-            VPackObjectBuilder d(&builder);
-            builder.add(VPackValue(DATABASE));
-            {
-              VPackObjectBuilder e(&builder);
-              builder.add(VPackValue(COLLECTION));
-              {
-                VPackObjectBuilder f(&builder);
-                builder.add(VPackValue("shards"));
-                {
-                  VPackObjectBuilder f(&builder);
-                  builder.add(VPackValue(SHARD));
-                  {
-                    VPackArrayBuilder g(&builder);
-                    builder.add(VPackValue(SHARD_LEADER));
-                    builder.add(VPackValue(SHARD_FOLLOWER1));
-                  }
-                }
-              }
-            }
-          }
-          builder.add(VPackValue("DBServers"));
-          {
-            VPackObjectBuilder d(&builder);
-            builder.add(SHARD_LEADER, VPackValue("none"));
-            builder.add(SHARD_FOLLOWER1, VPackValue("none"));
-            builder.add(FREE_SERVER, VPackValue("none"));
-            builder.add(FREE_SERVER2, VPackValue("none"));
-          }
-        }
-        builder.add(VPackValue("Supervision"));
-        {
-          VPackObjectBuilder c(&builder);
-          builder.add(VPackValue("Health"));
-          {
-            VPackObjectBuilder c(&builder);
-            builder.add(VPackValue(SHARD_LEADER));
-            {
-              VPackObjectBuilder e(&builder);
-              builder.add("Status", VPackValue("GOOD"));
-            }
-            builder.add(VPackValue(SHARD_FOLLOWER1));
-            {
-              VPackObjectBuilder e(&builder);
-              builder.add("Status", VPackValue("GOOD"));
-            }
-            builder.add(VPackValue(FREE_SERVER));
-            {
-              VPackObjectBuilder e(&builder);
-              builder.add("Status", VPackValue("GOOD"));
-            }
-            builder.add(VPackValue(FREE_SERVER2));
-            {
-              VPackObjectBuilder e(&builder);
-              builder.add("Status", VPackValue("GOOD"));
-            }
-          }
-          builder.add(VPackValue("DBServers"));
-          {
-            VPackObjectBuilder c(&builder);
-          }
-          builder.add(VPackValue("Shards"));
-          {
-            VPackObjectBuilder c(&builder);
-          }
-        }
-      }
-    }
-  }
+  { VPackObjectBuilder a(&builder);
+    builder.add("new", parser.steal()->slice()); }
+
+  Node root("ROOT");
   root.handle<SET>(builder.slice());
   return root;
 }
