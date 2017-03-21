@@ -259,35 +259,69 @@ bool FailedLeader::start() {
 
   // Something went south. Let's see
   auto result = res.result->slice()[0];
+
+  if (res.accepted && res.result->slice()[0].getUInt()) {
+    return true;
+  }
+
+  if (!res.accepted) { // lost leadership
+    LOG_TOPIC(INFO, Logger::SUPERVISION)
+      << "Leadership lost! Job " << _jobId << " handed off.";
+  }
+  
   if (result.isObject()) {
-    TRI_ASSERT(result.hasKey("failed") && result.get("failed").isUInt());
-    auto failed = result.get("failed").getUInt();
-    switch (failed) {
-    case 0:
-      finish("", _shard, false, "Server " + _from + " no longer failing");
+
+    // Still failing _from?
+    auto slice = result.get(
+      std::vector<std::string>({
+          agencyPrefix, "Supervision", "Health", _from, "Status"}));
+    if (!slice.isString() || slice.copyString() != "FAILED") {
+      finish("", _shard, false, "Server " + _from + " no longer failing.");
       return false;
-    case 1:
-      LOG_TOPIC(DEBUG, Logger::SUPERVISION)
-        << "Destination server " << _to << " not in good condition anymore " << _jobId;
+    }
+
+    // Still healthy _to?
+    slice = result.get(
+      std::vector<std::string>(
+        {agencyPrefix, "Supervision", "Health", _to, "Status"}));
+    if (!slice.isString() || slice.copyString() != "GOOD") {
+      LOG_TOPIC(INFO, Logger::SUPERVISION)
+        << "Will not failover from " << _from << " to " << _to
+        << " as target server is no longer in good condition. Will retry.";
       return false;
-    case 2:
-      LOG_TOPIC(DEBUG, Logger::SUPERVISION)
-        << "Plan no longer in sync with snapshot for failedLeader job " << _jobId;
-      return false;
-    case 3:
-      LOG_TOPIC(DEBUG, Logger::SUPERVISION)
-        << "Destination server " << _to << " is block by another job.";
-      return false;
-    case 4:
-      LOG_TOPIC(DEBUG, Logger::SUPERVISION)
-        << "Shard " << _shard << "is still blocked by another unabortable job";
-      return false;
-    default:
-      break;
-    }      
+    }
+
+    // Snapshot and plan still in sync with respect to server list?
+    slice = result.get(
+      std::vector<std::string>({agencyPrefix, "Plan", "Collections", _database,
+            _collection, "shards", _shard}));
+    if (!slice.isNone()) {
+      LOG_TOPIC(INFO, Logger::SUPERVISION)
+        << "Plan no longer holds the expected server list. Will retry.";
+    }
+
+    // To server blocked by other job?
+    slice = result.get(
+      std::vector<std::string>(
+        {agencyPrefix, "Supervision", "DBServers", _to}));
+    if (!slice.isNone()) {
+      LOG_TOPIC(INFO, Logger::SUPERVISION)
+        << "Destination server " << _to << " meanwhile is blocked by job " <<
+        slice.copyString();
+    }
+
+    // This shard blocked by other job?
+    slice = result.get(
+      std::vector<std::string>(
+        {agencyPrefix, "Supervision", "Shards", _shard}));
+    if (!slice.isNone()) {
+      LOG_TOPIC(INFO, Logger::SUPERVISION)
+        << "Shard  " << _shard << " meanwhile is blocked by job " <<
+        slice.copyString();
+    }
   }
     
-  return (res.accepted && res.result->slice()[0].getUInt());
+  return false;
   
 }
 
