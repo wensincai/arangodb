@@ -780,7 +780,7 @@ SECTION("abort any addFollower job blocking the shard and start") {
     JOB_STATUS::TODO,
     jobId
   );
-//  failedLeader.start();
+  failedLeader.start();
 }
 
 SECTION("if everything is fine than the job should be written to pending, adding the toServer") {

@@ -8,8 +8,7 @@ R"=(
             "shard": {
               "servers": [
                 "leader",
-                "follower1",
-                "follower2"
+                "follower1"
               ]
             }
           }
@@ -20,11 +19,11 @@ R"=(
       "Collections": {
         "database": {
           "collection": {
+            "replicationFactor" : 3,
             "shards": {
               "shard": [
                 "leader",
-                "follower1",
-                "follower2"
+                "follower1"
               ]
             }
           }
