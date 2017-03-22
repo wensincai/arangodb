@@ -531,7 +531,7 @@ SECTION("the job must not be started if there if one of the linked shards (distr
         builder->add(VPackValue("linkedcollection1"));
         {
           VPackObjectBuilder f(builder.get());
-          builder->add("distributeShardsLike", VPackValue(SHARD));
+          builder->add("distributeShardsLike", VPackValue(COLLECTION));
           builder->add(VPackValue("shards"));
           {
             VPackObjectBuilder f(builder.get());
@@ -547,7 +547,7 @@ SECTION("the job must not be started if there if one of the linked shards (distr
         builder->add(VPackValue("linkedcollection2"));
         {
           VPackObjectBuilder f(builder.get());
-          builder->add("distributeShardsLike", VPackValue(SHARD));
+          builder->add("distributeShardsLike", VPackValue(COLLECTION));
           builder->add(VPackValue("shards"));
           {
             VPackObjectBuilder f(builder.get());
@@ -780,7 +780,7 @@ SECTION("abort any addFollower job blocking the shard and start") {
     JOB_STATUS::TODO,
     jobId
   );
-  failedLeader.start();
+//  failedLeader.start();
 }
 
 SECTION("if everything is fine than the job should be written to pending, adding the toServer") {

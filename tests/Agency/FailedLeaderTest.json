@@ -56,7 +56,18 @@ R"=(
     "Target": {
       "Failed": {},
       "Finished": {},
-      "ToDo": {}
+      "ToDo": {},
+      "MapUniqueToShortID": {
+        "follower1": {
+          "ShortName": "follower1"
+        },
+        "follower2": {
+          "ShortName": "follower2"
+        },
+        "leader": {
+          "ShortName": "leader"
+        }
+      }
     }
   }
 }
