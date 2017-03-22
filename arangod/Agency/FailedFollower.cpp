@@ -165,14 +165,6 @@ bool FailedFollower::start() {
 
   { VPackArrayBuilder transactions(&job);
     
-    { VPackArrayBuilder stillThere(&job);
-      // Collection still there?
-      job.add(
-        VPackValue(
-          planColPrefix + _database + "/" + _collection));
-      // Still failing?
-      job.add(VPackValue(healthPrefix + _from + "/Status"));}
-    
     { VPackArrayBuilder transaction(&job);
         // Operations ----------------------------------------------------------
       { VPackObjectBuilder operations(&job);
@@ -201,13 +193,14 @@ bool FailedFollower::start() {
       }
       // Preconditions -------------------------------------------------------
       { VPackObjectBuilder preconditions(&job);
+        // Server _server is still in FAILED state
+        job.add( 
+          VPackValue(healthPrefix + _from + "/Status"));
+        { VPackObjectBuilder stillFailing(&job);
         // Server list in plan still as before:
         addPreconditionUnchanged(job, planPath, planned);
         // This implies that the collection has not been deleted in the mt
         // Status should still be failed
-        job.add( 
-          VPackValue(healthPrefix + _from + "/Status"));
-        { VPackObjectBuilder stillFailing(&job);
           job.add("old", VPackValue("FAILED")); }
         addPreconditionServerNotBlocked(job, _to);
         addPreconditionShardNotBlocked(job, _shard);
@@ -235,34 +228,50 @@ bool FailedFollower::start() {
   LOG_TOPIC(DEBUG, Logger::SUPERVISION)
     << "FailedFollower start result: " << res.result->toJson();
   
-  try {
-    auto exist = res.result->slice()[0].get(
-      std::vector<std::string>(
-        {"arango", "Plan", "Collections", _database, _collection}
-        )).isObject();
-    if (!exist) {
-      finish("", _shard, false, "Collection " + _collection + " gone");
-    }
-  } catch (std::exception const& e) {
-    LOG_TOPIC(ERR, Logger::SUPERVISION)
-      << "Failed to acquire find " << _from << " in job IDs from agency: "
-      << e.what() << __FILE__ << __LINE__; 
+  auto result = res.result->slice()[0];
+  
+  if (res.accepted && result.getUInt()) {
+    return true;
+  }
+
+  auto slice = result.get(
+    std::vector<std::string>(
+      {agencyPrefix, "Supervision", "Health", _from, "Status"}));
+  if (!slice.isString() || slice.copyString() != "FAILED") {
+    finish("", _shard, true, "Server " + _from + "no longer failing.");
+  }
+
+  slice = result.get(
+    std::vector<std::string>(
+      {agencyPrefix, "Supervision", "Health", _to, "Status"}));
+  if (!slice.isString() || slice.copyString() != "GOOD") {
+    LOG_TOPIC(INFO, Logger::SUPERVISION) <<
+      "Destination server " << _to << "is no longer in good condition";
+  }
+
+  slice = result.get(
+    std::vector<std::string>({agencyPrefix, "Plan", "Collections", _database,
+          _collection, "shards", _shard}));
+  if (!slice.isNone()) {
+    LOG_TOPIC(INFO, Logger::SUPERVISION) <<
+      "Planned db server list is in mismatch with snapshot";
   }
   
-  try {
-    auto state = res.result->slice()[0].get(
-      std::vector<std::string>(
-        {"arango", "Supervision", "Health", _from, "Status"})).copyString();
-    if (state != "FAILED") {
-      finish("", _shard, false, _from + " is no longer 'FAILED'");
-    }
-  } catch (std::exception const& e) {
-    LOG_TOPIC(ERR, Logger::SUPERVISION)
-      << "Failed to acquire find " << _from << " in job IDs from agency: "
-      << e.what() << __FILE__ << __LINE__; 
+  slice = result.get(
+    std::vector<std::string>({agencyPrefix, "Supervision", "DBServers", _to}));
+  if (!slice.isNone()) {
+    LOG_TOPIC(INFO, Logger::SUPERVISION) <<
+      "Destination " << _to << " is now blocked by job " << slice.copyString();
+  }
+
+  slice = result.get(
+    std::vector<std::string>({agencyPrefix, "Supervision", "Shards", _shard}));
+  if (!slice.isNone()) {
+    LOG_TOPIC(INFO, Logger::SUPERVISION) <<
+      "Shard " << _shard << " is now blocked by job " << slice.copyString();
   }
   
-  return (res.accepted && res.result->slice()[1].getUInt());
+  return false;
   
 }
 

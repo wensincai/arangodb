@@ -5,6 +5,7 @@ endforeach()
 # linking is a dark art...workmonitordummy is somehow necessary
 add_executable(
   arangodbtests
+  Agency/AddFollowerTest.cpp
   Agency/FailedFollowerTest.cpp
   Agency/FailedLeaderTest.cpp
   Agency/MoveShardTest.cpp
