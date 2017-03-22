@@ -604,24 +604,13 @@ SECTION("the job must not be started if there if one of the linked shards (distr
 
 SECTION("abort any moveShard job blocking the shard and start") {
   Mock<AgentInterface> moveShardMockAgent;
-
-  VPackBuilder moveShardBuilder;
-  When(Method(moveShardMockAgent, write)).Do([&](query_t const& q) -> write_ret_t {
-    REQUIRE(std::string(q->slice().typeName()) == "array" );
-    REQUIRE(q->slice().length() == 1);
-    REQUIRE(std::string(q->slice()[0].typeName()) == "array");
-    REQUIRE(q->slice()[0].length() > 0); // preconditions!
-    REQUIRE(std::string(q->slice()[0][0].typeName()) == "object");
-
-    REQUIRE(std::string(q->slice()[0][0].get("/arango/Target/ToDo/2").typeName()) == "object");
-    moveShardBuilder.add(q->slice()[0][0].get("/arango/Target/ToDo/2"));
-
-    return fakeWriteResult;
-  });
   AgentInterface &moveShardAgent = moveShardMockAgent.get();
 
+  auto moveShardBuilder = std::make_shared<VPackBuilder>();
+  moveShardBuilder->openObject();
   auto moveShard = MoveShard(baseStructure("arango"), &moveShardAgent, "2", "strunz", DATABASE, COLLECTION, SHARD, SHARD_LEADER, SHARD_FOLLOWER1, true);
-  moveShard.create();
+  moveShard.create(moveShardBuilder);
+  moveShardBuilder->close();
 
   std::string jobId = "1";
   std::function<std::unique_ptr<VPackBuilder>(VPackSlice const&, std::string const&)> createTestStructure = [&](VPackSlice const& s, std::string const& path) {
@@ -637,7 +626,7 @@ SECTION("abort any moveShard job blocking the shard and start") {
       if (path == "/arango/Supervision/Shards") {
         builder->add(SHARD, VPackValue("2"));
       } else if (path == "/arango/Target/Pending") {
-        builder->add("2", moveShardBuilder.slice());
+        builder->add("2", moveShardBuilder->slice());
       } else if (path == "/arango/Target/ToDo") {
         VPackBuilder jobBuilder;
         jobBuilder.add(VPackValue(VPackValueType::Object));
