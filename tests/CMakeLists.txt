@@ -5,6 +5,7 @@ endforeach()
 # linking is a dark art...workmonitordummy is somehow necessary
 add_executable(
   arangodbtests
+  main.cpp
   Agency/AddFollowerTest.cpp
   Agency/FailedFollowerTest.cpp
   Agency/FailedLeaderTest.cpp
@@ -31,7 +32,6 @@ add_executable(
   Basics/StringUtilsTest.cpp
   Basics/VelocyPackHelper-test.cpp
   Geo/georeg.cpp
-  main.cpp
 )
 
 target_link_libraries(

@@ -54,6 +54,24 @@ R"=(
       "Shards": {}
     },
     "Target": {
+      "MapUniqueToShortID": {
+        "follower1": {
+          "ShortName": "follower1"
+        },
+        "follower2": {
+          "ShortName": "follower2"
+        },
+        "free": {
+          "ShortName": "free"
+        },
+        "free2": {
+          "ShortName": "free2"
+        },
+        "leader": {
+          "ShortName": "leader"
+        }
+      },
+      "Pending": {},
       "Failed": {},
       "Finished": {},
       "ToDo": {},
