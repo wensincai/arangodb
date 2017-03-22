@@ -336,7 +336,6 @@ TEST_CASE("AddFollower", "[agency][supervision]") {
     
     auto builder = createTestStructure(baseStructure.toBuilder().slice(), "");
     REQUIRE(builder);
-    std::cout << builder->toJson();
     Node agency = createNodeFromBuilder(*builder);
     
     Mock<AgentInterface> mockAgent;
@@ -389,27 +388,20 @@ TEST_CASE("AddFollower", "[agency][supervision]") {
           builder->add(jobId, createBuilder(todo).slice());
         }
         
-      } else {
-        
-        if (path == "/arango/Plan/Collections/" + DATABASE + "/" +
-            COLLECTION + "/shards/" + SHARD) {
-          VPackArrayBuilder a(builder.get());
-          for (auto const& serv : VPackArrayIterator(s)) {
-            builder->add(serv);
-          }
-          builder->add(VPackValue(SHARD_FOLLOWER2));
-        } else {
-          builder->add(s);
+        if (path == "/arango/Supervision/Shards") {
+          builder->add(SHARD, VPackValue("2"));
         }
         
+      } else {
+        builder->add(s);
       }
+
       return builder;
       
     };
     
     auto builder = createTestStructure(baseStructure.toBuilder().slice(), "");
     REQUIRE(builder);
-    std::cout << builder->toJson();
     Node agency = createNodeFromBuilder(*builder);
     
     Mock<AgentInterface> mockAgent;
@@ -419,6 +411,130 @@ TEST_CASE("AddFollower", "[agency][supervision]") {
         REQUIRE(q->slice().length() == 1);
         REQUIRE(typeName(q->slice()[0]) == "array");
         REQUIRE(q->slice()[0].length() == 1); // we always simply override! no preconditions...
+        REQUIRE(typeName(q->slice()[0][0]) == "object");
+
+        auto writes = q->slice()[0][0];
+        REQUIRE(typeName(writes.get("/arango/Target/ToDo/1")) == "object");
+        CHECK(writes.get("/arango/Target/Finished/1").get("collection").copyString() == COLLECTION);
+        return fakeWriteResult;
+      });
+    When(Method(mockAgent, waitFor)).AlwaysReturn(AgentInterface::raft_commit_t::OK);
+    AgentInterface &agent = mockAgent.get();
+    auto addFollower =
+      AddFollower(agency("arango"), &agent, JOB_STATUS::TODO, jobId);
+    addFollower.start();
+    
+  }
+  
+  SECTION("we can find one (or more, if needed) which have status 'GOOD', and "
+          "have `Supervision/DBServers/ empty and are not currently in the list "
+          "of servers of the shard, if not, wait") {
+    
+    TestStructType createTestStructure =
+      [&](Slice const& s, std::string const& path) {
+      
+      std::unique_ptr<Builder> builder;
+      builder.reset(new Builder());
+      if (s.isObject()) {
+        
+        VPackObjectBuilder b(builder.get());
+
+        for (auto const& it: VPackObjectIterator(s)) {
+          auto childBuilder =
+            createTestStructure(it.value, path + "/" + it.key.copyString());
+          if (childBuilder) {
+            builder->add(it.key.copyString(), childBuilder->slice());
+          }
+        }
+        
+        if (path == "/arango/Target/ToDo") {
+          builder->add(jobId, createBuilder(todo).slice());
+        }
+        
+        if (path == "/arango/Supervision/Health/follower2") {
+          builder->add("Status", VPackValue("FAILED"));
+        }
+        
+        if (path == "/arango/Supervision/Health/free") {
+          builder->add("Status", VPackValue("FAILED"));
+        }
+      } else {
+        builder->add(s);
+      }
+      return builder;
+      
+    };
+    
+    auto builder = createTestStructure(baseStructure.toBuilder().slice(), "");
+    REQUIRE(builder);
+    Node agency = createNodeFromBuilder(*builder);
+    
+    Mock<AgentInterface> mockAgent;
+    When(Method(mockAgent, write)).AlwaysDo([&](query_t const& q) -> write_ret_t {
+        INFO(q->slice().toJson());
+        REQUIRE(typeName(q->slice()) == "array" );
+        REQUIRE(q->slice().length() == 1);
+        REQUIRE(typeName(q->slice()[0]) == "array");
+        REQUIRE(q->slice()[0].length() == 1); // we always simply override! no preconditions...
+        REQUIRE(typeName(q->slice()[0][0]) == "object");
+
+        auto writes = q->slice()[0][0];
+        REQUIRE(typeName(writes.get("/arango/Target/ToDo/1")) == "object");
+        CHECK(writes.get("/arango/Target/Finished/1").get("collection").copyString() == COLLECTION);
+        return fakeWriteResult;
+      });
+    When(Method(mockAgent, waitFor)).AlwaysReturn(AgentInterface::raft_commit_t::OK);
+    AgentInterface &agent = mockAgent.get();
+    auto addFollower =
+      AddFollower(agency("arango"), &agent, JOB_STATUS::TODO, jobId);
+    addFollower.start();
+
+  }
+
+  
+  SECTION("this job is immediately performed in a single transaction and then "
+          "moved to Target/Finished") {
+    
+    TestStructType createTestStructure =
+      [&](Slice const& s, std::string const& path) {
+      
+      std::unique_ptr<Builder> builder;
+      builder.reset(new Builder());
+      if (s.isObject()) {
+        
+        VPackObjectBuilder b(builder.get());
+
+        for (auto const& it: VPackObjectIterator(s)) {
+          auto childBuilder =
+            createTestStructure(it.value, path + "/" + it.key.copyString());
+          if (childBuilder) {
+            builder->add(it.key.copyString(), childBuilder->slice());
+          }
+        }
+        
+        if (path == "/arango/Target/ToDo") {
+          builder->add(jobId, createBuilder(todo).slice());
+        }
+        
+      } else {
+        builder->add(s);
+      }
+
+      return builder;
+      
+    };
+    
+    auto builder = createTestStructure(baseStructure.toBuilder().slice(), "");
+    REQUIRE(builder);
+    Node agency = createNodeFromBuilder(*builder);
+    
+    Mock<AgentInterface> mockAgent;
+    When(Method(mockAgent, write)).AlwaysDo([&](query_t const& q) -> write_ret_t {
+        INFO(q->slice().toJson());
+        REQUIRE(typeName(q->slice()) == "array" );
+        REQUIRE(q->slice().length() == 1);
+        REQUIRE(typeName(q->slice()[0]) == "array");
+        REQUIRE(q->slice()[0].length() == 2); // we always simply override! no preconditions...
         REQUIRE(typeName(q->slice()[0][0]) == "object");
 
         auto writes = q->slice()[0][0];
@@ -438,21 +554,11 @@ TEST_CASE("AddFollower", "[agency][supervision]") {
     
   }
   
-  SECTION("we can find one (or more, if needed) which have status 'GOOD', and "
-          "have `Supervision/DBServers/ empty and are not currently in the list "
-          "of servers of the shard, if not, wait") {
-    
-  }
-
-  SECTION("this job is immediately performed in a single transaction and then "
-          "moved to Target/Finished") {
-    
-  }
-
+  /*
   SECTION("As long as the job is still in Target/ToDo it can safely be aborted "
           "and moved to Target/Finished") {
   }
-  
+  */
 };
 
 }}}

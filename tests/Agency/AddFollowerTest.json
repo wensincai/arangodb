@@ -48,6 +48,12 @@ R"=(
         },
         "leader": {
           "Status": "FAILED"
+        },
+        "free": {
+          "Status": "GOOD"
+        },
+        "free2": {
+          "Status": "FAILED"
         }
       },
       "Shards": {}
