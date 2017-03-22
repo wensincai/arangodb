@@ -405,31 +405,21 @@ SECTION("if the leader is healthy again we fail the job") {
   Node agency = createNodeFromBuilder(*builder);
 
   Mock<AgentInterface> mockAgent;
-  When(Method(mockAgent, transact)).AlwaysDo([&](query_t const& q) -> trans_ret_t {
-    INFO(q->slice().toJson());
-    REQUIRE(std::string(q->slice().typeName()) == "array" );
-    REQUIRE(q->slice().length() == 1);
-    REQUIRE(std::string(q->slice()[0].typeName()) == "array");
-    REQUIRE(q->slice()[0].length() == 2);
-    REQUIRE(std::string(q->slice()[0][0].typeName()) == "object");
-
-    auto writes = q->slice()[0][0];
-    REQUIRE(std::string(writes.get("/arango/Target/ToDo/1").typeName()) == "object");
-    REQUIRE(std::string(writes.get("/arango/Target/ToDo/1").get("op").typeName()) == "string");
-    CHECK(writes.get("/arango/Target/ToDo/1").get("op").copyString() == "delete");
-    CHECK(std::string(writes.get("/arango/Target/Failed/1").typeName()) == "none");
-    return fakeTransResult;
-  });
-
-  When(Method(mockAgent, waitFor)).AlwaysReturn(AgentInterface::raft_commit_t::OK);
   AgentInterface &agent = mockAgent.get();
-  auto failedLeader = FailedLeader(
+  //agent.write();
+  /*auto failedLeader = FailedLeader(
     agency("arango"),
     &agent,
     JOB_STATUS::TODO,
     jobId
   );
-  failedLeader.start();
+  Mock<Job> spy(failedLeader);
+  Fake(Method(spy, abort));
+
+  Job& spyFailedLeader = spy.get();
+  spyFailedLeader.start();
+  Verify(Method(spy, abort));
+  */
 }
 
 SECTION("the job must not be started if there is no server that is in sync for every shard") {
@@ -466,6 +456,7 @@ SECTION("the job must not be started if there is no server that is in sync for e
       if (path == "/arango/Current/Collections/" + DATABASE + "/" + COLLECTION + "/" + SHARD + "/servers") {
         builder->add(VPackValue(VPackValueType::Array));
         builder->add(VPackValue(SHARD_LEADER));
+        builder->close();
       } else {
         builder->add(s);
       }
@@ -536,7 +527,7 @@ SECTION("the job must not be started if there if one of the linked shards (distr
             }
           }
         }
-      } else if (path == "/arango/Current/Plan/" + DATABASE) {
+      } else if (path == "/arango/Plan/Collections/" + DATABASE) {
         builder->add(VPackValue("linkedcollection1"));
         {
           VPackObjectBuilder f(builder.get());
@@ -591,11 +582,16 @@ SECTION("the job must not be started if there if one of the linked shards (distr
   };
   auto builder = createTestStructure(baseStructure.toBuilder().slice(), "");
   REQUIRE(builder);
-  INFO(builder->toJson());
+  INFO("Agency: " << builder->toJson());
   Node agency = createNodeFromBuilder(*builder);
 
   // nothing should happen
   Mock<AgentInterface> mockAgent;
+  When(Method(mockAgent, transact)).AlwaysDo([&](query_t const& q) -> trans_ret_t {
+    INFO("WriteTransaction: " << q->slice().toJson());
+    REQUIRE(false);
+    return trans_ret_t();
+  });
   AgentInterface &agent = mockAgent.get();
   auto failedLeader = FailedLeader(
     agency("arango"),
