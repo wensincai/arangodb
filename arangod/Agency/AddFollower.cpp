@@ -289,12 +289,13 @@ JOB_STATUS AddFollower::status() {
 
 arangodb::Result AddFollower::abort() {
 
-  Result result;
   // We can assume that the job is in ToDo or not there:
   if (_status == NOTFOUND || _status == FINISHED || _status == FAILED) {
-    result = Result(TRI_ERROR_SUPERVISION_GENERAL_FAILURE, "Failed aborting addFollower job beyond pending stage");
-    return result;
+    return Result(TRI_ERROR_SUPERVISION_GENERAL_FAILURE,
+                  "Failed aborting addFollower job beyond pending stage");
   }
+
+  Result result;  
   // Can now only be TODO or PENDING
   if (_status == TODO) {
     finish("", "", false, "job aborted");
