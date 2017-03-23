@@ -230,7 +230,7 @@ bool FailedFollower::start() {
   
   auto result = res.result->slice()[0];
   
-  if (res.accepted && result.getUInt()) {
+  if (res.accepted && result.isUInt() && result.getUInt()) {
     return true;
   }
 
