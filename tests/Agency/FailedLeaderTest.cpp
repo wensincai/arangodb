@@ -74,18 +74,25 @@ Node createNodeFromBuilder(VPackBuilder const& builder) {
 
 }
 
-Node createRootNode() {
+Builder createBuilder(char const* c) {
 
   VPackOptions options;
   options.checkAttributeUniqueness = true;
   VPackParser parser(&options);
-  parser.parse(agency);
+  parser.parse(c);
   
   VPackBuilder builder;
   builder.add(parser.steal()->slice());
-
-  return createNodeFromBuilder(builder);
+  return builder;
   
+}
+
+Node createNode(char const* c) {
+  return createNodeFromBuilder(createBuilder(c));
+}
+
+Node createRootNode() {
+  return createNode(agency);
 }
 
 TEST_CASE("FailedLeader", "[agency][supervision]") {
@@ -343,29 +350,8 @@ SECTION("if the leader is healthy again we fail the job") {
     auto preconditions = q->slice()[0][1];
     REQUIRE(preconditions.get("/arango/Supervision/Health/" + SHARD_LEADER + "/Status").get("old").copyString() == "FAILED");
 
-    auto transBuilder = std::make_shared<Builder>();
-    transBuilder->openArray();
-    {
-      VPackObjectBuilder a(transBuilder.get());
-      transBuilder->add(VPackValue(PREFIX));
-      {
-        VPackObjectBuilder b(transBuilder.get());
-        transBuilder->add(VPackValue("Supervision"));
-        {
-          VPackObjectBuilder c(transBuilder.get());
-          transBuilder->add(VPackValue("Health"));
-          {
-            VPackObjectBuilder c(transBuilder.get());
-            transBuilder->add(VPackValue(SHARD_LEADER));
-            {
-              VPackObjectBuilder c(transBuilder.get());
-              transBuilder->add("Status", VPackValue("GOOD"));
-            }
-          }
-        }
-      }
-    }
-    transBuilder->close();
+    char const* json = R"=([{"arango":{"Supervision":{"Health":{"leader":{"Status":"GOOD"}}}}}])=";
+    auto transBuilder = std::make_shared<Builder>(createBuilder(json));
     return trans_ret_t(true, "", 0, 1, transBuilder);
   });
   When(Method(mockAgent, write)).Do([&](query_t const& q) -> write_ret_t {
@@ -403,6 +389,7 @@ SECTION("the job must not be started if there is no server that is in sync for e
       }
 
       if (path == "/arango/Target/ToDo") {
+        
         VPackBuilder jobBuilder;
         jobBuilder.add(VPackValue(VPackValueType::Object));
         jobBuilder.add("creator", VPackValue("1"));
@@ -460,6 +447,8 @@ SECTION("the job must not be started if there if one of the linked shards (distr
           builder->add(it.key.copyString(), childBuilder->slice());
         }
       }
+
+      
 
       if (path == "/arango/Current/Collections/" + DATABASE) {
         // we fake that follower2 is in sync
