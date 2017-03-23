@@ -9,6 +9,7 @@ add_executable(
   Agency/FailedFollowerTest.cpp
   Agency/FailedLeaderTest.cpp
   Agency/MoveShardTest.cpp
+  Agency/RemoveFollowerTest.cpp
   Basics/AttributeNameParserTest.cpp
   Basics/associative-multi-pointer-test.cpp
   Basics/associative-multi-pointer-nohashcache-test.cpp
