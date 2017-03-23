@@ -481,7 +481,7 @@ SECTION("abort any moveShard job blocking the shard and start") {
       if (path == "/arango/Supervision/Shards") {
         builder->add(SHARD, VPackValue("2"));
       } else if (path == "/arango/Target/Pending") {
-        builder->add("2", moveShardBuilder->slice());
+        builder->add("2", moveShardBuilder->slice().get("/Target/ToDo/2"));
       } else if (path == "/arango/Target/ToDo") {
         builder->add("1", createBuilder(todo).slice());
       }
@@ -506,6 +506,7 @@ SECTION("abort any moveShard job blocking the shard and start") {
 
   Mock<AgentInterface> mockAgent;
   When(Method(mockAgent, write)).Do([&](query_t const& q) -> write_ret_t {
+    REQUIRE(false);
     // check that moveshard is being moved to failed
     INFO("WriteTransaction: " << q->slice().toJson());
     REQUIRE(std::string(q->slice().typeName()) == "array" );
@@ -523,6 +524,7 @@ SECTION("abort any moveShard job blocking the shard and start") {
     jobId
   );
   failedLeader.start();
+  Verify(Method(mockAgent, write));
 }
 
 SECTION("abort any addFollower job blocking the shard and start") {
@@ -562,7 +564,7 @@ SECTION("abort any addFollower job blocking the shard and start") {
         builder->add(SHARD, VPackValue("2"));
       } else if (path == "/arango/Target/ToDo") {
         builder->add("1", createBuilder(todo).slice());
-        builder->add("2", addFollowerBuilder.slice());
+        builder->add("2", addFollowerBuilder.slice().get("/Target/ToDo/2"));
       }
       builder->close();
     } else {
