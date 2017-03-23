@@ -74,18 +74,7 @@ R"=(
       "Pending": {},
       "Failed": {},
       "Finished": {},
-      "ToDo": {},
-      "MapUniqueToShortID": {
-        "follower1": {
-          "ShortName": "follower1"
-        },
-        "follower2": {
-          "ShortName": "follower2"
-        },
-        "leader": {
-          "ShortName": "leader"
-        }
-      }
+      "ToDo": {}
     }
   }
 }
