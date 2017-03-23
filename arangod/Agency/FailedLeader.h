@@ -48,6 +48,7 @@ struct FailedLeader : public Job {
   virtual JOB_STATUS status() override final;
   virtual void run() override final;
   virtual Result abort() override final;
+  void Rollback();
 
   std::string _database;
   std::string _collection;

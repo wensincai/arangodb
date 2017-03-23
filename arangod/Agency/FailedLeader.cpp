@@ -73,15 +73,47 @@ void FailedLeader::run() {
   runHelper("", _shard);
 }
 
-/*void FailedLeader::Timeout() {
+void FailedLeader::Rollback() {
 
+  // Create new plan servers (exchange _to and _from)
   std::string planPath
     = planColPrefix + _database + "/" + _collection + "/shards/" + _shard;
   auto const& planned = _snapshot(planPath).slice();
+  VPackBuilder rollback;
+  { VPackArrayBuilder r(&rollback);
+    for (auto const i : VPackArrayIterator(planned)) {
+      TRI_ASSERT(i.isString());
+      auto istr = i.copyString();
+      if (i.copyString() == _from) {
+        rollback.add(VPackValue(_to));
+      } else if (i.copyString() == _to) {
+        rollback.add(VPackValue(_from));
+      } else {
+        rollback.add(i);
+      }
+    }
+  }
+
+  auto myClones = clones(_snapshot, _database, _collection, _shard);
+
+  // Transactions
+  Builder envelope;
+  { VPackArrayBuilder transactions(&envelope);
+    { VPackArrayBuilder transaction(&envelope);
+      // To all clones incl myself apply rollback
+      for (auto const clone : myClones) {
+        envelope.add(
+          planColPrefix + _database + "/"
+          + clone.collection + "/shards/" + clone.shard, rollback.slice());
+      }
+      // Failed entry
+      // Remove ToDo/Pending
+    }
+  }
   
-  //auto itfrom = 
   
-  }*/
+  
+}
 
 bool FailedLeader::create(std::shared_ptr<VPackBuilder> b) {
 
