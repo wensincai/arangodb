@@ -54,8 +54,6 @@ const systemServiceMountPoints = [
 
 const GLOBAL_SERVICE_MAP = new Map();
 
-const RANDOM_ID = require('@arangodb/crypto').genRandomAlphaNumbers(8);
-
 function warn (e) {
   let err = e;
   while (err) {
@@ -178,12 +176,7 @@ function clusterUninstallOnPeers (service) { // TODO
 function clusterReloadOnPeers () { // TODO
 }
 
-function refreshServiceBundlesFromFoxxmaster (...mountPoints) { // TODO
-}
-
 function initLocalServiceMap () { // done
-  console.log('INITIALISING FOXX IN CTX', RANDOM_ID, db._name())
-  console.trace()
   const localServiceMap = new Map();
 
   for (const serviceDefinition of utils.getStorage().all()) {
@@ -200,7 +193,6 @@ function initLocalServiceMap () { // done
 
 function reloadInstalledService (mount, runSetup) { // done
   const serviceDefinition = utils.getServiceDefinition(mount);
-  console.log('Reloading', serviceDefinition.mount)
   if (!serviceDefinition) {
     throw new ArangoError({
       errorNum: errors.ERROR_SERVICE_NOT_FOUND.code,
@@ -580,87 +572,122 @@ function selfHeal () {
     // return to _system database so the caller does not need to know we changed the db
     db._useDatabase(dbName);
   }
-  reloadRouting() // :(
+  reloadRouting(); // FIXME :(
 }
 
 function healMyselfAndCoords () {
-  // checksumsINeedToFixLocally = List<mount>
-  // actualChecksums = Map<mount, checksum>
-  // coordsKnownToBeGoodSources = Map<mount, List<id>>
-  // coordsKnownToBeBadSources = Map<mount, Map<id, checksum>>
-  // allKnownMounts = List<mount>
+  const checksumsINeedToFixLocally = [];
+  const actualChecksums = new Map();
+  const coordsKnownToBeGoodSources = new Map();
+  const coordsKnownToBeBadSources = new Map();
+  const allKnownMounts = [];
 
-  // FOR {mount, checksum} IN _apps:
-  //   FILTER !mount.startsWith('/_')
-  //   allKnownMounts.push(mount)
-  //   actualChecksums.set(mount, checksum)
-  //   coordsKnownToBeGoodSources.set(mount, [])
-  //   coordsKnownToBeBadSources.set(mount, Map())
-  //   IF !checksum || checksum != FoxxService.checksum(mount):
-  //     checksumsINeedToFixLocally.push(mount)
+  const collection = utils.getStorage();
+  for (const serviceDefinition of collection.all()) {
+    const mount = serviceDefinition.mount;
+    const checksum = serviceDefinition.checksum;
+    if (mount.startsWith('/_')) {
+      continue;
+    }
+    allKnownMounts.push(mount);
+    actualChecksums.set(mount, checksum);
+    coordsKnownToBeGoodSources.set(mount, []);
+    coordsKnownToBeBadSources.set(mount, new Map());
+    if (!checksum || checksum !== FoxxService.checksum(mount)) {
+      checksumsINeedToFixLocally.push(mount);
+    }
+  }
 
-  // FOR id IN coordinatorIds:
-  //   FILTER id != myId
-  //   coordChecksums := Map<mount, checksum>
-  //   coordChecksums = Coordinator(id)->getChecksums(allKnownMounts)
-  //   FOR [mount, checksum] IN coordChecksums.items():
-  //     IF !checksum:
-  //       coordsKnownToBeBadSources.get(mount).set(id, null)
-  //     ELIF !actualChecksums.get(mount):
-  //       actualChecksums.set(mount, checksum)
-  //       coordsKnownToBeGoodSources.get(mount).push(id)
-  //     ELIF actualChecksums.get(mount) == checksum:
-  //       coordsKnownToBeGoodSources.get(mount).push(id)
-  //     ELSE:
-  //       coordsKnownToBeBadSources.get(mount).set(id, checksum)
-  // DEL actualChecksums
+  const coordinatorIds = []; // FIXME
+  const myId = null; // FIXME
+  for (const id of coordinatorIds) {
+    if (id === myId) {
+      continue;
+    }
+    const coordChecksums = new Map(); // FIXME getChecksums(id,allKnowMounts)
+    for (const [mount, checksum] of coordChecksums.items()) {
+      if (!checksum) {
+        coordsKnownToBeBadSources.get(mount).set(id, null);
+      } else if (!actualChecksums.get(mount)) {
+        actualChecksums.set(mount, checksum);
+        coordsKnownToBeGoodSources.get(mount).push(id);
+      } else if (actualChecksums.get(mount) === checksum) {
+        coordsKnownToBeGoodSources.get(mount).push(id);
+      } else {
+        coordsKnownToBeBadSources.get(mount).set(id, checksum);
+      }
+    }
+  }
 
-  // mountsINeedToDeleteInCollection = List<mount>
-  // checksumsINeedToFixInCollection = Map<mount, checksum>
-  // FOR mount IN checksumsINeedToFixLocally:
-  //   possibleSources = coordsKnownToBeGoodSources.get(mount)
-  //   IF !possibleSources.length:
-  //     arbitraryChecksum = FoxxService.checksum(mount)
-  //     IF arbitraryChecksum:
-  //       checksumsINeedToFixInCollection.set(mount, arbitraryChecksum)
-  //       possibleSources.push(myId)
-  //     ELSE:
-  //       found = false
-  //       FOR [coordId, coordChecksum] IN coordsKnownToBeBadSources.get(mount).items():
-  //         FILTER coordChecksum
-  //         checksumsINeedToFixInCollection.set(mount, coordChecksum)
-  //         possibleSources.push(coordId)
-  //         bundle = Coordinator(id)->getBundle(mount, checksum)
-  //         replaceLocalBundle(mount, bundle)
-  //         extractBundle(bundle, mount)
-  //         found = true
-  //         BREAK
-  //       IF !found:
-  //         mountsINeedToDeleteInCollection.push(mount)
-  //         coordsKnownToBeBadSources.remove(mount)
-  //   ELSE:
-  //     id = possibleSources[0]
-  //     bundle = Coordinator(id)->getBundle(mount, checksum)
-  //     replaceLocalBundle(mount, bundle)
-  //     extractBundle(bundle, mount)
+  const mountsINeedToDeleteInCollection = [];
+  const checksumsINeedToFixInCollection = new Map();
+  for (const mount of checksumsINeedToFixLocally) {
+    const possibleSources = coordsKnownToBeGoodSources.get(mount);
+    if (!possibleSources.length) {
+      const myChecksum = FoxxService.checksum(mount);
+      if (myChecksum) {
+        checksumsINeedToFixInCollection.set(mount, myChecksum);
+        possibleSources.push(myId);
+      } else {
+        let found = false;
+        for (const [coordId, coordChecksum] of coordsKnownToBeBadSources.get(mount).items()) {
+          if (!coordChecksum) {
+            continue;
+          }
+          checksumsINeedToFixInCollection.set(mount, coordChecksum);
+          possibleSources.push(coordId);
+          // FIXME const bundle = getBundle(coordId, mount, checksum)
+          // replaceLocalBundle(mount, bundle)
+          // extractBundle(mount, bundle)
+          found = true;
+          break;
+        }
+        if (!found) {
+          mountsINeedToDeleteInCollection.push(mount);
+          coordsKnownToBeBadSources.delete(mount);
+        }
+      }
+    } else {
+      // FIXME const bundle = getBundle(coordId, mount, checksum)
+      // replaceLocalBundle(mount, bundle)
+      // extractBundle(mount, bundle)
+    }
+  }
 
-  // FOR [mount, ids] IN coordsKnownToBeGoodSources.items():
-  //   ids.push(myId)
+  for (const ids of coordsKnownToBeGoodSources.values()) {
+    ids.push(myId);
+  }
 
-  // FOR mount IN mountsINeedToDeleteInCollection:
-  // REMOVE mount IN _apps
+  db._query(aql`
+    FOR service IN ${collection}
+    FILTER service.mount IN ${mountsINeedToDeleteInCollection}
+    REMOVE service
+    IN ${collection}
+  `);
 
-  // FOR {mount, checksum} IN checksumsINeedToFixInCollection
-  // UPDATE mount WITH {checksum} IN _apps
+  db._query(aql`
+    FOR service IN ${collection}
+    FOR item IN ${Array.from(checksumsINeedToFixInCollection.items())}
+    FILTER service.mount == item[0]
+    UPDATE service
+    WITH {checksum: item[1]}
+    IN ${collection}
+  `);
 
-  // FOR id IN coordinatorIds:
-  //   FILTER id != myId
-  //   servicesYouNeedToUpdate = Map<mount, id>
-  //   FOR [mount, map] IN coordsKnownToBeBadSources.items():
-  //     FILTER map.has(id)
-  //     goodId = RANDOM_CHOICE(coordsKnownToBeGoodSources.get(mount))
-  //     servicesYouNeedToUpdate.set(mount, goodId)
-  //   Coordinator(id)->goUpdateYourself(servicesYouNeedToUpdate)
+  for (const id of coordinatorIds) {
+    if (id === myId) {
+      continue;
+    }
+    const servicesYouNeedToUpdate = new Map();
+    for (const [mount, map] of coordsKnownToBeBadSources.items()) {
+      if (!map.has(id)) {
+        continue;
+      }
+      const goodId = coordsKnownToBeGoodSources.get(mount)[0]; // FIXME random
+      servicesYouNeedToUpdate.set(mount, goodId);
+    }
+    // goUpdateYourself(id, servicesYouNeedToUpdate);
+  }
 }
 
 function createServiceBundle (mount) {
@@ -742,13 +769,11 @@ function setDevelopmentMode (mount, enabled) { // done
   const service = getServiceInstance(mount);
   service.development(enabled);
   utils.updateService(mount, service.toJSON());
-  if (enabled) {
-    propagateServiceReconfigured(service);
-  } else {
+  if (!enabled) {
     // Make sure setup changes from devmode are respected
     service.executeScript('setup');
-    propagateServiceReplaced(service);
   }
+  propagateServiceReconfigured(service);
   return service;
 }
 
