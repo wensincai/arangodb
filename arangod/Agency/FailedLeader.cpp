@@ -260,7 +260,7 @@ bool FailedLeader::start() {
   // Something went south. Let's see
   auto result = res.result->slice()[0];
 
-  if (res.accepted && res.result->slice()[0].getUInt()) {
+  if (res.accepted && res.result->slice()[0].isUInt()) {
     return true;
   }
 
