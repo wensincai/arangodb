@@ -97,7 +97,11 @@ TEST_CASE("FailedLeader", "[agency][supervision]") {
 
     
   write_ret_t fakeWriteResult {true, "", std::vector<bool> {true}, std::vector<index_t> {1}};
-  trans_ret_t fakeTransResult {true, "", 1, 0, std::make_shared<Builder>()};
+  auto transBuilder = std::make_shared<Builder>();
+  transBuilder->openArray();
+  transBuilder->add(VPackValue((uint64_t)1));
+  transBuilder->close();
+  trans_ret_t fakeTransResult {true, "", 1, 0, transBuilder};
   
 SECTION("creating a job should create a job in todo") {
   Mock<AgentInterface> mockAgent;
@@ -289,77 +293,6 @@ SECTION("if we are supposed to fail a distributeShardsLike job we immediately fa
   failedLeader.start();
 }
 
-SECTION("if we are supposed to fail a distributeShardsLike job we immediately fail because this should be done by a job running on the master shard") {
-  std::string jobId = "1";
-
-  std::function<std::unique_ptr<VPackBuilder>(VPackSlice const&, std::string const&)> createTestStructure = [&](VPackSlice const& s, std::string const& path) {
-    std::unique_ptr<VPackBuilder> builder;
-    builder.reset(new VPackBuilder());
-    if (s.isObject()) {
-      builder->add(VPackValue(VPackValueType::Object));
-      for (auto const& it: VPackObjectIterator(s)) {
-        auto childBuilder = createTestStructure(it.value, path + "/" + it.key.copyString());
-        if (childBuilder) {
-          builder->add(it.key.copyString(), childBuilder->slice());
-        }
-      }
-
-      if (path == "/arango/Plan/Collections/" + DATABASE + "/" + COLLECTION) {
-        builder->add("distributeShardsLike", VPackValue("PENG"));
-      }
-
-      if (path == "/arango/Target/ToDo") {
-        VPackBuilder jobBuilder;
-        jobBuilder.add(VPackValue(VPackValueType::Object));
-        jobBuilder.add("creator", VPackValue("1"));
-        jobBuilder.add("type", VPackValue("failedLeader"));
-        jobBuilder.add("database", VPackValue(DATABASE));
-        jobBuilder.add("collection", VPackValue(COLLECTION));
-        jobBuilder.add("shard", VPackValue(SHARD));
-        jobBuilder.add("fromServer", VPackValue(SHARD_LEADER));
-        jobBuilder.add("jobId", VPackValue(jobId));
-        jobBuilder.add("timeCreated", VPackValue("2017-01-01 00:00:00"));
-        jobBuilder.close();
-        builder->add("1", jobBuilder.slice());
-      }
-      builder->close();
-    } else {
-      builder->add(s);
-    }
-    return builder;
-  };
-
-  auto builder = createTestStructure(baseStructure.toBuilder().slice(), "");
-  REQUIRE(builder);
-  Node agency = createNodeFromBuilder(*builder);
-
-  Mock<AgentInterface> mockAgent;
-  When(Method(mockAgent, write)).AlwaysDo([&](query_t const& q) -> write_ret_t {
-    INFO(q->slice().toJson());
-    REQUIRE(std::string(q->slice().typeName()) == "array" );
-    REQUIRE(q->slice().length() == 1);
-    REQUIRE(std::string(q->slice()[0].typeName()) == "array");
-    REQUIRE(q->slice()[0].length() == 1); // we always simply override! no preconditions...
-    REQUIRE(std::string(q->slice()[0][0].typeName()) == "object");
-
-    auto writes = q->slice()[0][0];
-    REQUIRE(std::string(writes.get("/arango/Target/ToDo/1").typeName()) == "object");
-    REQUIRE(std::string(writes.get("/arango/Target/ToDo/1").get("op").typeName()) == "string");
-    CHECK(writes.get("/arango/Target/ToDo/1").get("op").copyString() == "delete");
-    CHECK(std::string(writes.get("/arango/Target/Failed/1").typeName()) == "object");
-    return fakeWriteResult;
-  });
-  When(Method(mockAgent, waitFor)).AlwaysReturn(AgentInterface::raft_commit_t::OK);
-  AgentInterface &agent = mockAgent.get();
-  auto failedLeader = FailedLeader(
-    agency("arango"),
-    &agent,
-    JOB_STATUS::TODO,
-    jobId
-  );
-  failedLeader.start();
-}
-
 SECTION("if the leader is healthy again we fail the job") {
   std::string jobId = "1";
 
@@ -405,21 +338,53 @@ SECTION("if the leader is healthy again we fail the job") {
   Node agency = createNodeFromBuilder(*builder);
 
   Mock<AgentInterface> mockAgent;
+  When(Method(mockAgent, transact)).Do([&](query_t const& q) -> trans_ret_t {
+    INFO("WriteTransaction: " << q->slice().toJson());
+    auto preconditions = q->slice()[0][1];
+    REQUIRE(preconditions.get("/arango/Supervision/Health/" + SHARD_LEADER + "/Status").get("old").copyString() == "FAILED");
+
+    auto transBuilder = std::make_shared<Builder>();
+    transBuilder->openArray();
+    {
+      VPackObjectBuilder a(transBuilder.get());
+      transBuilder->add(VPackValue(PREFIX));
+      {
+        VPackObjectBuilder b(transBuilder.get());
+        transBuilder->add(VPackValue("Supervision"));
+        {
+          VPackObjectBuilder c(transBuilder.get());
+          transBuilder->add(VPackValue("Health"));
+          {
+            VPackObjectBuilder c(transBuilder.get());
+            transBuilder->add(VPackValue(SHARD_LEADER));
+            {
+              VPackObjectBuilder c(transBuilder.get());
+              transBuilder->add("Status", VPackValue("GOOD"));
+            }
+          }
+        }
+      }
+    }
+    transBuilder->close();
+    return trans_ret_t(true, "", 0, 1, transBuilder);
+  });
+  When(Method(mockAgent, write)).Do([&](query_t const& q) -> write_ret_t {
+    INFO("WriteTransaction: " << q->slice().toJson());
+    auto writes = q->slice()[0][0]; \
+    REQUIRE(std::string(writes.get("/arango/Target/ToDo/1").get("op").typeName()) == "string"); \
+    CHECK(std::string(writes.get("/arango/Target/Failed/1").typeName()) == "object");
+
+    return fakeWriteResult;
+  });
+  When(Method(mockAgent, waitFor)).AlwaysReturn();
   AgentInterface &agent = mockAgent.get();
-  //agent.write();
-  /*auto failedLeader = FailedLeader(
+  auto failedLeader = FailedLeader(
     agency("arango"),
     &agent,
     JOB_STATUS::TODO,
     jobId
   );
-  Mock<Job> spy(failedLeader);
-  Fake(Method(spy, abort));
-
-  Job& spyFailedLeader = spy.get();
-  spyFailedLeader.start();
-  Verify(Method(spy, abort));
-  */
+  failedLeader.start();
 }
 
 SECTION("the job must not be started if there is no server that is in sync for every shard") {
@@ -839,7 +804,6 @@ SECTION("if everything is fine than the job should be written to pending, adding
     CHECK(std::string(job.get("timeStarted").typeName()) == "string");
 
     REQUIRE(std::string(writes.get("/arango/Plan/Collections/" + DATABASE + "/" + COLLECTION + "/shards/" + SHARD).typeName()) == "array");
-    // also the free server should be added to the list so the replicationFactor stays ok
     REQUIRE(writes.get("/arango/Plan/Collections/" + DATABASE + "/" + COLLECTION + "/shards/" + SHARD).length() == 4);
     REQUIRE(std::string(writes.get("/arango/Plan/Collections/" + DATABASE + "/" + COLLECTION + "/shards/" + SHARD)[0].typeName()) == "string");
     REQUIRE(std::string(writes.get("/arango/Plan/Collections/" + DATABASE + "/" + COLLECTION + "/shards/" + SHARD)[1].typeName()) == "string");
@@ -854,6 +818,8 @@ SECTION("if everything is fine than the job should be written to pending, adding
     REQUIRE(std::string(preconditions.get("/arango/Supervision/Shards/" + SHARD).typeName()) == "object");
     REQUIRE(std::string(preconditions.get("/arango/Supervision/Shards/" + SHARD).get("oldEmpty").typeName()) == "bool");
     CHECK(preconditions.get("/arango/Supervision/Shards/" + SHARD).get("oldEmpty").getBool() == true);
+    CHECK(preconditions.get("/arango/Supervision/Health/" + SHARD_LEADER + "/Status").get("old").copyString() == "FAILED");
+    CHECK(preconditions.get("/arango/Supervision/Health/" + SHARD_FOLLOWER2 + "/Status").get("old").copyString() == "GOOD");
 
     REQUIRE(std::string(preconditions.get("/arango/Plan/Collections/" + DATABASE + "/" + COLLECTION + "/shards/" + SHARD).typeName()) == "object");
     REQUIRE(std::string(preconditions.get("/arango/Plan/Collections/" + DATABASE + "/" + COLLECTION + "/shards/" + SHARD).get("old").typeName()) == "array");
@@ -881,177 +847,6 @@ SECTION("if everything is fine than the job should be written to pending, adding
   );
   failedLeader.start();
 }
-
-
-/*
-TEST_CASE( "FailedLeader should fill FailedServers with failed shards", "[agency][supervision]" ) {
-  Node root = createRootNode();
-  auto prefixRoot = root.children().find("arango")->second;
-
-  write_ret_t fakeWriteResult {true, "", std::vector<bool> {true}, std::vector<index_t> {1}};
-
-  Mock<AgentInterface> mockAgent;
-  When(Method(mockAgent, write)).AlwaysDo([&](query_t const& q) -> write_ret_t {
-    REQUIRE(q->slice().isArray() );
-    REQUIRE(q->slice().length() > 0);
-    REQUIRE(q->slice()[0].isArray() > 0);
-    REQUIRE(q->slice()[0].length() > 0);
-    REQUIRE(q->slice()[0][0].isObject() > 0);
-    REQUIRE(q->slice()[0][0].get(PREFIX + "/Target/FailedServers/" + FROM).isObject());
-
-    auto failedServers = q->slice()[0][0].get(PREFIX + "/Target/FailedServers/" + FROM);
-
-    REQUIRE(failedServers.isObject());
-    REQUIRE(failedServers.get("new").isString());
-    REQUIRE(failedServers.get("new").copyString() == SHARD);
-    REQUIRE(failedServers.get("op").isString());
-    REQUIRE(failedServers.get("op").copyString() == "push");
-
-    return fakeWriteResult;
-  });
-  When(Method(mockAgent, waitFor)).AlwaysReturn(AgentInterface::raft_commit_t::OK);
-
-  AgentInterface &agent = mockAgent.get();
-  auto failedLeader = FailedLeader(
-    root("arango"),
-    &agent,
-    "1",
-    "unittest",
-    DATABASE,
-    COLLECTION,
-    SHARD,
-    FROM,
-    TO
-  );
-  failedLeader.run();
-}
-
-TEST_CASE("A FailedLeader job should be queued", "[agency][supervision]") {
-  Node root = createRootNode();
-  write_ret_t fakeWriteResult {true, "", std::vector<bool> {true}, std::vector<index_t> {1}};
-
-  Mock<AgentInterface> mockAgent;
-  When(Method(mockAgent, write)).AlwaysDo([&](query_t const& q) -> write_ret_t {
-    REQUIRE(q->slice().isArray() );
-    REQUIRE(q->slice().length() > 0);
-    REQUIRE(q->slice()[0].isArray() > 0);
-    REQUIRE(q->slice()[0].length() > 0);
-    REQUIRE(q->slice()[0][0].isObject() > 0);
-    REQUIRE(q->slice()[0][0].get(PREFIX + "/Target/ToDo/1").isObject());
-
-    auto job = q->slice()[0][0].get(PREFIX + "/Target/ToDo/1");
-    REQUIRE(job.get("collection").isString());
-    REQUIRE(job.get("collection").copyString() == COLLECTION);
-    REQUIRE(job.get("database").isString());
-    REQUIRE(job.get("database").copyString() == DATABASE);
-    REQUIRE(job.get("type").isString());
-    REQUIRE(job.get("type").copyString() == "failedLeader");
-
-    return fakeWriteResult;
-  });
-  When(Method(mockAgent, waitFor)).AlwaysReturn(AgentInterface::raft_commit_t::OK);
-
-  AgentInterface &agent = mockAgent.get();
-  auto failedLeader = FailedLeader(
-    root("arango"),
-    &agent,
-    "1",
-    "unittest",
-    DATABASE,
-    COLLECTION,
-    SHARD,
-    FROM,
-    TO
-  );
-  failedLeader.run();
-}
-
-TEST_CASE("FailedLeader should set a new leader and set the new one as a follower", "[agency][supervision]") {
-  write_ret_t fakeWriteResult {true, "", std::vector<bool> {true}, std::vector<index_t> {1}};
-  Node root = createRootNode();
-  {
-    Mock<AgentInterface> mockAgent;
-    When(Method(mockAgent, write)).Return(fakeWriteResult);
-    When(Method(mockAgent, write)).Return(fakeWriteResult);
-    When(Method(mockAgent, write)).Do([&](query_t const& q) -> write_ret_t {
-      REQUIRE(q->slice().isArray());
-      REQUIRE(q->slice().length() == 1);
-      REQUIRE(q->slice()[0].isArray());
-      REQUIRE(q->slice()[0].length() == 1);
-      REQUIRE(q->slice()[0][0].isObject());
-      for (auto const& i : VPackObjectIterator(q->slice()[0][0])) {
-        std::string key = i.key.copyString();
-        std::vector<std::string> keys = StringUtils::split(key, '/', '\0');
-
-        if (i.value.isObject() && i.value.hasKey("op")) {
-          root(keys).applieOp(i.value);
-        } else {
-          root(keys).applies(i.value);
-        }
-      }
-      auto arangoNode = root.children().find("arango");
-
-      return fakeWriteResult;
-    });
-
-    When(Method(mockAgent, waitFor)).AlwaysReturn(AgentInterface::raft_commit_t::OK);
-
-    AgentInterface &agent = mockAgent.get();
-    auto failedLeader = FailedLeader(
-      root("arango"),
-      &agent,
-      "1",
-      "unittest",
-      DATABASE,
-      COLLECTION,
-      SHARD,
-      FROM,
-      TO
-    );
-    failedLeader.run();
-  }
-
-  Mock<AgentInterface> mockAgent;
-  When(Method(mockAgent, write)).Return(fakeWriteResult);
-  When(Method(mockAgent, write)).Return(fakeWriteResult);
-  When(Method(mockAgent, write)).Do([&](query_t const& q) -> write_ret_t {
-    REQUIRE(q->slice().isArray());
-    REQUIRE(q->slice().length() == 1);
-    REQUIRE(q->slice()[0].isArray());
-    REQUIRE(q->slice()[0].length() == 2); // preconditions should be present
-    REQUIRE(q->slice()[0][0].isObject());
-
-    bool shardPlanFound = false;
-    for (auto const& i : VPackObjectIterator(q->slice()[0][0])) {
-      std::string key = i.key.copyString();
-      std::vector<std::string> keys = StringUtils::split(key, '/', '\0');
-
-      if (i.key.copyString() == PREFIX + "/Plan/Collections/" + DATABASE + "/" + COLLECTION + "/shards/" + SHARD) {
-        shardPlanFound = true;
-        REQUIRE(i.value.toJson() == "[\"to\",\"from\"]");
-      }
-    }
-    REQUIRE(shardPlanFound);
-
-    return fakeWriteResult;
-  });
-  When(Method(mockAgent, waitFor)).AlwaysReturn(AgentInterface::raft_commit_t::OK);
-
-  AgentInterface &agent = mockAgent.get();
-  auto failedLeader = FailedLeader(
-    root("arango"),
-    &agent,
-    "1",
-    "unittest",
-    DATABASE,
-    COLLECTION,
-    SHARD,
-    FROM,
-    TO
-  );
-  failedLeader.run();
-}*/
-
 }
 }
 }
