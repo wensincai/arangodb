@@ -123,7 +123,7 @@ Dependencies
 ------------
 * *Ruby*, *rspec*, *httparty* to install the required dependencies run:
   `cd UnitTests/HttpInterface; bundler`
-* boost_test (compile time)
+* catch (compile time, shipped in the 3rdParty directory)
 
 
 Filename conventions
@@ -463,7 +463,7 @@ restrictions.
 
 To only regereneate one file (faster) you may specify a filter:
 
-    make FILTER=Manual/Aql/Invoke.mdpp
+    make build-book NAME=Manual FILTER=Manual/Aql/Invoke.mdpp
 
 (regular expressions allowed)
 
