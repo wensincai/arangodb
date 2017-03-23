@@ -46,16 +46,15 @@
     require('@arangodb/statistics').startup();
   }
 
-  // load all foxxes
-  if (internal.threadNumber === 0) {
-    internal.loadStartup('server/bootstrap/foxxes.js').foxxes();
-  }
-
-  // autoload all modules
-  internal.loadStartup('server/bootstrap/autoload.js').startup();
-
   // reload routing information
+  internal.loadStartup('server/bootstrap/autoload.js').startup();
   internal.loadStartup('server/bootstrap/routing.js').startup();
+
+  // startup the foxx manager once
+  if (internal.threadNumber === 0) {
+    require('@arangodb/foxx/manager')._startup(true);
+    require('@arangodb/foxx/manager')._selfHeal();
+  }
 
   // start the queue manager once
   if (internal.threadNumber === 0) {

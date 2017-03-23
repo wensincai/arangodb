@@ -122,7 +122,7 @@ installer.use(function (req, res, next) {
     }
     throw e;
   }
-  const configuration = FoxxManager.configuration(mount);
+  const configuration = service.getConfiguration();
   res.json(Object.assign(
     {error: false, configuration},
     service.simpleJSON()
@@ -199,7 +199,8 @@ foxxRouter.delete('/', function (req, res) {
 router.get('/', function (req, res) {
   const foxxes = FoxxManager.listJson();
   foxxes.forEach((foxx) => {
-    const readme = FoxxManager.readme(foxx.mount);
+    const service = FoxxManager.lookupService(foxx.mount);
+    const readme = service.readme;
     if (readme) {
       foxx.readme = marked(readme, {
         highlight: (code) => highlightAuto(code).value
@@ -227,7 +228,8 @@ foxxRouter.get('/thumbnail', function (req, res) {
 
 foxxRouter.get('/config', function (req, res) {
   const mount = decodeURIComponent(req.queryParams.mount);
-  res.json(FoxxManager.configuration(mount));
+  const service = FoxxManager.lookupService(mount);
+  res.json(service.getConfiguration());
 })
 .summary('Get the configuration for a service')
 .description(dd`
@@ -240,7 +242,7 @@ foxxRouter.patch('/config', function (req, res) {
   const configuration = req.body;
   const service = FoxxManager.lookupService(mount);
   FoxxManager.setConfiguration(mount, {configuration, replace: !service.isDevelopment});
-  res.json(FoxxManager.configuration(mount));
+  res.json(service.getConfiguration());
 })
 .body(joi.object().optional(), 'Configuration to apply.')
 .summary('Set the configuration for a service')
@@ -251,7 +253,8 @@ foxxRouter.patch('/config', function (req, res) {
 
 foxxRouter.get('/deps', function (req, res) {
   const mount = decodeURIComponent(req.queryParams.mount);
-  const deps = FoxxManager.dependencies(mount);
+  const service = FoxxManager.lookupService(mount);
+  const deps = service.getDependencies();
   for (const key of Object.keys(deps)) {
     const dep = deps[key];
     deps[key] = {
@@ -275,7 +278,7 @@ foxxRouter.patch('/deps', function (req, res) {
   const dependencies = req.body;
   const service = FoxxManager.lookupService(mount);
   FoxxManager.setDependencies(mount, {dependencies, replace: !service.isDevelopment});
-  res.json(FoxxManager.dependencies(mount));
+  res.json(service.getDependencies());
 })
 .body(joi.object().optional(), 'Dependency options to apply.')
 .summary('Set the dependencies for a service')

@@ -32,8 +32,7 @@
 // //////////////////////////////////////////////////////////////////////////////
 
 (function () {
-  var internal = require('internal');
-  var console = require('console');
+  const internal = require('internal');
 
   // statistics can be turned off
   if (internal.enableStatistics && internal.threadNumber === 0) {
@@ -45,15 +44,18 @@
   internal.loadStartup('server/bootstrap/routing.js').startup();
 
   if (internal.threadNumber === 0) {
+    if (!global.ArangoServerState.isFoxxmaster()) {
+      // startup the foxx manager once
+      require('@arangodb/foxx/manager')._startup(false);
+    }
     // start the queue manager once
     require('@arangodb/foxx/queues/manager').run();
-    var systemCollectionsCreated = global.ArangoAgency.get('SystemCollectionsCreated');
+    const systemCollectionsCreated = global.ArangoAgency.get('SystemCollectionsCreated');
     if (!(systemCollectionsCreated && systemCollectionsCreated.arango && systemCollectionsCreated.arango.SystemCollectionsCreated)) {
       // Wait for synchronous replication of system colls to settle:
       console.info('Waiting for initial replication of system collections...');
-      var db = internal.db;
-      var colls = db._collections();
-      colls = colls.filter(c => c.name()[0] === '_');
+      const db = internal.db;
+      const colls = db._collections().filter(c => c.name()[0] === '_');
       if (!require('@arangodb/cluster').waitForSyncRepl('_system', colls)) {
         throw new Error('System collections not properly set up. Refusing startup!');
       } else {

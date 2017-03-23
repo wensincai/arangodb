@@ -3,15 +3,13 @@ const _ = require('lodash');
 const dd = require('dedent');
 const fs = require('fs');
 const joi = require('joi');
-const semver = require('semver');
 
 const actions = require('@arangodb/actions');
 const ArangoError = require('@arangodb').ArangoError;
 const errors = require('@arangodb').errors;
 const jsonml2xml = require('@arangodb/util').jsonml2xml;
 const swaggerJson = require('@arangodb/foxx/legacy/swagger').swaggerJson;
-const fm = require('@arangodb/foxx/manager');
-const fmu = require('@arangodb/foxx/manager-utils');
+const FoxxManager = require('@arangodb/foxx/manager');
 const createRouter = require('@arangodb/foxx/router');
 const reporters = Object.keys(require('@arangodb/mocha').reporters);
 const schemas = require('./schemas');
@@ -42,11 +40,6 @@ const serviceToJson = (service) => (
     options: _.pick(service.options, ['configuration', 'dependencies'])
   }
 );
-
-function isLegacy (service) {
-  const range = service.manifest.engines && service.manifest.engines.arangodb;
-  return range ? semver.gtr('3.0.0', range) : false;
-}
 
 function writeUploadToTempFile (buffer) {
   const filename = fs.getTempFile('foxx-manager', true);
@@ -92,7 +85,7 @@ router.use((req, res, next) => {
 
 router.get((req, res) => {
   res.json(
-    fmu.getStorage().toArray()
+    FoxxManager.installedServices()
     .map((service) => (
       {
         mount: service.mount,
@@ -100,7 +93,7 @@ router.get((req, res) => {
         version: service.manifest.version,
         provides: service.manifest.provides || {},
         development: service.isDevelopment,
-        legacy: isLegacy(service)
+        legacy: service.legacy
       }
     ))
   );
@@ -113,17 +106,17 @@ router.get((req, res) => {
 
 router.post(prepareServiceRequestBody, (req, res) => {
   const mount = req.queryParams.mount;
-  fm.install(req.body.source, mount, _.omit(req.queryParams, ['mount', 'development']));
+  FoxxManager.install(req.body.source, mount, _.omit(req.queryParams, ['mount', 'development']));
   if (req.body.configuration) {
-    fm.setConfiguration(mount, {configuration: req.body.configuration, replace: true});
+    FoxxManager.setConfiguration(mount, {configuration: req.body.configuration, replace: true});
   }
   if (req.body.dependencies) {
-    fm.setDependencies(mount, {dependencies: req.body.dependencies, replace: true});
+    FoxxManager.setDependencies(mount, {dependencies: req.body.dependencies, replace: true});
   }
   if (req.queryParams.development) {
-    fm.development(mount);
+    FoxxManager.development(mount);
   }
-  const service = fm.lookupService(mount);
+  const service = FoxxManager.lookupService(mount);
   res.json(serviceToJson(service));
 })
 .body(schemas.service, ['multipart/form-data', 'application/json'], `Service to be installed.`)
@@ -145,7 +138,7 @@ const instanceRouter = createRouter();
 instanceRouter.use((req, res, next) => {
   const mount = req.queryParams.mount;
   try {
-    req.service = fm.lookupService(mount);
+    req.service = FoxxManager.lookupService(mount);
   } catch (e) {
     res.throw(400, `No service installed at mount path "${mount}".`, e);
   }
@@ -168,14 +161,14 @@ serviceRouter.get((req, res) => {
 
 serviceRouter.patch(prepareServiceRequestBody, (req, res) => {
   const mount = req.queryParams.mount;
-  fm.upgrade(req.body.source, mount, _.omit(req.queryParams, ['mount']));
+  FoxxManager.upgrade(req.body.source, mount, _.omit(req.queryParams, ['mount']));
   if (req.body.configuration) {
-    fm.setConfiguration(mount, {configuration: req.body.configuration, replace: false});
+    FoxxManager.setConfiguration(mount, {configuration: req.body.configuration, replace: false});
   }
   if (req.body.dependencies) {
-    fm.setDependencies(mount, {dependencies: req.body.dependencies, replace: false});
+    FoxxManager.setDependencies(mount, {dependencies: req.body.dependencies, replace: false});
   }
-  const service = fm.lookupService(mount);
+  const service = FoxxManager.lookupService(mount);
   res.json(serviceToJson(service));
 })
 .body(schemas.service, ['multipart/form-data', 'application/json'], `Service to be installed.`)
@@ -195,14 +188,14 @@ serviceRouter.patch(prepareServiceRequestBody, (req, res) => {
 
 serviceRouter.put(prepareServiceRequestBody, (req, res) => {
   const mount = req.queryParams.mount;
-  fm.replace(req.body.source, mount, _.omit(req.queryParams, ['mount']));
+  FoxxManager.replace(req.body.source, mount, _.omit(req.queryParams, ['mount']));
   if (req.body.configuration) {
-    fm.setConfiguration(mount, {configuration: req.body.configuration, replace: true});
+    FoxxManager.setConfiguration(mount, {configuration: req.body.configuration, replace: true});
   }
   if (req.body.dependencies) {
-    fm.setDependencies(mount, {dependencies: req.body.dependencies, replace: true});
+    FoxxManager.setDependencies(mount, {dependencies: req.body.dependencies, replace: true});
   }
-  const service = fm.lookupService(mount);
+  const service = FoxxManager.lookupService(mount);
   res.json(serviceToJson(service));
 })
 .body(schemas.service, ['multipart/form-data', 'application/json'], `Service to be installed.`)
@@ -221,7 +214,7 @@ serviceRouter.put(prepareServiceRequestBody, (req, res) => {
 `);
 
 serviceRouter.delete((req, res) => {
-  fm.uninstall(
+  FoxxManager.uninstall(
     req.queryParams.mount,
     _.omit(req.queryParams, ['mount'])
   );
@@ -239,7 +232,7 @@ instanceRouter.use('/configuration', configRouter)
 .response(200, schemas.configs, `Configuration options of the service.`);
 
 configRouter.get((req, res) => {
-  res.json(fm.configuration(req.service.mount));
+  res.json(req.service.getConfiguration());
 })
 .summary(`Get configuration options`)
 .description(dd`
@@ -247,11 +240,11 @@ configRouter.get((req, res) => {
 `);
 
 configRouter.patch((req, res) => {
-  const warnings = fm.setConfiguration(req.service.mount, {
+  const warnings = FoxxManager.setConfiguration(req.service.mount, {
     configuration: req.body,
     replace: false
   });
-  const values = fm.configuration(req.service.mount, {simple: true});
+  const values = req.service.getConfiguration(true);
   res.json({values, warnings});
 })
 .body(joi.object().required(), `Object mapping configuration names to values.`)
@@ -262,11 +255,11 @@ configRouter.patch((req, res) => {
 `);
 
 configRouter.put((req, res) => {
-  const warnings = fm.setConfiguration(req.service.mount, {
+  const warnings = FoxxManager.setConfiguration(req.service.mount, {
     configuration: req.body,
     replace: true
   });
-  const values = fm.configuration(req.service.mount, {simple: true});
+  const values = req.service.getConfiguration(true);
   res.json({values, warnings});
 })
 .body(joi.object().required(), `Object mapping configuration names to values.`)
@@ -281,7 +274,7 @@ instanceRouter.use('/dependencies', depsRouter)
 .response(200, schemas.deps, `Dependency options of the service.`);
 
 depsRouter.get((req, res) => {
-  res.json(fm.dependencies(req.service.mount));
+  res.json(req.service.getDependencies());
 })
 .summary(`Get dependency options`)
 .description(dd`
@@ -289,11 +282,11 @@ depsRouter.get((req, res) => {
 `);
 
 depsRouter.patch((req, res) => {
-  const warnings = fm.setDependencies(req.service.mount, {
+  const warnings = FoxxManager.setDependencies(req.service.mount, {
     dependencies: req.body,
     replace: true
   });
-  const values = fm.dependencies(req.service.mount, {simple: true});
+  const values = req.service.getDependencies(true);
   res.json({values, warnings});
 })
 .body(joi.object().required(), `Object mapping dependency aliases to mount paths.`)
@@ -304,11 +297,11 @@ depsRouter.patch((req, res) => {
 `);
 
 depsRouter.put((req, res) => {
-  const warnings = fm.setDependencies(req.service.mount, {
+  const warnings = FoxxManager.setDependencies(req.service.mount, {
     dependencies: req.body,
     replace: true
   });
-  const values = fm.dependencies(req.service.mount, {simple: true});
+  const values = req.service.getDependencies(true);
   res.json({values, warnings});
 })
 .body(joi.object().required(), `Object mapping dependency aliases to mount paths.`)
@@ -323,7 +316,7 @@ instanceRouter.use('/development', devRouter)
 .response(200, schemas.fullInfo, `Description of the service.`);
 
 devRouter.post((req, res) => {
-  const service = fm.development(req.service.mount);
+  const service = FoxxManager.development(req.service.mount);
   res.json(serviceToJson(service));
 })
 .summary(`Enable development mode`)
@@ -333,7 +326,7 @@ devRouter.post((req, res) => {
 `);
 
 devRouter.delete((req, res) => {
-  const service = fm.production(req.service.mount);
+  const service = FoxxManager.production(req.service.mount);
   res.json(serviceToJson(service));
 })
 .summary(`Disable development mode`)
@@ -360,7 +353,7 @@ scriptsRouter.get((req, res) => {
 scriptsRouter.post('/:name', (req, res) => {
   const service = req.service;
   const scriptName = req.pathParams.name;
-  res.json(fm.runScript(scriptName, service.mount, req.body) || null);
+  res.json(FoxxManager.runScript(scriptName, service.mount, req.body) || null);
 })
 .body(joi.any(), `Optional script arguments.`)
 .pathParam('name', joi.string().required(), `Name of the script to run`)
@@ -374,7 +367,7 @@ scriptsRouter.post('/:name', (req, res) => {
 instanceRouter.post('/tests', (req, res) => {
   const service = req.service;
   const reporter = req.queryParams.reporter || null;
-  const result = fm.runTests(service.mount, {reporter});
+  const result = FoxxManager.runTests(service.mount, {reporter});
   if (reporter === 'stream' && req.accepts(LDJSON, 'json') === LDJSON) {
     res.type(LDJSON);
     for (const row of result) {
@@ -429,7 +422,7 @@ instanceRouter.get('/bundle', (req, res) => {
 
 instanceRouter.get('/readme', (req, res) => {
   const service = req.service;
-  res.send(fm.readme(service.mount));
+  res.send(service.readme);
 })
 .response(200, ['text/plain'], `Raw README contents.`)
 .summary(`Service README`)
@@ -447,3 +440,25 @@ instanceRouter.get('/swagger', (req, res) => {
 .description(dd`
   Fetches the Swagger API description for the service at the given mount path.
 `);
+
+router.put('/_clusterdist', prepareServiceRequestBody, (req, res) => {
+  FoxxManager._clusterInstall(
+    req.body.source,
+    req.queryParams.mount,
+    _.omit(req.queryParams, ['mount'])
+  );
+  res.status(204);
+})
+.body(schemas.service, ['multipart/form-data'], `Service to be installed/replaced.`)
+.queryParam('mount', schemas.mount, `Mount path of the installed service.`)
+.queryParam('chksum', joi.string().required(), `Adler-32 checksum of the service bundle.`)
+.response(204, null, 'Empty response');
+
+router.delete('/_clusterdist', (req, res) => {
+  FoxxManager._clusterUninstall(
+    req.queryParams.mount
+  );
+  res.status(204);
+})
+.queryParam('mount', schemas.mount, `Mount path of the installed service.`)
+.response(204, null, 'Empty response');
