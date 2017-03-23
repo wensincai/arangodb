@@ -73,6 +73,16 @@ void FailedLeader::run() {
   runHelper("", _shard);
 }
 
+/*void FailedLeader::Timeout() {
+
+  std::string planPath
+    = planColPrefix + _database + "/" + _collection + "/shards/" + _shard;
+  auto const& planned = _snapshot(planPath).slice();
+  
+  //auto itfrom = 
+  
+  }*/
+
 bool FailedLeader::create(std::shared_ptr<VPackBuilder> b) {
 
   using namespace std::chrono;

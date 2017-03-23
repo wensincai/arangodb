@@ -95,6 +95,13 @@ Node createRootNode() {
   return createNode(agency);
 }
 
+char const* todo = R"=({
+  "creator":"1", "type":"failedLeader", "database":"database",
+  "collection":"collection", "shard":"shard", "fromServer":"leader",
+  "jobId":"1", "timeCreated":"2017-01-01 00:00:00"
+  })=";
+
+
 TEST_CASE("FailedLeader", "[agency][supervision]") {
 
   auto baseStructure = createRootNode();
@@ -178,18 +185,7 @@ SECTION("if we want to start and the collection went missing from plan (our trut
       }
 
       if (path == "/arango/Target/ToDo") {
-        VPackBuilder jobBuilder;
-        jobBuilder.add(VPackValue(VPackValueType::Object));
-        jobBuilder.add("creator", VPackValue("1"));
-        jobBuilder.add("type", VPackValue("failedLeader"));
-        jobBuilder.add("database", VPackValue(DATABASE));
-        jobBuilder.add("collection", VPackValue(COLLECTION));
-        jobBuilder.add("shard", VPackValue(SHARD));
-        jobBuilder.add("fromServer", VPackValue(SHARD_LEADER));
-        jobBuilder.add("jobId", VPackValue(jobId));
-        jobBuilder.add("timeCreated", VPackValue("2017-01-01 00:00:00"));
-        jobBuilder.close();
-        builder->add("1", jobBuilder.slice());
+        builder->add("1", createBuilder(todo).slice());
       }
       builder->close();
     } else {
@@ -249,18 +245,7 @@ SECTION("if we are supposed to fail a distributeShardsLike job we immediately fa
       }
 
       if (path == "/arango/Target/ToDo") {
-        VPackBuilder jobBuilder;
-        jobBuilder.add(VPackValue(VPackValueType::Object));
-        jobBuilder.add("creator", VPackValue("1"));
-        jobBuilder.add("type", VPackValue("failedLeader"));
-        jobBuilder.add("database", VPackValue(DATABASE));
-        jobBuilder.add("collection", VPackValue(COLLECTION));
-        jobBuilder.add("shard", VPackValue(SHARD));
-        jobBuilder.add("fromServer", VPackValue(SHARD_LEADER));
-        jobBuilder.add("jobId", VPackValue(jobId));
-        jobBuilder.add("timeCreated", VPackValue("2017-01-01 00:00:00"));
-        jobBuilder.close();
-        builder->add("1", jobBuilder.slice());
+        builder->add("1", createBuilder(todo).slice());
       }
       builder->close();
     } else {
@@ -320,18 +305,7 @@ SECTION("if the leader is healthy again we fail the job") {
       }
 
       if (path == "/arango/Target/ToDo") {
-        VPackBuilder jobBuilder;
-        jobBuilder.add(VPackValue(VPackValueType::Object));
-        jobBuilder.add("creator", VPackValue("1"));
-        jobBuilder.add("type", VPackValue("failedLeader"));
-        jobBuilder.add("database", VPackValue(DATABASE));
-        jobBuilder.add("collection", VPackValue(COLLECTION));
-        jobBuilder.add("shard", VPackValue(SHARD));
-        jobBuilder.add("fromServer", VPackValue(SHARD_LEADER));
-        jobBuilder.add("jobId", VPackValue(jobId));
-        jobBuilder.add("timeCreated", VPackValue("2017-01-01 00:00:00"));
-        jobBuilder.close();
-        builder->add("1", jobBuilder.slice());
+        builder->add("1", createBuilder(todo).slice());
       }
       builder->close();
     } else {
@@ -389,19 +363,7 @@ SECTION("the job must not be started if there is no server that is in sync for e
       }
 
       if (path == "/arango/Target/ToDo") {
-        
-        VPackBuilder jobBuilder;
-        jobBuilder.add(VPackValue(VPackValueType::Object));
-        jobBuilder.add("creator", VPackValue("1"));
-        jobBuilder.add("type", VPackValue("failedLeader"));
-        jobBuilder.add("database", VPackValue(DATABASE));
-        jobBuilder.add("collection", VPackValue(COLLECTION));
-        jobBuilder.add("shard", VPackValue(SHARD));
-        jobBuilder.add("fromServer", VPackValue(SHARD_LEADER));
-        jobBuilder.add("jobId", VPackValue(jobId));
-        jobBuilder.add("timeCreated", VPackValue("2017-01-01 00:00:00"));
-        jobBuilder.close();
-        builder->add("1", jobBuilder.slice());
+        builder->add("1", createBuilder(todo).slice());
       }
       builder->close();
     } else {
@@ -448,85 +410,24 @@ SECTION("the job must not be started if there if one of the linked shards (distr
         }
       }
 
-      
-
       if (path == "/arango/Current/Collections/" + DATABASE) {
         // we fake that follower2 is in sync
-        builder->add(VPackValue("linkedcollection1"));
-        {
-          VPackObjectBuilder f(builder.get());
-          builder->add(VPackValue("linkedshard1"));
-          {
-            VPackObjectBuilder f(builder.get());
-            builder->add(VPackValue("servers"));
-            {
-              VPackArrayBuilder g(builder.get());
-              builder->add(VPackValue(SHARD_LEADER));
-              builder->add(VPackValue(SHARD_FOLLOWER2));
-            }
-          }
-        }
+        char const* json1 =
+          R"=({"linkedshard1":{"servers":["leader","follower2"]}})=";
+        builder->add("linkedcollection1", createBuilder(json1).slice());
         // for the other shard there is only follower1 in sync
-        builder->add(VPackValue("linkedcollection2"));
-        {
-          VPackObjectBuilder f(builder.get());
-          builder->add(VPackValue("linkedshard2"));
-          {
-            VPackObjectBuilder f(builder.get());
-            builder->add(VPackValue("servers"));
-            {
-              VPackArrayBuilder g(builder.get());
-              builder->add(VPackValue(SHARD_LEADER));
-              builder->add(VPackValue(SHARD_FOLLOWER1));
-            }
-          }
-        }
+        char const* json2 =
+          R"=({"linkedshard2":{"servers":["leader","follower1"]}})=";
+        builder->add("linkedcollection2", createBuilder(json2).slice());
       } else if (path == "/arango/Plan/Collections/" + DATABASE) {
-        builder->add(VPackValue("linkedcollection1"));
-        {
-          VPackObjectBuilder f(builder.get());
-          builder->add("distributeShardsLike", VPackValue(COLLECTION));
-          builder->add(VPackValue("shards"));
-          {
-            VPackObjectBuilder f(builder.get());
-            builder->add(VPackValue("linkedshard1"));
-            {
-              VPackArrayBuilder g(builder.get());
-              builder->add(VPackValue(SHARD_LEADER));
-              builder->add(VPackValue(SHARD_FOLLOWER1));
-              builder->add(VPackValue(SHARD_FOLLOWER2));
-            }
-          }
-        }
-        builder->add(VPackValue("linkedcollection2"));
-        {
-          VPackObjectBuilder f(builder.get());
-          builder->add("distributeShardsLike", VPackValue(COLLECTION));
-          builder->add(VPackValue("shards"));
-          {
-            VPackObjectBuilder f(builder.get());
-            builder->add(VPackValue("linkedshard2"));
-            {
-              VPackArrayBuilder g(builder.get());
-              builder->add(VPackValue(SHARD_LEADER));
-              builder->add(VPackValue(SHARD_FOLLOWER1));
-              builder->add(VPackValue(SHARD_FOLLOWER2));
-            }
-          }
-        }
+        char const* json1 = R"=({"distributeShardsLike":"collection","shards":
+          {"linkedshard1":["leader","follower1","follower2"]}})=";
+        builder->add("linkedcollection1", createBuilder(json1).slice());
+        char const* json2 = R"=({"distributeShardsLike":"collection","shards":
+          {"linkedshard2":["leader","follower1","follower2"]}})=";
+        builder->add("linkedcollection2", createBuilder(json2).slice());
       } else if (path == "/arango/Target/ToDo") {
-        VPackBuilder jobBuilder;
-        jobBuilder.add(VPackValue(VPackValueType::Object));
-        jobBuilder.add("creator", VPackValue("1"));
-        jobBuilder.add("type", VPackValue("failedLeader"));
-        jobBuilder.add("database", VPackValue(DATABASE));
-        jobBuilder.add("collection", VPackValue(COLLECTION));
-        jobBuilder.add("shard", VPackValue(SHARD));
-        jobBuilder.add("fromServer", VPackValue(SHARD_LEADER));
-        jobBuilder.add("jobId", VPackValue(jobId));
-        jobBuilder.add("timeCreated", VPackValue("2017-01-01 00:00:00"));
-        jobBuilder.close();
-        builder->add("1", jobBuilder.slice());
+        builder->add("1", createBuilder(todo).slice());
       }
       builder->close();
     } else {
@@ -582,18 +483,7 @@ SECTION("abort any moveShard job blocking the shard and start") {
       } else if (path == "/arango/Target/Pending") {
         builder->add("2", moveShardBuilder->slice());
       } else if (path == "/arango/Target/ToDo") {
-        VPackBuilder jobBuilder;
-        jobBuilder.add(VPackValue(VPackValueType::Object));
-        jobBuilder.add("creator", VPackValue("1"));
-        jobBuilder.add("type", VPackValue("failedLeader"));
-        jobBuilder.add("database", VPackValue(DATABASE));
-        jobBuilder.add("collection", VPackValue(COLLECTION));
-        jobBuilder.add("shard", VPackValue(SHARD));
-        jobBuilder.add("fromServer", VPackValue(SHARD_LEADER));
-        jobBuilder.add("jobId", VPackValue(jobId));
-        jobBuilder.add("timeCreated", VPackValue("2017-01-01 00:00:00"));
-        jobBuilder.close();
-        builder->add("1", jobBuilder.slice());
+        builder->add("1", createBuilder(todo).slice());
       }
       builder->close();
     } else {
@@ -671,23 +561,13 @@ SECTION("abort any addFollower job blocking the shard and start") {
       if (path == "/arango/Supervision/Shards") {
         builder->add(SHARD, VPackValue("2"));
       } else if (path == "/arango/Target/ToDo") {
-        VPackBuilder jobBuilder;
-        jobBuilder.add(VPackValue(VPackValueType::Object));
-        jobBuilder.add("creator", VPackValue("1"));
-        jobBuilder.add("type", VPackValue("failedLeader"));
-        jobBuilder.add("database", VPackValue(DATABASE));
-        jobBuilder.add("collection", VPackValue(COLLECTION));
-        jobBuilder.add("shard", VPackValue(SHARD));
-        jobBuilder.add("fromServer", VPackValue(SHARD_LEADER));
-        jobBuilder.add("jobId", VPackValue(jobId));
-        jobBuilder.add("timeCreated", VPackValue("2017-01-01 00:00:00"));
-        jobBuilder.close();
-        builder->add("1", jobBuilder.slice());
+        builder->add("1", createBuilder(todo).slice());
         builder->add("2", addFollowerBuilder.slice());
       }
       builder->close();
     } else {
-      if (path == "/arango/Current/Collections/" + DATABASE + "/" + COLLECTION + "/" + SHARD + "/servers") {
+      if (path == "/arango/Current/Collections/" + DATABASE + "/" +
+          COLLECTION + "/" + SHARD + "/servers") {
         builder->add(VPackValue(VPackValueType::Array));
         builder->add(VPackValue(SHARD_LEADER));
         builder->add(VPackValue(SHARD_FOLLOWER2));
@@ -739,18 +619,7 @@ SECTION("if everything is fine than the job should be written to pending, adding
         }
       }
       if (path == "/arango/Target/ToDo") {
-        VPackBuilder jobBuilder;
-        jobBuilder.add(VPackValue(VPackValueType::Object));
-        jobBuilder.add("creator", VPackValue("1"));
-        jobBuilder.add("type", VPackValue("failedLeader"));
-        jobBuilder.add("database", VPackValue(DATABASE));
-        jobBuilder.add("collection", VPackValue(COLLECTION));
-        jobBuilder.add("shard", VPackValue(SHARD));
-        jobBuilder.add("fromServer", VPackValue(SHARD_LEADER));
-        jobBuilder.add("jobId", VPackValue(jobId));
-        jobBuilder.add("timeCreated", VPackValue("2017-01-01 00:00:00"));
-        jobBuilder.close();
-        builder->add("1", jobBuilder.slice());
+        builder->add("1", createBuilder(todo).slice());
       }
       builder->close();
     } else {
