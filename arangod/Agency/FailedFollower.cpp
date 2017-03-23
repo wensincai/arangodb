@@ -234,6 +234,8 @@ bool FailedFollower::start() {
     return true;
   }
 
+  TRI_ASSERT(result.isObject());
+
   auto slice = result.get(
     std::vector<std::string>(
       {agencyPrefix, "Supervision", "Health", _from, "Status"}));
