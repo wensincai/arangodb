@@ -101,6 +101,8 @@ char const* todo = R"=({
   "jobId":"1", "timeCreated":"2017-01-01 00:00:00"
   })=";
 
+typedef std::function<std::unique_ptr<VPackBuilder>(
+  VPackSlice const&, std::string const&)>TestStructureType;
 
 TEST_CASE("FailedLeader", "[agency][supervision]") {
 
@@ -168,7 +170,7 @@ SECTION("creating a job should create a job in todo") {
 SECTION("if we want to start and the collection went missing from plan (our truth) the job should just finish") {
   std::string jobId = "1";
 
-  std::function<std::unique_ptr<VPackBuilder>(VPackSlice const&, std::string const&)> createTestStructure = [&](VPackSlice const& s, std::string const& path) {
+  TestStructureType createTestStructure = [&](VPackSlice const& s, std::string const& path) {
     std::unique_ptr<VPackBuilder> builder;
     if (path == "/arango/Plan/Collections/" + DATABASE + "/" + COLLECTION) {
       return builder;
@@ -228,7 +230,7 @@ SECTION("if we want to start and the collection went missing from plan (our trut
 SECTION("if we are supposed to fail a distributeShardsLike job we immediately fail because this should be done by a job running on the master shard") {
   std::string jobId = "1";
 
-  std::function<std::unique_ptr<VPackBuilder>(VPackSlice const&, std::string const&)> createTestStructure = [&](VPackSlice const& s, std::string const& path) {
+  TestStructureType createTestStructure = [&](VPackSlice const& s, std::string const& path) {
     std::unique_ptr<VPackBuilder> builder;
     builder.reset(new VPackBuilder());
     if (s.isObject()) {
@@ -288,7 +290,7 @@ SECTION("if we are supposed to fail a distributeShardsLike job we immediately fa
 SECTION("if the leader is healthy again we fail the job") {
   std::string jobId = "1";
 
-  std::function<std::unique_ptr<VPackBuilder>(VPackSlice const&, std::string const&)> createTestStructure = [&](VPackSlice const& s, std::string const& path) {
+  TestStructureType createTestStructure = [&](VPackSlice const& s, std::string const& path) {
     std::unique_ptr<VPackBuilder> builder;
     builder.reset(new VPackBuilder());
     if (s.isObject()) {
@@ -350,7 +352,7 @@ SECTION("if the leader is healthy again we fail the job") {
 SECTION("the job must not be started if there is no server that is in sync for every shard") {
   std::string jobId = "1";
 
-  std::function<std::unique_ptr<VPackBuilder>(VPackSlice const&, std::string const&)> createTestStructure = [&](VPackSlice const& s, std::string const& path) {
+  TestStructureType createTestStructure = [&](VPackSlice const& s, std::string const& path) {
     std::unique_ptr<VPackBuilder> builder;
     builder.reset(new VPackBuilder());
     if (s.isObject()) {
@@ -398,7 +400,7 @@ SECTION("the job must not be started if there is no server that is in sync for e
 SECTION("the job must not be started if there if one of the linked shards (distributeShardsLike) is not in sync") {
   std::string jobId = "1";
 
-  std::function<std::unique_ptr<VPackBuilder>(VPackSlice const&, std::string const&)> createTestStructure = [&](VPackSlice const& s, std::string const& path) {
+  TestStructureType createTestStructure = [&](VPackSlice const& s, std::string const& path) {
     std::unique_ptr<VPackBuilder> builder;
     builder.reset(new VPackBuilder());
     if (s.isObject()) {
@@ -459,98 +461,29 @@ SECTION("the job must not be started if there if one of the linked shards (distr
 
 SECTION("abort any moveShard job blocking the shard and start") {
   Mock<AgentInterface> moveShardMockAgent;
-  AgentInterface &moveShardAgent = moveShardMockAgent.get();
 
-  auto moveShardBuilder = std::make_shared<VPackBuilder>();
-  moveShardBuilder->openObject();
-  auto moveShard = MoveShard(baseStructure("arango"), &moveShardAgent, "2", "strunz", DATABASE, COLLECTION, SHARD, SHARD_LEADER, SHARD_FOLLOWER1, true);
-  moveShard.create(moveShardBuilder);
-  moveShardBuilder->close();
-
-  std::string jobId = "1";
-  std::function<std::unique_ptr<VPackBuilder>(VPackSlice const&, std::string const&)> createTestStructure = [&](VPackSlice const& s, std::string const& path) {
-    std::unique_ptr<VPackBuilder> builder(new VPackBuilder());
-    if (s.isObject()) {
-      builder->add(VPackValue(VPackValueType::Object));
-      for (auto const& it: VPackObjectIterator(s)) {
-        auto childBuilder = createTestStructure(it.value, path + "/" + it.key.copyString());
-        if (childBuilder) {
-          builder->add(it.key.copyString(), childBuilder->slice());
-        }
-      }
-      if (path == "/arango/Supervision/Shards") {
-        builder->add(SHARD, VPackValue("2"));
-      } else if (path == "/arango/Target/Pending") {
-        builder->add("2", moveShardBuilder->slice().get("/Target/ToDo/2"));
-      } else if (path == "/arango/Target/ToDo") {
-        builder->add("1", createBuilder(todo).slice());
-      }
-      builder->close();
-    } else {
-      if (path == "/arango/Current/Collections/" + DATABASE + "/" + COLLECTION + "/" + SHARD + "/servers") {
-        builder->add(VPackValue(VPackValueType::Array));
-        builder->add(VPackValue(SHARD_LEADER));
-        builder->add(VPackValue(SHARD_FOLLOWER2));
-        builder->close();
-      } else {
-        builder->add(s);
-      }
-    }
-    return builder;
-  };
-
-  auto builder = createTestStructure(baseStructure.toBuilder().slice(), "");
-  REQUIRE(builder);
-  INFO("Teststructure: " << builder->toJson());
-  Node agency = createNodeFromBuilder(*builder);
-
-  Mock<AgentInterface> mockAgent;
-  When(Method(mockAgent, write)).Do([&](query_t const& q) -> write_ret_t {
-    REQUIRE(false);
-    // check that moveshard is being moved to failed
-    INFO("WriteTransaction: " << q->slice().toJson());
-    REQUIRE(std::string(q->slice().typeName()) == "array" );
-    REQUIRE(q->slice().length() == 1);
-    REQUIRE(std::string(q->slice()[0].typeName()) == "array");
-    REQUIRE(std::string(q->slice()[0][0].typeName()) == "object");
-    REQUIRE(std::string(q->slice()[0][0].get("/arango/Target/Failed/2").typeName()) == "object");
-    return fakeWriteResult;
-  });
-  AgentInterface &agent = mockAgent.get();
-  auto failedLeader = FailedLeader(
-    agency("arango"),
-    &agent,
-    JOB_STATUS::TODO,
-    jobId
-  );
-  failedLeader.start();
-  Verify(Method(mockAgent, write));
-}
-
-SECTION("abort any addFollower job blocking the shard and start") {
-  Mock<AgentInterface> addFollowerMockAgent;
-
-  VPackBuilder addFollowerBuilder;
-  When(Method(addFollowerMockAgent, write)).Do([&](query_t const& q) -> write_ret_t {
+  VPackBuilder moveShardBuilder;
+  When(Method(moveShardMockAgent, write)).Do([&](query_t const& q) -> write_ret_t {
     INFO("WriteTransaction(create): " << q->slice().toJson());
     REQUIRE(std::string(q->slice().typeName()) == "array" );
     REQUIRE(q->slice().length() == 1);
     REQUIRE(std::string(q->slice()[0].typeName()) == "array");
     REQUIRE(q->slice()[0].length() > 0); // preconditions!
     REQUIRE(std::string(q->slice()[0][0].typeName()) == "object");
-
     REQUIRE(std::string(q->slice()[0][0].get("/arango/Target/ToDo/2").typeName()) == "object");
-    addFollowerBuilder.add(q->slice()[0][0].get("/arango/Target/ToDo/2"));
+    moveShardBuilder.add(q->slice()[0][0].get("/arango/Target/ToDo/2"));
 
     return fakeWriteResult;
   });
-  When(Method(addFollowerMockAgent, waitFor)).Return();
-  AgentInterface &addFollowerAgent = addFollowerMockAgent.get();
-  auto addFollower = AddFollower(baseStructure("arango"), &addFollowerAgent, "2", "strunz", DATABASE, COLLECTION, SHARD);
-  addFollower.create();
+  When(Method(moveShardMockAgent, waitFor)).Return();
+  AgentInterface &moveShardAgent = moveShardMockAgent.get();
+  auto moveShard = MoveShard(
+    baseStructure("arango"), &moveShardAgent, "2", "strunz", DATABASE,
+    COLLECTION, SHARD, SHARD_LEADER, FREE_SERVER, true);
+  moveShard.create();
 
   std::string jobId = "1";
-  std::function<std::unique_ptr<VPackBuilder>(VPackSlice const&, std::string const&)> createTestStructure = [&](VPackSlice const& s, std::string const& path) {
+  TestStructureType createTestStructure = [&](VPackSlice const& s, std::string const& path) {
     std::unique_ptr<VPackBuilder> builder(new VPackBuilder());
     if (s.isObject()) {
       builder->add(VPackValue(VPackValueType::Object));
@@ -564,7 +497,8 @@ SECTION("abort any addFollower job blocking the shard and start") {
         builder->add(SHARD, VPackValue("2"));
       } else if (path == "/arango/Target/ToDo") {
         builder->add("1", createBuilder(todo).slice());
-        builder->add("2", addFollowerBuilder.slice().get("/Target/ToDo/2"));
+      } else if (path == "/arango/Target/Pending") {
+        builder->add("2", moveShardBuilder.slice());
       }
       builder->close();
     } else {
@@ -587,7 +521,7 @@ SECTION("abort any addFollower job blocking the shard and start") {
   Node agency = createNodeFromBuilder(*builder);
 
   Mock<AgentInterface> mockAgent;
-  When(Method(mockAgent, write)).Do([&](query_t const& q) -> write_ret_t {
+  When(Method(mockAgent, transact)).Do([&](query_t const& q) -> trans_ret_t {
     // check that moveshard is being moved to failed
     INFO("WriteTransaction: " << q->slice().toJson());
     REQUIRE(std::string(q->slice().typeName()) == "array" );
@@ -595,7 +529,7 @@ SECTION("abort any addFollower job blocking the shard and start") {
     REQUIRE(std::string(q->slice()[0].typeName()) == "array");
     REQUIRE(std::string(q->slice()[0][0].typeName()) == "object");
     REQUIRE(std::string(q->slice()[0][0].get("/arango/Target/Failed/2").typeName()) == "object");
-    return fakeWriteResult;
+    return fakeTransResult;
   });
   AgentInterface &agent = mockAgent.get();
   auto failedLeader = FailedLeader(
@@ -604,13 +538,13 @@ SECTION("abort any addFollower job blocking the shard and start") {
     JOB_STATUS::TODO,
     jobId
   );
-  failedLeader.start();
+  //failedLeader.start();
 }
 
 SECTION("if everything is fine than the job should be written to pending, adding the toServer") {
   std::string jobId = "1";
 
-  std::function<std::unique_ptr<VPackBuilder>(VPackSlice const&, std::string const&)> createTestStructure = [&](VPackSlice const& s, std::string const& path) {
+  TestStructureType createTestStructure = [&](VPackSlice const& s, std::string const& path) {
     std::unique_ptr<VPackBuilder> builder(new VPackBuilder());
     if (s.isObject()) {
       builder->add(VPackValue(VPackValueType::Object));
@@ -672,7 +606,7 @@ SECTION("if everything is fine than the job should be written to pending, adding
     CHECK(writes.get("/arango/Plan/Collections/" + DATABASE + "/" + COLLECTION + "/shards/" + SHARD)[0].copyString() == SHARD_FOLLOWER2);
     CHECK(writes.get("/arango/Plan/Collections/" + DATABASE + "/" + COLLECTION + "/shards/" + SHARD)[1].copyString() == SHARD_LEADER);
     CHECK(writes.get("/arango/Plan/Collections/" + DATABASE + "/" + COLLECTION + "/shards/" + SHARD)[2].copyString() == SHARD_FOLLOWER1);
-    CHECK(writes.get("/arango/Plan/Collections/" + DATABASE + "/" + COLLECTION + "/shards/" + SHARD)[3].copyString() == FREE_SERVER);
+    CHECK(writes.get("/arango/Plan/Collections/" + DATABASE + "/" + COLLECTION + "/shards/" + SHARD)[3].copyString() == FREE_SERVER2);
 
     auto preconditions = q->slice()[0][1];
     REQUIRE(std::string(preconditions.get("/arango/Supervision/Shards/" + SHARD).typeName()) == "object");
@@ -711,7 +645,7 @@ SECTION("if everything is fine than the job should be written to pending, adding
 SECTION("if we want are working and our collection went missing from plan the job should just finish") {
   std::string jobId = "1";
 
-  std::function<std::unique_ptr<VPackBuilder>(VPackSlice const&, std::string const&)> createTestStructure = [&](VPackSlice const& s, std::string const& path) {
+  TestStructureType createTestStructure = [&](VPackSlice const& s, std::string const& path) {
     std::unique_ptr<VPackBuilder> builder;
     if (path == "/arango/Plan/Collections/" + DATABASE + "/" + COLLECTION) {
       return builder;
@@ -736,6 +670,7 @@ SECTION("if we want are working and our collection went missing from plan the jo
         jobBuilder.add("collection", VPackValue(COLLECTION));
         jobBuilder.add("shard", VPackValue(SHARD));
         jobBuilder.add("fromServer", VPackValue(SHARD_LEADER));
+        jobBuilder.add("toServer", VPackValue(SHARD_FOLLOWER1));
         jobBuilder.add("jobId", VPackValue(jobId));
         jobBuilder.add("timeCreated", VPackValue("2017-01-01 00:00:00"));
         jobBuilder.close();
@@ -784,7 +719,7 @@ SECTION("if we want are working and our collection went missing from plan the jo
 SECTION("if the newly supposed leader didn't catch up yet we wait") {
   std::string jobId = "1";
 
-  std::function<std::unique_ptr<VPackBuilder>(VPackSlice const&, std::string const&)> createTestStructure = [&](VPackSlice const& s, std::string const& path) {
+  TestStructureType createTestStructure = [&](VPackSlice const& s, std::string const& path) {
     std::unique_ptr<VPackBuilder> builder;
     builder.reset(new VPackBuilder());
     if (s.isObject()) {
@@ -805,6 +740,7 @@ SECTION("if the newly supposed leader didn't catch up yet we wait") {
         jobBuilder.add("collection", VPackValue(COLLECTION));
         jobBuilder.add("shard", VPackValue(SHARD));
         jobBuilder.add("fromServer", VPackValue(SHARD_LEADER));
+        jobBuilder.add("toServer", VPackValue(SHARD_FOLLOWER1));
         jobBuilder.add("jobId", VPackValue(jobId));
         jobBuilder.add("timeCreated", VPackValue(timepointToString(std::chrono::system_clock::now())));
         jobBuilder.close();
@@ -848,7 +784,7 @@ SECTION("if the newly supposed leader didn't catch up yet we wait") {
 SECTION("in case of a timeout the job should be aborted") {
   std::string jobId = "1";
 
-  std::function<std::unique_ptr<VPackBuilder>(VPackSlice const&, std::string const&)> createTestStructure = [&](VPackSlice const& s, std::string const& path) {
+  TestStructureType createTestStructure = [&](VPackSlice const& s, std::string const& path) {
     std::unique_ptr<VPackBuilder> builder;
     builder.reset(new VPackBuilder());
     if (s.isObject()) {
@@ -869,6 +805,7 @@ SECTION("in case of a timeout the job should be aborted") {
         jobBuilder.add("collection", VPackValue(COLLECTION));
         jobBuilder.add("shard", VPackValue(SHARD));
         jobBuilder.add("fromServer", VPackValue(SHARD_LEADER));
+        jobBuilder.add("toServer", VPackValue(SHARD_FOLLOWER1));
         jobBuilder.add("jobId", VPackValue(jobId));
         jobBuilder.add("timeCreated", VPackValue("2015-01-03T20:00:00Z"));
         jobBuilder.close();
@@ -914,7 +851,6 @@ SECTION("in case of a timeout the job should be aborted") {
     REQUIRE(std::string(writes.get("/arango/Plan/Collections/" + DATABASE + "/" + COLLECTION + "/shards/" + SHARD).typeName()) == "array");
     CHECK(writes.get("/arango/Plan/Collections/" + DATABASE + "/" + COLLECTION + "/shards/" + SHARD)[0].copyString() == SHARD_LEADER);
     CHECK(writes.get("/arango/Plan/Collections/" + DATABASE + "/" + COLLECTION + "/shards/" + SHARD)[1].copyString() == SHARD_FOLLOWER1);
-    CHECK(writes.get("/arango/Plan/Collections/" + DATABASE + "/" + COLLECTION + "/shards/" + SHARD)[2].copyString() == SHARD_FOLLOWER2);
     return fakeWriteResult;
   });
   When(Method(mockAgent, waitFor)).AlwaysReturn(AgentInterface::raft_commit_t::OK);
@@ -933,7 +869,7 @@ SECTION("in case of a timeout the job should be aborted") {
 SECTION("when everything is finished there should be proper cleanup") {
   std::string jobId = "1";
 
-  std::function<std::unique_ptr<VPackBuilder>(VPackSlice const&, std::string const&)> createTestStructure = [&](VPackSlice const& s, std::string const& path) {
+  TestStructureType createTestStructure = [&](VPackSlice const& s, std::string const& path) {
     std::unique_ptr<VPackBuilder> builder;
     builder.reset(new VPackBuilder());
     if (s.isObject()) {
@@ -954,8 +890,10 @@ SECTION("when everything is finished there should be proper cleanup") {
         jobBuilder.add("collection", VPackValue(COLLECTION));
         jobBuilder.add("shard", VPackValue(SHARD));
         jobBuilder.add("fromServer", VPackValue(SHARD_LEADER));
+        jobBuilder.add("toServer", VPackValue(SHARD_FOLLOWER1));
         jobBuilder.add("jobId", VPackValue(jobId));
-        jobBuilder.add("timeCreated", VPackValue("2015-01-03T20:00:00Z"));
+        jobBuilder.add("timeCreated", VPackValue(
+                         timepointToString(std::chrono::system_clock::now())));
         jobBuilder.close();
         builder->add("1", jobBuilder.slice());
       }
