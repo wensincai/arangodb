@@ -64,8 +64,9 @@ Job::~Job() {}
 // this will be initialized in the AgencyFeature
 std::string Job::agencyPrefix = "/arango";
 
-bool Job::finish(std::string const& server, std::string const& shard,
-                 bool success, std::string const& reason) {
+bool Job::finish(
+  std::string const& server, std::string const& shard,
+  bool success, std::string const& reason, query_t const payload) {
   
   Builder pending, finished;
   
@@ -102,6 +103,17 @@ bool Job::finish(std::string const& server, std::string const& shard,
     addRemoveJobFromSomewhere(finished, "ToDo", _jobId);
     addRemoveJobFromSomewhere(finished, "Pending", _jobId);
 
+    // Additional payload, which is to be executed in the finish transaction
+    if (payload != nullptr) {
+      Slice slice = payload->slice();
+      TRI_ASSERT(slice.isObject());
+      if (slice.length() > 0) {
+        for (auto const& oper : VPackObjectIterator(slice)) {
+          finished.add(oper.key.copyString(), oper.value);
+        }
+      }
+    }
+
     // --- Remove blocks if specified:
     if (started && !server.empty()) {
       addReleaseServer(finished, server);
@@ -109,6 +121,7 @@ bool Job::finish(std::string const& server, std::string const& shard,
     if (started && !shard.empty()) {
       addReleaseShard(finished, shard);
     }
+    
   }  // close object and array
 
   write_ret_t res = singleWriteTransaction(_agent, finished);

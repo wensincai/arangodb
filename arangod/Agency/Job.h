@@ -119,9 +119,10 @@ struct Job {
 
   virtual Result abort() = 0;
 
-  virtual bool finish(std::string const& server, std::string const& shard,
-                      bool success = true,
-                      std::string const& reason = std::string());
+  virtual bool finish(
+    std::string const& server, std::string const& shard, bool success = true,
+    std::string const& reason = std::string(), query_t const payload = nullptr);
+  
   virtual JOB_STATUS status() = 0;
 
   virtual bool create(std::shared_ptr<VPackBuilder> b) = 0;
