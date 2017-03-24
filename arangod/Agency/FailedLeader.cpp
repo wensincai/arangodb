@@ -37,15 +37,13 @@ FailedLeader::FailedLeader(Node const& snapshot, AgentInterface* agent,
                            std::string const& database,
                            std::string const& collection,
                            std::string const& shard, std::string const& from)
-    : Job(NOTFOUND, snapshot, agent, jobId, creator),
-      _database(database),
-      _collection(collection),
-      _shard(shard),
-      _from(from) {}
+    : Job(NOTFOUND, snapshot, agent, jobId, creator), _database(database),
+      _collection(collection), _shard(shard), _from(from) {}
 
-FailedLeader::FailedLeader(Node const& snapshot, AgentInterface* agent,
-                           JOB_STATUS status, std::string const& jobId)
-    : Job(status, snapshot, agent, jobId) {
+FailedLeader::FailedLeader(
+  Node const& snapshot, AgentInterface* agent, JOB_STATUS status,
+  std::string const& jobId) : Job(status, snapshot, agent, jobId) {
+  
   // Get job details from agency:
   try {
     std::string path = pos[status] + _jobId + "/";
@@ -58,6 +56,7 @@ FailedLeader::FailedLeader(Node const& snapshot, AgentInterface* agent,
     } catch (...) {}
     _shard = _snapshot(path + "shard").getString();
     _creator = _snapshot(path + "creator").getString();
+    _created = stringToTimepoint(_snapshot(path + "timeCreated").getString());
   } catch (std::exception const& e) {
     std::stringstream err;
     err << "Failed to find job " << _jobId << " in agency: " << e.what();
@@ -65,6 +64,7 @@ FailedLeader::FailedLeader(Node const& snapshot, AgentInterface* agent,
     finish("", _shard, false, err.str());
     _status = FAILED;
   }
+  
 }
 
 FailedLeader::~FailedLeader() {}
@@ -73,47 +73,47 @@ void FailedLeader::run() {
   runHelper("", _shard);
 }
 
-void FailedLeader::Rollback() {
+void FailedLeader::rollback() {
 
   // Create new plan servers (exchange _to and _from)
   std::string planPath
     = planColPrefix + _database + "/" + _collection + "/shards/" + _shard;
   auto const& planned = _snapshot(planPath).slice();
-  VPackBuilder rollback;
-  { VPackArrayBuilder r(&rollback);
-    for (auto const i : VPackArrayIterator(planned)) {
-      TRI_ASSERT(i.isString());
-      auto istr = i.copyString();
-      if (i.copyString() == _from) {
-        rollback.add(VPackValue(_to));
-      } else if (i.copyString() == _to) {
-        rollback.add(VPackValue(_from));
-      } else {
-        rollback.add(i);
+
+  VPackBuilder rb;
+  if (!_to.empty()) {
+    { VPackArrayBuilder r(&rb);
+      for (auto const i : VPackArrayIterator(planned)) {
+        TRI_ASSERT(i.isString());
+        auto istr = i.copyString();
+        if (istr == _from) {
+          rb.add(VPackValue(_to));
+        } else if (istr == _to) {
+          rb.add(VPackValue(_from));
+        } else {
+          rb.add(i);
+        }
       }
     }
+  } else {
+    rb.add(planned);
   }
-
-  auto myClones = clones(_snapshot, _database, _collection, _shard);
-
+  
+  auto cs = clones(_snapshot, _database, _collection, _shard);
+  
   // Transactions
-  Builder envelope;
-  { VPackArrayBuilder transactions(&envelope);
-    { VPackArrayBuilder transaction(&envelope);
-      // To all clones incl myself apply rollback
-      for (auto const clone : myClones) {
-        envelope.add(
-          planColPrefix + _database + "/"
-          + clone.collection + "/shards/" + clone.shard, rollback.slice());
-      }
-      // Failed entry
-      // Remove ToDo/Pending
+  auto payload = std::make_shared<Builder>();
+  { VPackObjectBuilder b(payload.get());
+    for (auto const c : cs) {
+      payload->add(planColPrefix + _database + "/" + c.collection + "/shards/" +
+                   c.shard, rb.slice());
     }
   }
-  
-  
+
+  finish("", _shard, false, "Timed out.", payload);
   
 }
+
 
 bool FailedLeader::create(std::shared_ptr<VPackBuilder> b) {
 
@@ -137,12 +137,11 @@ bool FailedLeader::create(std::shared_ptr<VPackBuilder> b) {
         _jb->add(
           "timeCreated", VPackValue(timepointToString(system_clock::now())));
       }}}
-  
-  write_ret_t res = singleWriteTransaction(_agent, *_jb);
-  
+  write_ret_t res = singleWriteTransaction(_agent, *_jb);  
   return (res.accepted && res.indices.size() == 1 && res.indices[0]);
   
 }
+
 
 bool FailedLeader::start() {
 
@@ -372,6 +371,11 @@ JOB_STATUS FailedLeader::status() {
   if(!_snapshot.has(planColPrefix + _database + "/" + _collection)) {
     finish("", _shard, true, "Collection " + _collection + " gone");
     return FINISHED;
+  }
+
+  // Timedout after 77 minutes
+  if (std::chrono::system_clock::now() - _created > std::chrono::seconds(4620)) {
+    rollback();
   }
 
   if (_status != PENDING) {
