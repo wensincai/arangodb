@@ -323,39 +323,27 @@ std::vector<bool> Store::apply(
 
     for (auto const& url : urls) {
       Builder body;  // host
-      body.openObject();
-      body.add("term", VPackValue(term));
-      body.add("index", VPackValue(lastCommitIndex));
-      auto ret = in.equal_range(url);
-      
-      // mop: XXX not exactly sure what is supposed to happen here
-      // if there are multiple subobjects being updates at the same time
-      // e.g.
-      // /hans/wurst
-      //        /hans/wurst/peter: 1
-      // /hans/wurst
-      //        /hans/wurst/uschi: 2
-      // we are generating invalid json...not sure if this here is a
-      // valid fix...it is most likely broken :S
-      std::string currentKey;
-      for (auto it = ret.first; it != ret.second; ++it) {
-        if (currentKey != it->second->key) {
-          if (!currentKey.empty()) {
-            body.close();
+      { VPackObjectBuilder b(&body);
+        body.add("term", VPackValue(term));
+        body.add("index", VPackValue(lastCommitIndex));
+        auto ret = in.equal_range(url);
+        std::string currentKey;
+        for (auto it = ret.first; it != ret.second; ++it) {
+          if (currentKey != it->second->key) {
+            if (!currentKey.empty()) {
+              body.close();
+            }
+            body.add(it->second->key, VPackValue(VPackValueType::Object));
+            currentKey = it->second->key;
           }
-          body.add(it->second->key, VPackValue(VPackValueType::Object));
-          currentKey = it->second->key;
+          body.add(VPackValue(it->second->modified));
+          { VPackObjectBuilder b(&body);
+            body.add("op", VPackValue(it->second->oper)); }
         }
-        // mop: XXX maybe there are duplicates here as well?
-        // e.g. a key is set and deleted in the same transaction?
-        body.add(it->second->modified, VPackValue(VPackValueType::Object));
-        body.add("op", VPackValue(it->second->oper));
-        body.close();
+        if (!currentKey.empty()) {
+          body.close();
+        }
       }
-      if (!currentKey.empty()) {
-        body.close();
-      }
-      body.close();
       
       std::string endpoint, path;
       if (endpointPathFromUrl(url, endpoint, path)) {
@@ -477,11 +465,10 @@ check_ret_t Store::check(VPackSlice const& slice, CheckMode mode) const {
 std::vector<bool> Store::read(query_t const& queries, query_t& result) const {
   std::vector<bool> success;
   if (queries->slice().isArray()) {
-    result->add(VPackValue(VPackValueType::Array));  // top node array
+    VPackArrayBuilder r(result.get());
     for (auto const& query : VPackArrayIterator(queries->slice())) {
       success.push_back(read(query, *result));
     }
-    result->close();
   } else {
     LOG_TOPIC(ERR, Logger::AGENCY) << "Read queries to stores must be arrays";
   }
@@ -550,25 +537,24 @@ void Store::beginShutdown() {
 
 /// TTL clear values from store
 query_t Store::clearExpired() const {
+
   query_t tmp = std::make_shared<Builder>();
-  tmp->openArray();
-  {
+  { VPackArrayBuilder t(tmp.get());
     MUTEX_LOCKER(storeLocker, _storeLock);
     for (auto it = _timeTable.cbegin(); it != _timeTable.cend(); ++it) {
       if (it->first < std::chrono::system_clock::now()) {
-        tmp->openArray();
-        tmp->openObject();
-        tmp->add(it->second, VPackValue(VPackValueType::Object));
-        tmp->add("op", VPackValue("delete"));
-        tmp->close();
-        tmp->close();
-        tmp->close();
+        VPackArrayBuilder ttt(tmp.get());
+        { VPackObjectBuilder tttt(tmp.get());
+          tmp->add(VPackValue(it->second));
+          { VPackObjectBuilder ttttt(tmp.get());
+            tmp->add("op", VPackValue("delete"));
+          }}
       } else {
         break;
       }
     }
+    
   }
-  tmp->close();
   return tmp;
 }
 

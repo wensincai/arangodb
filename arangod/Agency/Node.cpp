@@ -117,11 +117,11 @@ Slice Node::slice() const {
 void Node::rebuildVecBuf() const {
   if (_vecBufDirty) {  // Dirty vector buffer
     Builder tmp;
-    tmp.openArray();
-    for (auto const& i : _value) {
-      tmp.add(Slice(i.data()));
+    { VPackArrayBuilder t(&tmp);
+      for (auto const& i : _value) {
+        tmp.add(Slice(i.data()));
+      }
     }
-    tmp.close();
     _vecBuf = *tmp.steal();
     _vecBufDirty = false;
   }
@@ -413,13 +413,13 @@ bool Node::handle<INCREMENT>(VPackSlice const& slice) {
     slice.get("step").getUInt() : 1;
 
   Builder tmp;
-  tmp.openObject();
-  try {
-    tmp.add("tmp", Value(this->slice().getInt() + inc));
-  } catch (std::exception const&) {
-    tmp.add("tmp", Value(1));
+  { VPackObjectBuilder t(&tmp);
+    try {
+      tmp.add("tmp", Value(this->slice().getInt() + inc));
+    } catch (std::exception const&) {
+      tmp.add("tmp", Value(1));
+    }
   }
-  tmp.close();
   *this = tmp.slice().get("tmp");
   return true;
 }
@@ -428,13 +428,13 @@ bool Node::handle<INCREMENT>(VPackSlice const& slice) {
 template <>
 bool Node::handle<DECREMENT>(VPackSlice const& slice) {
   Builder tmp;
-  tmp.openObject();
-  try {
-    tmp.add("tmp", Value(this->slice().getInt() - 1));
-  } catch (std::exception const&) {
-    tmp.add("tmp", Value(-1));
+  { VPackObjectBuilder t(&tmp);
+    try {
+      tmp.add("tmp", Value(this->slice().getInt() - 1));
+    } catch (std::exception const&) {
+      tmp.add("tmp", Value(-1));
+    }
   }
-  tmp.close();
   *this = tmp.slice().get("tmp");
   return true;
 }
@@ -448,12 +448,12 @@ bool Node::handle<PUSH>(VPackSlice const& slice) {
     return false;
   }
   Builder tmp;
-  tmp.openArray();
-  if (this->slice().isArray()) {
-    for (auto const& old : VPackArrayIterator(this->slice())) tmp.add(old);
+  { VPackArrayBuilder t(&tmp);
+    if (this->slice().isArray()) {
+      for (auto const& old : VPackArrayIterator(this->slice())) tmp.add(old);
+    }
+    tmp.add(slice.get("new"));
   }
-  tmp.add(slice.get("new"));
-  tmp.close();
   *this = tmp.slice();
   return true;
 }
@@ -467,15 +467,15 @@ bool Node::handle<ERASE>(VPackSlice const& slice) {
     return false;
   }
   Builder tmp;
-  tmp.openArray();
-  if (this->slice().isArray()) {
-    for (auto const& old : VPackArrayIterator(this->slice())) {
-      if (old != slice.get("val")) {
-        tmp.add(old);
+  { VPackArrayBuilder t(&tmp);
+    if (this->slice().isArray()) {
+      for (auto const& old : VPackArrayIterator(this->slice())) {
+        if (old != slice.get("val")) {
+          tmp.add(old);
+        }
       }
     }
   }
-  tmp.close();
   *this = tmp.slice();
   return true;
 }
@@ -494,17 +494,13 @@ bool Node::handle<REPLACE>(VPackSlice const& slice) {
     return false;
   }
   Builder tmp;
-  tmp.openArray();
-  if (this->slice().isArray()) {
-    for (auto const& old : VPackArrayIterator(this->slice())) {
-      if (old == slice.get("val")) {
-        tmp.add(slice.get("new"));
-      } else {
-        tmp.add(old);
+  { VPackArrayBuilder t(&tmp);
+    if (this->slice().isArray()) {
+      for (auto const& old : VPackArrayIterator(this->slice())) {
+        tmp.add(old == slice.get("val") ? slice.get("new") : old);
       }
     }
   }
-  tmp.close();
   *this = tmp.slice();
   return true;
 }
@@ -513,18 +509,18 @@ bool Node::handle<REPLACE>(VPackSlice const& slice) {
 template <>
 bool Node::handle<POP>(VPackSlice const& slice) {
   Builder tmp;
-  tmp.openArray();
-  if (this->slice().isArray()) {
-    VPackArrayIterator it(this->slice());
-    if (it.size() > 1) {
-      size_t j = it.size() - 1;
-      for (auto old : it) {
-        tmp.add(old);
-        if (--j == 0) break;
+  { VPackArrayBuilder t(&tmp);
+    if (this->slice().isArray()) {
+      VPackArrayIterator it(this->slice());
+      if (it.size() > 1) {
+        size_t j = it.size() - 1;
+        for (auto old : it) {
+          tmp.add(old);
+          if (--j == 0) break;
+        }
       }
     }
   }
-  tmp.close();
   *this = tmp.slice();
   return true;
 }
@@ -538,12 +534,12 @@ bool Node::handle<PREPEND>(VPackSlice const& slice) {
     return false;
   }
   Builder tmp;
-  tmp.openArray();
-  tmp.add(slice.get("new"));
-  if (this->slice().isArray()) {
-    for (auto const& old : VPackArrayIterator(this->slice())) tmp.add(old);
+  { VPackArrayBuilder t(&tmp);
+    tmp.add(slice.get("new"));
+    if (this->slice().isArray()) {
+      for (auto const& old : VPackArrayIterator(this->slice())) tmp.add(old);
+    }
   }
-  tmp.close();
   *this = tmp.slice();
   return true;
 }
@@ -552,19 +548,19 @@ bool Node::handle<PREPEND>(VPackSlice const& slice) {
 template <>
 bool Node::handle<SHIFT>(VPackSlice const& slice) {
   Builder tmp;
-  tmp.openArray();
-  if (this->slice().isArray()) {  // If a
-    VPackArrayIterator it(this->slice());
-    bool first = true;
-    for (auto const& old : it) {
-      if (first) {
-        first = false;
-      } else {
-        tmp.add(old);
+  { VPackArrayBuilder t(&tmp);
+    if (this->slice().isArray()) {  // If a
+      VPackArrayIterator it(this->slice());
+      bool first = true;
+      for (auto const& old : it) {
+        if (first) {
+          first = false;
+        } else {
+          tmp.add(old);
+        }
       }
     }
   }
-  tmp.close();
   *this = tmp.slice();
   return true;
 }
@@ -741,9 +737,8 @@ Builder Node::toBuilder() const {
 
 std::string Node::toJson() const {
   Builder builder;
-  builder.openArray();
-  toBuilder(builder);
-  builder.close();
+  { VPackArrayBuilder b(&builder);
+    toBuilder(builder); }
   std::string strval = builder.slice()[0].isString() ?
     builder.slice()[0].copyString() : builder.slice()[0].toJson();
   return strval;
