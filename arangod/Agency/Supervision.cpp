@@ -226,7 +226,6 @@ std::vector<check_t> Supervision::checkDBServers() {
             report->add(i.key.copyString(), i.value);
           }
         }
-        
       } // Operation
       
       if (envelope != nullptr) { // Failed server precondition
