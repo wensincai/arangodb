@@ -116,8 +116,8 @@ std::vector<check_t> Supervision::checkDBServers() {
   }
   
   for (auto const& machine : machinesPlanned) {
-    std::string lastHeartbeatTime, lastHeartbeatAcked, lastStatus,
-      heartbeatTime, heartbeatStatus, serverID(machine.first),
+    std::string lastHeartbeatTime, lastHeartbeatAcked, lastHeartbeatStatus,
+      lastStatus, heartbeatTime, heartbeatStatus, serverID(machine.first),
       shortName("Unknown");
     bool good(false), reportPersistent(false),
       sync(_transient.has(syncPrefix + serverID));
@@ -134,6 +134,8 @@ std::vector<check_t> Supervision::checkDBServers() {
         _transient(healthPrefix + serverID + "/LastHeartbeatSent").toJson();
       lastHeartbeatAcked =
         _transient(healthPrefix + serverID + "/LastHeartbeatAcked").toJson();
+      lastHeartbeatStatus =
+        _transient(healthPrefix + serverID + "/LastHeartbeatStatus").toJson();
       lastStatus = _transient(healthPrefix + serverID + "/Status").toJson();
       if (lastHeartbeatTime != heartbeatTime) {  // Update
         good = true;
@@ -163,6 +165,10 @@ std::vector<check_t> Supervision::checkDBServers() {
           }
         }
       }
+    }
+
+    if (lastHeartbeatStatus != heartbeatStatus) {
+      reportPersistent = true;
     }
 
     if (good) {
@@ -285,8 +291,8 @@ std::vector<check_t> Supervision::checkCoordinators() {
   }
 
   for (auto const& machine : machinesPlanned) {
-    std::string lastHeartbeatTime, lastHeartbeatAcked, lastStatus,
-      heartbeatTime, heartbeatStatus, serverID = machine.first,
+    std::string lastHeartbeatTime, lastHeartbeatAcked, lastHeartbeatStatus,
+      lastStatus, heartbeatTime, heartbeatStatus, serverID = machine.first,
       shortName = "Unknown";
     
     bool reportPersistent(false), good(false),
@@ -304,6 +310,8 @@ std::vector<check_t> Supervision::checkCoordinators() {
         _transient(healthPrefix + serverID + "/LastHeartbeatSent").toJson();
       lastHeartbeatAcked =
         _transient(healthPrefix + serverID + "/LastHeartbeatAcked").toJson();
+      lastHeartbeatStatus =
+        _transient(healthPrefix + serverID + "/LastHeartbeatStatus").toJson();
       lastStatus = _transient(healthPrefix + serverID + "/Status").toJson();
       if (lastHeartbeatTime != heartbeatTime) {  // Update
         good = true;
@@ -333,6 +341,10 @@ std::vector<check_t> Supervision::checkCoordinators() {
           }
         }
       }
+    }
+
+    if (heartbeatStatus != lastHeartbeatStatus) {
+      reportPersistent = true;
     }
 
     if (good) {
