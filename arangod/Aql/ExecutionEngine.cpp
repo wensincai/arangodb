@@ -851,7 +851,10 @@ struct CoordinatorInstanciator : public WalkerWorker<ExecutionNode> {
       auto shardIds = edges[i]->shardIds();
       for (auto const& shard : *shardIds) {
         auto serverList = clusterInfo->getResponsibleServer(shard);
-        TRI_ASSERT(!serverList->empty());
+        if (serverList->empty()) {
+          THROW_ARANGO_EXCEPTION_MESSAGE(TRI_ERROR_CLUSTER_BACKEND_UNAVAILABLE,
+            std::string("could not find responsible server for shard ")+shard);
+        }
         auto& pair = mappingServerToCollections[(*serverList)[0]];
         pair.first[i].emplace_back(shard);
       }
@@ -878,7 +881,11 @@ struct CoordinatorInstanciator : public WalkerWorker<ExecutionNode> {
           auto shardIds = collection.second->shardIds();
           for (auto const& shard : *shardIds) {
             auto serverList = clusterInfo->getResponsibleServer(shard);
-            TRI_ASSERT(!serverList->empty());
+            if (serverList->empty()) {
+              THROW_ARANGO_EXCEPTION_MESSAGE(TRI_ERROR_CLUSTER_BACKEND_UNAVAILABLE,
+                std::string("could not find responsible server for shard ") +
+                shard);
+            }
             auto& pair = mappingServerToCollections[(*serverList)[0]];
             pair.second[collection.second->getName()].emplace_back(shard);
           }
@@ -894,7 +901,11 @@ struct CoordinatorInstanciator : public WalkerWorker<ExecutionNode> {
         auto shardIds = it->shardIds();
         for (auto const& shard : *shardIds) {
           auto serverList = clusterInfo->getResponsibleServer(shard);
-          TRI_ASSERT(!serverList->empty());
+          if (serverList->empty()) {
+            THROW_ARANGO_EXCEPTION_MESSAGE(TRI_ERROR_CLUSTER_BACKEND_UNAVAILABLE,
+              std::string("could not find responsible server for shard ") +
+              shard);
+          }
           auto& pair = mappingServerToCollections[(*serverList)[0]];
           pair.second[it->getName()].emplace_back(shard);
         }
@@ -1159,9 +1170,10 @@ ExecutionEngine* ExecutionEngine::instantiateFromPlan(
       // instantiate the engine on the coordinator
       auto inst =
           std::make_unique<CoordinatorInstanciator>(query, queryRegistry);
-      plan->root()->walk(inst.get());
 
       try {
+        plan->root()->walk(inst.get());  // if this throws, we need to
+                                         // clean up as well
         engine = inst.get()->buildEngines();
         root = engine->root();
         // Now find all shards that take part:
