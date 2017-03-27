@@ -69,30 +69,25 @@ static std::string const foxxmaster = "/Current/Foxxmaster";
 
 // Upgrade agency, guarded by wakeUp
 void Supervision::upgradeAgency() {
-  try {
-    if (_snapshot(failedServersPrefix).slice().isArray()) {
-      Builder builder;
-      builder.openArray();
-      builder.openObject();
-      builder.add(failedServersPrefix, VPackValue(VPackValueType::Object));
-      for (auto const& failed :
-             VPackArrayIterator(_snapshot(failedServersPrefix).slice())) {
-        builder.add(failed.copyString(), VPackValue(VPackValueType::Object));
-        builder.close();
+  Builder builder;
+  Slice fails;
+  { VPackArrayBuilder a(&builder);
+    { VPackObjectBuilder o(&builder);
+      builder.add(VPackValue(failedServersPrefix));
+      { VPackObjectBuilder oo(&builder);
+        try {
+          fails = _snapshot(failedServersPrefix).slice();
+          if (fails.isArray()) {
+            for (auto const& fail : VPackArrayIterator(fails)) {
+              builder.add(VPackValue(fail.copyString()));
+              { VPackObjectBuilder ooo(&builder); }
+            }
+          }
+        } catch (...) {}
       }
-      builder.close();
-      builder.close();
-      builder.close();
-      singleWriteTransaction(_agent, builder);
     }
-  } catch (std::exception const&) {
-    Builder builder;
-    builder.openArray();
-    builder.openObject();
-    builder.add(failedServersPrefix, VPackValue(VPackValueType::Object));
-    builder.close();
-    builder.close();
-    builder.close();
+  }
+  if (!fails.isObject()) {
     singleWriteTransaction(_agent, builder);
   }
 }
@@ -101,8 +96,7 @@ void Supervision::upgradeAgency() {
 std::vector<check_t> Supervision::checkDBServers() {
 
   std::vector<check_t> ret;
-  auto const& machinesPlanned =
-      _snapshot(planDBServersPrefix).children();
+  auto const& machinesPlanned = _snapshot(planDBServersPrefix).children();
   auto const& serversRegistered =
       _snapshot(currentServersRegisteredPrefix).children();
   auto secondsSinceLeader = std::chrono::duration<double>(
@@ -122,9 +116,8 @@ std::vector<check_t> Supervision::checkDBServers() {
     bool good(false), reportPersistent(false),
       sync(_transient.has(syncPrefix + serverID));
     
-    todelete.erase(std::remove(todelete.begin(), todelete.end(), serverID),
-                   todelete.end());
-    
+    todelete.erase(
+      std::remove(todelete.begin(), todelete.end(), serverID), todelete.end());
     shortName = _snapshot(targetShortID + serverID + "/ShortName").toJson();
 
     if (sync) {
@@ -145,97 +138,104 @@ std::vector<check_t> Supervision::checkDBServers() {
     }
 
     auto report = std::make_shared<Builder>();
-    report->openArray();
+    
+    { VPackArrayBuilder transaction(report.get());
 
-    report->openObject();
-    report->add(healthPrefix + serverID, VPackValue(VPackValueType::Object));
-    report->add("LastHeartbeatSent", VPackValue(heartbeatTime));
-    report->add("LastHeartbeatStatus", VPackValue(heartbeatStatus));
-    report->add("Role", VPackValue("DBServer"));
-    report->add("ShortName", VPackValue(shortName));
-    auto endpoint = serversRegistered.find(serverID);
-    std::shared_ptr<VPackBuilder> envelope;
-    if (endpoint != serversRegistered.end()) {
-      endpoint = endpoint->second->children().find("endpoint");
-      if (endpoint != endpoint->second->children().end()) {
-        if (endpoint->second->children().size() == 0) {
-          VPackSlice epString = endpoint->second->slice();
-          if (epString.isString()) {
-            report->add("Endpoint", epString);
+      std::shared_ptr<VPackBuilder> envelope;
+      { VPackObjectBuilder operation(report.get());
+
+        report->add(VPackValue(healthPrefix + serverID));
+        { VPackObjectBuilder oo(report.get());
+
+          report->add("LastHeartbeatSent", VPackValue(heartbeatTime));
+          report->add("LastHeartbeatStatus", VPackValue(heartbeatStatus));
+          report->add("Role", VPackValue("DBServer"));
+          report->add("ShortName", VPackValue(shortName));
+
+          auto endpoint = serversRegistered.find(serverID);
+          if (endpoint != serversRegistered.end()) {
+            endpoint = endpoint->second->children().find("endpoint");
+            if (endpoint != endpoint->second->children().end()) {
+              if (endpoint->second->children().size() == 0) {
+                VPackSlice epString = endpoint->second->slice();
+                if (epString.isString()) {
+                  report->add("Endpoint", epString);
+                }
+              }
+            }
+          }
+          
+          if (lastHeartbeatStatus != heartbeatStatus) {
+            reportPersistent = true;
+          }
+          
+          if (good) {
+            
+            if (lastStatus != Supervision::HEALTH_STATUS_GOOD) {
+              reportPersistent = true;
+            }
+            report->add(
+              "LastHeartbeatAcked",
+              VPackValue(timepointToString(std::chrono::system_clock::now())));
+            report->add("Status", VPackValue(Supervision::HEALTH_STATUS_GOOD));
+            
+            std::string failedServerPath = failedServersPrefix + "/" + serverID;
+            if (_snapshot.exists(failedServerPath).size() == 3) {
+              Builder del;
+              { VPackArrayBuilder c(&del);
+                { VPackObjectBuilder cc(&del);
+                  del.add(VPackValue(failedServerPath));
+                  { VPackObjectBuilder ccc(&del);
+                    del.add("op", VPackValue("delete")); }}}
+              singleWriteTransaction(_agent, del);
+            }
+            
+          } else {
+            
+            auto elapsed = std::chrono::duration<double>(
+              std::chrono::system_clock::now() -
+              stringToTimepoint(lastHeartbeatAcked)).count();
+            
+            // Failed servers are considered only after having taken on
+            // leadership for at least grace period
+            if (elapsed > _gracePeriod) {
+              if (lastStatus == Supervision::HEALTH_STATUS_BAD) {
+                reportPersistent = true;
+                report->add(
+                  "Status", VPackValue(Supervision::HEALTH_STATUS_FAILED));
+                envelope = std::make_shared<VPackBuilder>();
+                FailedServer(_snapshot, _agent, std::to_string(_jobId++),
+                             "supervision", serverID).create(envelope);
+              }
+            } else {
+              if (lastStatus != Supervision::HEALTH_STATUS_BAD) {
+                reportPersistent = true;
+                report->add(
+                  "Status", VPackValue(Supervision::HEALTH_STATUS_BAD));
+              }
+            }
+            
+          }
+          
+        } // Supervision/Health
+        
+        if (envelope != nullptr) { // Failed server operation
+          TRI_ASSERT(
+            envelope->slice().isArray() && envelope->slice()[0].isObject());
+          for (const auto& i : VPackObjectIterator(envelope->slice()[0])) {
+            report->add(i.key.copyString(), i.value);
           }
         }
-      }
-    }
-
-    if (lastHeartbeatStatus != heartbeatStatus) {
-      reportPersistent = true;
-    }
-
-    if (good) {
-      if (lastStatus != Supervision::HEALTH_STATUS_GOOD) {
-        reportPersistent = true;
-      }
-      report->add(
-        "LastHeartbeatAcked",
-        VPackValue(timepointToString(std::chrono::system_clock::now())));
-      report->add("Status", VPackValue(Supervision::HEALTH_STATUS_GOOD));
+        
+      } // Operation
       
-      std::string failedServerPath = failedServersPrefix + "/" + serverID;
-      if (_snapshot.exists(failedServerPath).size() == 3) {
-        Builder del;
-        del.openArray();
-        del.openObject();
-        del.add(failedServerPath, VPackValue(VPackValueType::Object));
-        del.add("op", VPackValue("delete"));
-        del.close();
-        del.close();
-        del.close();
-        singleWriteTransaction(_agent, del);
+      if (envelope != nullptr) { // Failed server precondition
+        TRI_ASSERT(envelope->slice().isArray() && envelope->slice()[1].isObject());
+        report->add(envelope->slice()[1]);
       }
       
-    } else {
-      
-      auto elapsed = std::chrono::duration<double>(
-        std::chrono::system_clock::now() -
-        stringToTimepoint(lastHeartbeatAcked)).count();
-      
-      // Failed servers are considered only after having taken on leadership
-      // for at least grace period
-      if (elapsed > _gracePeriod) {
-        if (lastStatus == Supervision::HEALTH_STATUS_BAD) {
-          reportPersistent = true;
-          report->add("Status", VPackValue(Supervision::HEALTH_STATUS_FAILED));
-          envelope = std::make_shared<VPackBuilder>();
-          FailedServer(_snapshot, _agent, std::to_string(_jobId++),
-                       "supervision", serverID).create(envelope);
-        }
-      } else {
-        if (lastStatus != Supervision::HEALTH_STATUS_BAD) {
-          reportPersistent = true;
-          report->add("Status", VPackValue(Supervision::HEALTH_STATUS_BAD));
-        }
-      }
-      
-    }
-
-    report->close(); // Supervision/Health
-
-    if (envelope != nullptr) {
-      TRI_ASSERT(envelope->slice().isArray() && envelope->slice()[0].isObject());
-      for (const auto& i : VPackObjectIterator(envelope->slice()[0])) {
-        report->add(i.key.copyString(), i.value);
-      }
-    }
+    } // Transaction
     
-    report->close();
-    
-    if (envelope != nullptr) {
-      TRI_ASSERT(envelope->slice().isArray() && envelope->slice()[1].isObject());
-      report->add(envelope->slice()[1]);
-    }
-    
-    report->close(); // inner array
-
     if (!this->isStopping()) {
       transient(_agent, *report);
       if (reportPersistent) {
@@ -244,21 +244,16 @@ std::vector<check_t> Supervision::checkDBServers() {
     }
     
   }
-
+    
   if (!todelete.empty()) {
     query_t del = std::make_shared<Builder>();
-    del->openArray();
-    del->openArray();
-    del->openObject();
-    for (auto const& srv : todelete) {
-      del->add(_agencyPrefix + healthPrefix + srv,
-               VPackValue(VPackValueType::Object));
-      del->add("op", VPackValue("delete"));
-      del->close();
-    }
-    del->close();
-    del->close();
-    del->close();
+    { VPackArrayBuilder a(del.get());
+      { VPackArrayBuilder aa(del.get());
+        { VPackArrayBuilder aaa(del.get());
+          for (auto const& srv : todelete) {
+            del->add(VPackValue(_agencyPrefix + healthPrefix + srv));
+            { VPackArrayBuilder aaaa(del.get());                     
+              del->add("op", VPackValue("delete")); }}}}}
     _agent->write(del);
   }
 
@@ -269,8 +264,7 @@ std::vector<check_t> Supervision::checkDBServers() {
 std::vector<check_t> Supervision::checkCoordinators() {
 
   std::vector<check_t> ret;
-  auto const& machinesPlanned =
-      _snapshot(planCoordinatorsPrefix).children();
+  auto const& machinesPlanned = _snapshot(planCoordinatorsPrefix).children();
   auto const& serversRegistered =
       _snapshot(currentServersRegisteredPrefix).children();
   auto secondsSinceLeader = std::chrono::duration<double>(
@@ -302,7 +296,7 @@ std::vector<check_t> Supervision::checkCoordinators() {
                    todelete.end());
     
     shortName = _snapshot(targetShortID + serverID + "/ShortName").toJson();
-
+    
     if (sync) {
       heartbeatTime = _transient(syncPrefix + serverID + "/time").toJson();
       heartbeatStatus = _transient(syncPrefix + serverID + "/status").toJson();
@@ -319,68 +313,73 @@ std::vector<check_t> Supervision::checkCoordinators() {
     } else if (secondsSinceLeader < _gracePeriod) {  // New server
       good = true;
     }
-
+    
     query_t report = std::make_shared<Builder>();
-    report->openArray();
-    report->openArray();
-    report->openObject();
-    report->add(_agencyPrefix + healthPrefix + serverID,
-                VPackValue(VPackValueType::Object));
-    report->add("LastHeartbeatSent", VPackValue(heartbeatTime));
-    report->add("LastHeartbeatStatus", VPackValue(heartbeatStatus));
-    report->add("Role", VPackValue("Coordinator"));
-    report->add("ShortName", VPackValue(shortName));
-    auto endpoint = serversRegistered.find(serverID);
-    if (endpoint != serversRegistered.end()) {
-      endpoint = endpoint->second->children().find("endpoint");
-      if (endpoint != endpoint->second->children().end()) {
-        if (endpoint->second->children().size() == 0) {
-          VPackSlice epString = endpoint->second->slice();
-          if (epString.isString()) {
-            report->add("Endpoint", epString);
+
+    { VPackArrayBuilder transactions(report.get());
+      { VPackArrayBuilder transaction(report.get());
+        { VPackObjectBuilder operation(report.get());
+
+          report->add(VPackValue(_agencyPrefix + healthPrefix + serverID));
+          { VPackObjectBuilder oo(report.get());
+
+            report->add("LastHeartbeatSent", VPackValue(heartbeatTime));
+            report->add("LastHeartbeatStatus", VPackValue(heartbeatStatus));
+            report->add("Role", VPackValue("Coordinator"));
+            report->add("ShortName", VPackValue(shortName));
+            auto endpoint = serversRegistered.find(serverID);
+            if (endpoint != serversRegistered.end()) {
+              endpoint = endpoint->second->children().find("endpoint");
+              if (endpoint != endpoint->second->children().end()) {
+                if (endpoint->second->children().size() == 0) {
+                  VPackSlice epString = endpoint->second->slice();
+                  if (epString.isString()) {
+                    report->add("Endpoint", epString);
+                  }
+                }
+              }
+            }
+            
+            if (heartbeatStatus != lastHeartbeatStatus) {
+              reportPersistent = true;
+            }
+            
+            if (good) {
+              if (lastStatus != Supervision::HEALTH_STATUS_GOOD) {
+                reportPersistent = true;
+              }
+              if (goodServerId.empty()) {
+                goodServerId = serverID;
+              }
+              if (serverID == currentFoxxmaster) {
+                foxxmasterOk = true;
+              }
+              report->add(
+                "LastHeartbeatAcked",
+                VPackValue(timepointToString(std::chrono::system_clock::now())));
+              report->add("Status", VPackValue(Supervision::HEALTH_STATUS_GOOD));
+            } else {
+
+              auto elapsed = std::chrono::duration<double>(
+                std::chrono::system_clock::now() -
+                stringToTimepoint(lastHeartbeatAcked)).count();
+              
+              if (elapsed > _gracePeriod || !sync) {
+                if (lastStatus == Supervision::HEALTH_STATUS_BAD) {
+                  report->add(
+                    "Status", VPackValue(Supervision::HEALTH_STATUS_FAILED));
+                  reportPersistent = true;
+                }
+              } else {
+                report->add(
+                  "Status", VPackValue(Supervision::HEALTH_STATUS_BAD));
+              }
+            }
           }
         }
       }
     }
 
-    if (heartbeatStatus != lastHeartbeatStatus) {
-      reportPersistent = true;
-    }
-
-    if (good) {
-      if (lastStatus != Supervision::HEALTH_STATUS_GOOD) {
-        reportPersistent = true;
-      }
-      if (goodServerId.empty()) {
-        goodServerId = serverID;
-      }
-      if (serverID == currentFoxxmaster) {
-        foxxmasterOk = true;
-      }
-      report->add(
-          "LastHeartbeatAcked",
-          VPackValue(timepointToString(std::chrono::system_clock::now())));
-      report->add("Status", VPackValue(Supervision::HEALTH_STATUS_GOOD));
-    } else {
-
-      auto elapsed = std::chrono::duration<double>(
-        std::chrono::system_clock::now() -
-        stringToTimepoint(lastHeartbeatAcked)).count();
-      
-      if (elapsed > _gracePeriod || !sync) {
-        if (lastStatus == Supervision::HEALTH_STATUS_BAD) {
-          report->add("Status", VPackValue(Supervision::HEALTH_STATUS_FAILED));
-          reportPersistent = true;
-        }
-      } else {
-        report->add("Status", VPackValue(Supervision::HEALTH_STATUS_BAD));
-      }
-    }
-
-    report->close();
-    report->close();
-    report->close();
-    report->close();
     if (!this->isStopping()) {
       _agent->transient(report);
       if (reportPersistent) { // STATUS changes should be persisted
@@ -391,31 +390,22 @@ std::vector<check_t> Supervision::checkCoordinators() {
 
   if (!todelete.empty()) {
     query_t del = std::make_shared<Builder>();
-    del->openArray();
-    del->openArray();
-    del->openObject();
-    for (auto const& srv : todelete) {
-      del->add(_agencyPrefix + healthPrefix + srv,
-               VPackValue(VPackValueType::Object));
-      del->add("op", VPackValue("delete"));
-      del->close();
-    }
-    del->close();
-    del->close();
-    del->close();
+    { VPackArrayBuilder txs(del.get());
+      { VPackArrayBuilder tx(del.get());
+        { VPackObjectBuilder d(del.get());
+          for (auto const& srv : todelete) {
+            del->add(VPackValue(_agencyPrefix + healthPrefix + srv));
+            { VPackObjectBuilder e(del.get());
+              del->add("op", VPackValue("delete")); }}}}}
     _agent->write(del);
   }
 
   if (!foxxmasterOk && !goodServerId.empty()) {
     query_t create = std::make_shared<Builder>();
-    create->openArray();
-    create->openArray();
-    create->openObject();
-    create->add(_agencyPrefix + foxxmaster, VPackValue(goodServerId));
-    create->close();
-    create->close();
-    create->close();
-
+    { VPackArrayBuilder txs(create.get());
+      { VPackArrayBuilder tx(create.get());
+        { VPackObjectBuilder d(create.get());
+          create->add(_agencyPrefix + foxxmaster, VPackValue(goodServerId)); }}}
     _agent->write(create);
   }
 
@@ -539,12 +529,12 @@ void Supervision::handleShutdown() {
       continue;
     }
 
-    LOG_TOPIC(DEBUG, Logger::SUPERVISION) << "Waiting for " << server.first
-                                     << " to shutdown";
+    LOG_TOPIC(DEBUG, Logger::SUPERVISION)
+      << "Waiting for " << server.first << " to shutdown";
 
     if (serverHealth(server.first) != HEALTH_STATUS_GOOD) {
-      LOG_TOPIC(WARN, Logger::SUPERVISION) << "Server " << server.first
-                                      << " did not shutdown properly it seems!";
+      LOG_TOPIC(WARN, Logger::SUPERVISION)
+        << "Server " << server.first << " did not shutdown properly it seems!";
       continue;
     }
     serversCleared = false;
@@ -553,15 +543,12 @@ void Supervision::handleShutdown() {
   if (serversCleared) {
     if (_agent->leading()) {
       auto del = std::make_shared<Builder>();
-      del->openArray();
-      del->openArray();
-      del->openObject();
-      del->add(_agencyPrefix + "/Shutdown", VPackValue(VPackValueType::Object));
-      del->add("op", VPackValue("delete"));
-      del->close();
-      del->close();
-      del->close();
-      del->close();
+      { VPackArrayBuilder txs(del.get());
+        { VPackArrayBuilder tx(del.get());
+          { VPackObjectBuilder o(del.get());
+            del->add(VPackValue(_agencyPrefix + "/Shutdown"));
+            { VPackObjectBuilder oo(del.get());
+              del->add("op", VPackValue("delete")); }}}}
       auto result = _agent->write(del);
       if (result.indices.size() != 1) {
         LOG(ERR) << "Invalid resultsize of " << result.indices.size()
