@@ -2410,7 +2410,6 @@ std::shared_ptr<std::vector<ServerID>> ClusterInfo::getResponsibleServer(
               (*serverList)[0].size() > 0 && (*serverList)[0][0] == '_') {
             // This is a temporary situation in which the leader has already
             // resigned, let's wait half a second and try again.
-            --tries;
             LOG_TOPIC(INFO, Logger::CLUSTER)
                 << "getResponsibleServer: found resigned leader,"
                 << "waiting for half a second...";
@@ -2422,7 +2421,7 @@ std::shared_ptr<std::vector<ServerID>> ClusterInfo::getResponsibleServer(
       usleep(500000);
     }
 
-    if (++tries >= 2) {
+    if (++tries >= 240) {
       break;
     }
 
@@ -2430,6 +2429,8 @@ std::shared_ptr<std::vector<ServerID>> ClusterInfo::getResponsibleServer(
     loadCurrent();
   }
 
+  LOG_TOPIC(ERR, Logger::CLUSTER) << "getResponsibleServer: could not find "
+    "responsible server for shard " << shardID << " within 2 minutes";
   return std::make_shared<std::vector<ServerID>>();
 }
 
