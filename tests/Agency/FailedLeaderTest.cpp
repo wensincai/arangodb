@@ -504,16 +504,25 @@ SECTION("abort any moveShard job blocking the shard and start") {
   Node agency = createNodeFromBuilder(*builder);
 
   Mock<AgentInterface> mockAgent;
-  When(Method(mockAgent, transact)).Do([&](query_t const& q) -> trans_ret_t {
+  When(Method(mockAgent, write)).Do([&](query_t const& q) -> write_ret_t {
     // check that moveshard is being moved to failed
     INFO("WriteTransaction: " << q->slice().toJson());
-    REQUIRE(std::string(q->slice().typeName()) == "array" );
+    REQUIRE(std::string(q->slice().typeName()) == "array");
     REQUIRE(q->slice().length() == 1);
     REQUIRE(std::string(q->slice()[0].typeName()) == "array");
     REQUIRE(std::string(q->slice()[0][0].typeName()) == "object");
     REQUIRE(std::string(q->slice()[0][0].get("/arango/Target/Failed/2").typeName()) == "object");
+    return fakeWriteResult;
+  });
+
+  When(Method(mockAgent, transact)).Do([&](query_t const& q) -> trans_ret_t {
+    // check that the job is now pending
+    INFO("Transaction: " << q->slice().toJson());
+    auto writes = q->slice()[0][0];
+    REQUIRE(std::string(writes.get("/arango/Target/Pending/1").typeName()) == "object");
     return fakeTransResult;
   });
+  When(Method(mockAgent, waitFor)).AlwaysReturn(AgentInterface::raft_commit_t::OK);
   AgentInterface &agent = mockAgent.get();
   auto failedLeader = FailedLeader(
     agency("arango"),
@@ -521,7 +530,9 @@ SECTION("abort any moveShard job blocking the shard and start") {
     JOB_STATUS::TODO,
     jobId
   );
-  //failedLeader.start();
+  failedLeader.start();
+  Verify(Method(mockAgent, transact));
+  Verify(Method(mockAgent, write));
 }
 
 SECTION("if everything is fine than the job should be written to pending, adding the toServer") {
@@ -587,7 +598,7 @@ SECTION("if everything is fine than the job should be written to pending, adding
     CHECK(writes.get("/arango/Plan/Collections/" + DATABASE + "/" + COLLECTION + "/shards/" + SHARD)[0].copyString() == SHARD_FOLLOWER2);
     CHECK(writes.get("/arango/Plan/Collections/" + DATABASE + "/" + COLLECTION + "/shards/" + SHARD)[1].copyString() == SHARD_LEADER);
     CHECK(writes.get("/arango/Plan/Collections/" + DATABASE + "/" + COLLECTION + "/shards/" + SHARD)[2].copyString() == SHARD_FOLLOWER1);
-    CHECK(writes.get("/arango/Plan/Collections/" + DATABASE + "/" + COLLECTION + "/shards/" + SHARD)[3].copyString() == FREE_SERVER2);
+    CHECK(writes.get("/arango/Plan/Collections/" + DATABASE + "/" + COLLECTION + "/shards/" + SHARD)[3].copyString() == FREE_SERVER);
 
     auto preconditions = q->slice()[0][1];
     REQUIRE(std::string(preconditions.get("/arango/Supervision/Shards/" + SHARD).typeName()) == "object");
