@@ -821,6 +821,7 @@ read_ret_t Agent::read(query_t const& query) {
   std::vector<bool> success = _readDB.read(query, result);
 
   return read_ret_t(true, _constituent.leaderID(), success, result);
+  
 }
 
 
@@ -1186,7 +1187,7 @@ arangodb::consensus::index_t Agent::rebuildDBs() {
     << _lastAppliedIndex << " to " << _leaderCommitIndex;
 
   auto logs = _state.slices(_lastAppliedIndex+1, _leaderCommitIndex+1);
-  
+
   _spearhead.apply(logs, _leaderCommitIndex, _constituent.term());
   _readDB.apply(logs, _leaderCommitIndex, _constituent.term());
   
@@ -1196,6 +1197,9 @@ arangodb::consensus::index_t Agent::rebuildDBs() {
   _lastAppliedIndex = _leaderCommitIndex;
   //_lastCompactionIndex = _leaderCommitIndex;
   
+  LOG_TOPIC(INFO, Logger::AGENCY)
+    << id() << " rebuilt key-value stores - serving.";
+
   return _lastAppliedIndex;
 
 }
@@ -1293,6 +1297,8 @@ query_t Agent::gossip(query_t const& in, bool isCallback, size_t version) {
         20002, "Gossip message must contain string parameter 'id'");
   }
 
+  
+  
   if (!slice.hasKey("endpoint") || !slice.get("endpoint").isString()) {
     THROW_ARANGO_EXCEPTION_MESSAGE(
         20003, "Gossip message must contain string parameter 'endpoint'");
