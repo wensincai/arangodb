@@ -54,14 +54,6 @@
   }
 
   global.ArangoAgency.set('Current/Foxxmaster', global.ArangoServerState.id());
-  require('@arangodb/foxx/manager')._startup(true);
-  require('@arangodb/tasks').register({
-    id: 'self-heal',
-    offset: 1,
-    command: function () {
-      require('@arangodb/foxx/manager')._selfHeal();
-    }
-  });
 
   return true;
 }());

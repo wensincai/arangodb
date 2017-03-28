@@ -546,7 +546,7 @@ function rebuildAllServiceBundles (updateDatabase, fixMissingChecksums) {
   `);
 }
 
-function selfHeal () {
+function selfHeal (healTheWorld) {
   const db = require('internal').db;
   const dbName = db._name();
   try {
@@ -555,7 +555,11 @@ function selfHeal () {
     for (const name of databases) {
       try {
         db._useDatabase(name);
-        healMyselfAndCoords();
+        if (healTheWorld) {
+          healMyselfAndCoords();
+        } else {
+          healMyself();
+        }
       } catch (e) {
         let err = e;
         while (err) {
@@ -572,7 +576,16 @@ function selfHeal () {
     // return to _system database so the caller does not need to know we changed the db
     db._useDatabase(dbName);
   }
+  global.KEY_SET('foxx', 'ready', true);
   reloadRouting(); // FIXME :(
+}
+
+function isFoxxReady () {
+  
+}
+
+function healMyself () {
+  // TODO
 }
 
 function healMyselfAndCoords () {
