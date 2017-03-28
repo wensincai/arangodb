@@ -99,8 +99,6 @@ std::vector<check_t> Supervision::checkDBServers() {
   auto const& machinesPlanned = _snapshot(planDBServersPrefix).children();
   auto const& serversRegistered =
       _snapshot(currentServersRegisteredPrefix).children();
-  auto secondsSinceLeader = std::chrono::duration<double>(
-    std::chrono::system_clock::now() - _agent->leaderSince()).count();
   
   std::vector<std::string> todelete;
   for (auto const& machine : _snapshot(healthPrefix).children()) {
@@ -133,9 +131,7 @@ std::vector<check_t> Supervision::checkDBServers() {
       if (lastHeartbeatTime != heartbeatTime) {  // Update
         good = true;
       }
-    } else if (secondsSinceLeader < _gracePeriod) {
-      good = true;
-    }
+    } 
 
     auto report = std::make_shared<Builder>();
     
@@ -194,11 +190,35 @@ std::vector<check_t> Supervision::checkDBServers() {
             
             auto elapsed = std::chrono::duration<double>(
               std::chrono::system_clock::now() -
-              stringToTimepoint(lastHeartbeatAcked)).count();
+              stringToTimepoint(lastHeartbeatAcked));
+
+            if (elapsed.count() > 31557600) {
+              LOG_TOPIC(WARN, Logger::SUPERVISION) <<
+                shortName << " last seen: never";
+            } else if (elapsed.count() > 2592000) {
+              LOG_TOPIC(WARN, Logger::SUPERVISION) <<
+                shortName << " last seen: more than a month ago";
+            } else if (elapsed.count() > 86400) {
+              LOG_TOPIC(WARN, Logger::SUPERVISION) <<
+                shortName << " last seen: more than a day ago";
+            } else if (elapsed.count() > 3600) {
+              LOG_TOPIC(WARN, Logger::SUPERVISION) <<
+                shortName << " last seen: more than "
+                          << std::chrono::duration_cast<std::chrono::hours>(elapsed).count()
+                          << " hours ago.";
+            } else if (elapsed.count() > 60) {
+              LOG_TOPIC(WARN, Logger::SUPERVISION) <<
+                shortName << " last seen: more than "
+                          << std::chrono::duration_cast<std::chrono::minutes>(elapsed).count()
+                          << " minutes ago.";
+            } else {
+              LOG_TOPIC(WARN, Logger::SUPERVISION) <<
+                shortName << " last seen: more than "
+                          << std::chrono::duration_cast<std::chrono::seconds>(elapsed).count()
+                          << " seconds ago.";
+            }
             
-            // Failed servers are considered only after having taken on
-            // leadership for at least grace period
-            if (elapsed > _gracePeriod) {
+            if (elapsed.count() > _gracePeriod) {
               if (lastStatus == Supervision::HEALTH_STATUS_BAD) {
                 reportPersistent = true;
                 report->add(
@@ -266,8 +286,6 @@ std::vector<check_t> Supervision::checkCoordinators() {
   auto const& machinesPlanned = _snapshot(planCoordinatorsPrefix).children();
   auto const& serversRegistered =
       _snapshot(currentServersRegisteredPrefix).children();
-  auto secondsSinceLeader = std::chrono::duration<double>(
-    std::chrono::system_clock::now() - _agent->leaderSince()).count();
   
   std::string currentFoxxmaster;
   try {
@@ -309,9 +327,7 @@ std::vector<check_t> Supervision::checkCoordinators() {
       if (lastHeartbeatTime != heartbeatTime) {  // Update
         good = true;
       }
-    } else if (secondsSinceLeader < _gracePeriod) {  // New server
-      good = true;
-    }
+    } 
     
     query_t report = std::make_shared<Builder>();
 
@@ -472,7 +488,11 @@ void Supervision::run() {
 
         if (_agent->leading()) {
           upgradeAgency();
-          doChecks();
+          auto secondsSinceLeader = std::chrono::duration<double>(
+            std::chrono::system_clock::now() - _agent->leaderSince()).count();
+          if (secondsSinceLeader > _gracePeriod) {
+            doChecks();
+          }
         }
 
         if (isShuttingDown()) {
