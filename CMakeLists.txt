@@ -67,6 +67,10 @@ if (DEBUG_SYNC_REPLICATION)
   add_definitions("-DDEBUG_SYNC_REPLICATION=1")
 endif ()
 
+option(USE_CPP11_LOCKS "use alternative rwlock implementation" OFF)
+if (USE_CPP11_LOCKS)
+  add_definitions("-DUSE_CPP11_LOCKS=1")
+endif ()
 
 ################################################################################
 ## ARANGODB
