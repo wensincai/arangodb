@@ -58,6 +58,7 @@ FailedFollower::FailedFollower(Node const& snapshot, AgentInterface* agent,
     } catch (...) {}
     _shard = _snapshot(path + "shard").getString();
     _creator = _snapshot(path + "creator").slice().copyString();
+    _created = stringToTimepoint(_snapshot(path + "timeCreated").getString());
   } catch (std::exception const& e) {
     std::stringstream err;
     err << "Failed to find job " << _jobId << " in agency: " << e.what();
@@ -78,6 +79,8 @@ bool FailedFollower::create(std::shared_ptr<VPackBuilder> envelope) {
   using namespace std::chrono;
   LOG_TOPIC(INFO, Logger::SUPERVISION)
     << "Create failedFollower for " + _shard + " from " + _from;
+
+  _created = system_clock::now();
   
   _jb = std::make_shared<Builder>();
   { VPackArrayBuilder transaction(_jb.get());
@@ -93,7 +96,7 @@ bool FailedFollower::create(std::shared_ptr<VPackBuilder> envelope) {
         _jb->add("fromServer", VPackValue(_from));
         _jb->add("jobId", VPackValue(_jobId));
         _jb->add(
-          "timeCreated", VPackValue(timepointToString(system_clock::now())));
+          "timeCreated", VPackValue(timepointToString(_created)));
       }}}
   
   write_ret_t res = singleWriteTransaction(_agent, *_jb);
@@ -130,6 +133,11 @@ bool FailedFollower::start() {
   // Get proper replacement
   _to = randomIdleGoodAvailableServer(_snapshot, planned);
   if (_to.empty()) {
+    return false;
+  }
+
+  if (std::chrono::system_clock::now() - _created > std::chrono::seconds(4620)) {
+    finish("", _shard, false, "Job timed out");
     return false;
   }
 
@@ -276,56 +284,7 @@ bool FailedFollower::start() {
   
 }
 
-
-void FailedFollower::rollback() {
-
-  // Create new plan servers (exchange _to and _from)
-  std::string planPath
-    = planColPrefix + _database + "/" + _collection + "/shards/" + _shard;
-  auto const& planned = _snapshot(planPath).slice();
-
-  VPackBuilder rb;
-  if (!_to.empty()) {
-    { VPackArrayBuilder r(&rb);
-      for (auto const i : VPackArrayIterator(planned)) {
-        TRI_ASSERT(i.isString());
-        auto istr = i.copyString();
-        if (istr == _from) {
-          rb.add(VPackValue(_to));
-        } else if (istr == _to) {
-          rb.add(VPackValue(_from));
-        } else {
-          rb.add(i);
-        }
-      }
-    }
-  } else {
-    rb.add(planned);
-  }
-  
-  auto cs = clones(_snapshot, _database, _collection, _shard);
-  
-  // Transactions
-  auto payload = std::make_shared<Builder>();
-  { VPackObjectBuilder b(payload.get());
-    for (auto const c : cs) {
-      payload->add(planColPrefix + _database + "/" + c.collection + "/shards/" +
-                   c.shard, rb.slice());
-    }
-  }
-
-  finish("", _shard, false, "Timed out.", payload);
-  
-}
-
-
 JOB_STATUS FailedFollower::status() {
-
-  // Timedout after 77 minutes
-  if (std::chrono::system_clock::now() - _created > std::chrono::seconds(4620)) {
-    rollback();
-  }
-
   // We can only be hanging around TODO. start === finished
   return TODO;
   
@@ -333,34 +292,20 @@ JOB_STATUS FailedFollower::status() {
 
 arangodb::Result FailedFollower::abort() {
 
-  Builder builder;
-  arangodb::Result result;
-
-  { VPackArrayBuilder a(&builder);      
-    // Oper: Delete job from todo ONLY!
-    { VPackObjectBuilder oper(&builder);
-      builder.add(VPackValue(toDoPrefix + _jobId));
-      { VPackObjectBuilder del(&builder);
-        builder.add("op", VPackValue("delete")); }}
-    // Precond: Just so that we can report?
-    { VPackObjectBuilder prec(&builder);
-      builder.add(VPackValue(toDoPrefix + _jobId));
-      { VPackObjectBuilder old(&builder);
-        builder.add("oldEmpty", VPackValue(false)); }}
+  // We can assume that the job is in ToDo or not there:
+  if (_status == NOTFOUND || _status == FINISHED || _status == FAILED) {
+    return Result(TRI_ERROR_SUPERVISION_GENERAL_FAILURE,
+                  "Failed aborting failedFollower job beyond pending stage");
   }
 
-  auto ret = singleWriteTransaction(_agent, builder);
-
-  if (!ret.accepted) {
-    result = arangodb::Result(
-      TRI_ERROR_SUPERVISION_GENERAL_FAILURE, "Lost leadership.");
-  } else if (ret.indices[0] == 0) {
-    result = arangodb::Result(
-      TRI_ERROR_SUPERVISION_GENERAL_FAILURE,
-      std::string("Cannot abort failedFollower job ") + _jobId
-      + " beyond todo stage");
+  Result result;  
+  // Can now only be TODO
+  if (_status == TODO) {
+    finish("", "", false, "job aborted");
+    return result;
   }
-  
+
+  TRI_ASSERT(false);  // cannot happen, since job moves directly to FINISHED
   return result;
   
 }

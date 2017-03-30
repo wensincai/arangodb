@@ -425,35 +425,14 @@ JOB_STATUS FailedLeader::status() {
 
 
 arangodb::Result FailedLeader::abort() {
-
-  Builder builder;
-  arangodb::Result result;
-
-  { VPackArrayBuilder a(&builder);      
-    // Oper: Delete job from todo ONLY!
-    { VPackObjectBuilder oper(&builder);
-      builder.add(VPackValue(toDoPrefix + _jobId));
-      { VPackObjectBuilder del(&builder);
-        builder.add("op", VPackValue("delete")); }}
-    // Precond: Just so that we can report?
-    { VPackObjectBuilder prec(&builder);
-      builder.add(VPackValue(toDoPrefix + _jobId));
-      { VPackObjectBuilder old(&builder);
-        builder.add("oldEmpty", VPackValue(false)); }}
+  // job is only abortable when it is in ToDo
+  if (_status != TODO) {
+    return Result(TRI_ERROR_SUPERVISION_GENERAL_FAILURE,
+                  "Failed aborting failedFollower job beyond todo stage");
+  } else {
+    finish("", "", false, "job aborted");
+    return Result();
   }
-
-  auto ret = singleWriteTransaction(_agent, builder);
-
-  if (!ret.accepted) {
-    result = arangodb::Result(TRI_ERROR_SUPERVISION_GENERAL_FAILURE, "Lost leadership.");
-  } else if (ret.indices[0] == 0) {
-    result = arangodb::Result(
-      1, std::string("Cannot abort failedLeader job ")
-      + _jobId + " beyond todo stage");
-  }
-  
-  return result;
-  
 }
 
 

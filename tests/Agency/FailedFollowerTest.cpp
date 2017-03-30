@@ -558,6 +558,7 @@ SECTION("a successfully started job should finish immediately and set everything
 
     return fakeTransResult;
   });
+  When(Method(mockAgent, waitFor)).AlwaysReturn(AgentInterface::raft_commit_t::OK);
   AgentInterface &agent = mockAgent.get();
   auto failedFollower = FailedFollower(
     agency("arango"),
@@ -655,6 +656,7 @@ SECTION("the job should handle distributeShardsLike") {
 
     return fakeTransResult;
   });
+  When(Method(mockAgent, waitFor)).AlwaysReturn(AgentInterface::raft_commit_t::OK);
   AgentInterface &agent = mockAgent.get();
   auto failedFollower = FailedFollower(
     agency("arango"),
@@ -682,12 +684,14 @@ SECTION("the job should timeout after a while") {
       if (path == "/arango/Target/ToDo") {
         VPackBuilder todoJob = createJob();
         VPackBuilder timedOutJob;
-
-        for (auto const& it: VPackObjectIterator(todoJob.slice())) {
-          if (it.key.copyString() != "timeCreated") {
-            timedOutJob.add("timeCreated", VPackValue("2015-01-01T00:00:00Z"));
-          } else {
-            timedOutJob.add(it.key.copyString(), it.value);
+        {
+          VPackObjectBuilder a(&timedOutJob);
+          for (auto const& it: VPackObjectIterator(todoJob.slice())) {
+            if (it.key.copyString() == "timeCreated") {
+              timedOutJob.add("timeCreated", VPackValue("2015-01-01T00:00:00Z"));
+            } else {
+              timedOutJob.add(it.key.copyString(), it.value);
+            }
           }
         }
         builder->add("1", timedOutJob.slice());
@@ -711,14 +715,15 @@ SECTION("the job should timeout after a while") {
   Node agency = createNodeFromBuilder(*builder);
 
   Mock<AgentInterface> mockAgent;
-  When(Method(mockAgent, transact)).Do([&](query_t const& q) -> trans_ret_t {
+  When(Method(mockAgent, write)).Do([&](query_t const& q) -> write_ret_t {
     // check that the job is now pending
-    INFO("Transaction: " << q->slice().toJson());
+    INFO("Write: " << q->slice().toJson());
     auto writes = q->slice()[0][0];
     REQUIRE(std::string(writes.get("/arango/Target/Failed/1").typeName()) == "object");
 
-    return fakeTransResult;
+    return fakeWriteResult;
   });
+  When(Method(mockAgent, waitFor)).AlwaysReturn(AgentInterface::raft_commit_t::OK);
   AgentInterface &agent = mockAgent.get();
   auto failedFollower = FailedFollower(
     agency("arango"),
@@ -727,7 +732,7 @@ SECTION("the job should timeout after a while") {
     jobId
   );
   failedFollower.start();
-  Verify(Method(mockAgent, transact));
+  Verify(Method(mockAgent, write));
 }
 
 SECTION("the job should be abortable when it is in todo") {
@@ -773,6 +778,7 @@ SECTION("the job should be abortable when it is in todo") {
 
     return fakeWriteResult;
   });
+  When(Method(mockAgent, waitFor)).AlwaysReturn(AgentInterface::raft_commit_t::OK);
   AgentInterface &agent = mockAgent.get();
   auto failedFollower = FailedFollower(
     agency("arango"),
@@ -781,7 +787,7 @@ SECTION("the job should be abortable when it is in todo") {
     jobId
   );
   failedFollower.abort();
-  Verify(Method(mockAgent, transact));
+  Verify(Method(mockAgent, write));
 }
 
 
