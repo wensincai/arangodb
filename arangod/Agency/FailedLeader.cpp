@@ -301,9 +301,11 @@ bool FailedLeader::start() {
   // Something went south. Let's see
   auto result = res.result->slice()[0];
 
-  if (res.accepted && res.result->slice()[0].isUInt()) {
+  if (res.accepted && result.isNumber()) {
     return true;
   }
+
+  TRI_ASSERT(result.isObject());
 
   if (!res.accepted) { // lost leadership
     LOG_TOPIC(INFO, Logger::SUPERVISION)

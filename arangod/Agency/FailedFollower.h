@@ -56,6 +56,7 @@ struct FailedFollower : public Job {
   std::string _shard;
   std::string _from;
   std::string _to;
+  std::chrono::system_clock::time_point _created;
 };
 }
 }  // namespaces

@@ -193,26 +193,25 @@ bool FailedFollower::start() {
       }
       // Preconditions -------------------------------------------------------
       { VPackObjectBuilder preconditions(&job);
-        // Server _server is still in FAILED state
-        job.add( 
-          VPackValue(healthPrefix + _from + "/Status"));
-        { VPackObjectBuilder stillFailing(&job);
-        // Server list in plan still as before:
-        addPreconditionUnchanged(job, planPath, planned);
-        // This implies that the collection has not been deleted in the mt
-        // Status should still be failed
+        // Failed condition persists
+        job.add(VPackValue(healthPrefix + _from + "/Status"));
+        { VPackObjectBuilder stillExists(&job);
           job.add("old", VPackValue("FAILED")); }
+        addPreconditionUnchanged(job, planPath, planned);
+        // toServer not blocked
         addPreconditionServerNotBlocked(job, _to);
+        // shard not blocked
         addPreconditionShardNotBlocked(job, _shard);
+        // toServer in good condition 
         addPreconditionServerGood(job, _to);
-      } // Preconditions -----------------------------------------------------
+      } 
         
     }
   }
   
-  // Abort job blocking server if abortable
+  // Abort job blocking shard if abortable
   try {
-    std::string jobId = _snapshot(blockedServersPrefix + _from).getString();
+    std::string jobId = _snapshot(blockedShardsPrefix + _shard).getString();
     if (!abortable(_snapshot, jobId)) {
       return false;
     } else {
@@ -230,7 +229,7 @@ bool FailedFollower::start() {
   
   auto result = res.result->slice()[0];
   
-  if (res.accepted && result.isUInt() && result.getUInt()) {
+  if (res.accepted && result.isNumber()) {
     return true;
   }
 
@@ -240,7 +239,7 @@ bool FailedFollower::start() {
     std::vector<std::string>(
       {agencyPrefix, "Supervision", "Health", _from, "Status"}));
   if (!slice.isString() || slice.copyString() != "FAILED") {
-    finish("", _shard, true, "Server " + _from + "no longer failing.");
+    finish("", _shard, false, "Server " + _from + " no longer failing.");
   }
 
   slice = result.get(
@@ -277,9 +276,59 @@ bool FailedFollower::start() {
   
 }
 
+
+void FailedFollower::rollback() {
+
+  // Create new plan servers (exchange _to and _from)
+  std::string planPath
+    = planColPrefix + _database + "/" + _collection + "/shards/" + _shard;
+  auto const& planned = _snapshot(planPath).slice();
+
+  VPackBuilder rb;
+  if (!_to.empty()) {
+    { VPackArrayBuilder r(&rb);
+      for (auto const i : VPackArrayIterator(planned)) {
+        TRI_ASSERT(i.isString());
+        auto istr = i.copyString();
+        if (istr == _from) {
+          rb.add(VPackValue(_to));
+        } else if (istr == _to) {
+          rb.add(VPackValue(_from));
+        } else {
+          rb.add(i);
+        }
+      }
+    }
+  } else {
+    rb.add(planned);
+  }
+  
+  auto cs = clones(_snapshot, _database, _collection, _shard);
+  
+  // Transactions
+  auto payload = std::make_shared<Builder>();
+  { VPackObjectBuilder b(payload.get());
+    for (auto const c : cs) {
+      payload->add(planColPrefix + _database + "/" + c.collection + "/shards/" +
+                   c.shard, rb.slice());
+    }
+  }
+
+  finish("", _shard, false, "Timed out.", payload);
+  
+}
+
+
 JOB_STATUS FailedFollower::status() {
+
+  // Timedout after 77 minutes
+  if (std::chrono::system_clock::now() - _created > std::chrono::seconds(4620)) {
+    rollback();
+  }
+
   // We can only be hanging around TODO. start === finished
   return TODO;
+  
 }
 
 arangodb::Result FailedFollower::abort() {
