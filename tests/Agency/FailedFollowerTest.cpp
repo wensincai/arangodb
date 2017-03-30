@@ -549,7 +549,7 @@ SECTION("a successfully started job should finish immediately and set everything
     auto preconditions = q->slice()[0][1];
     REQUIRE(std::string(preconditions.typeName()) == "object");
     REQUIRE(preconditions.get("/arango/Supervision/Health/free/Status").get("old").copyString() == "GOOD");
-    REQUIRE(preconditions.get("/arango/Plan/Collections/" + DATABASE + "/" + COLLECTION + "/shards/" + SHARD).get("old").typeName() == "array");
+    REQUIRE(std::string(preconditions.get("/arango/Plan/Collections/" + DATABASE + "/" + COLLECTION + "/shards/" + SHARD).get("old").typeName()) == "array");
     REQUIRE(preconditions.get("/arango/Plan/Collections/" + DATABASE + "/" + COLLECTION + "/shards/" + SHARD).get("old")[0].copyString() == "leader");
     REQUIRE(preconditions.get("/arango/Plan/Collections/" + DATABASE + "/" + COLLECTION + "/shards/" + SHARD).get("old")[1].copyString() == "follower1");
     REQUIRE(preconditions.get("/arango/Plan/Collections/" + DATABASE + "/" + COLLECTION + "/shards/" + SHARD).get("old")[2].copyString() == "follower2");
@@ -646,7 +646,7 @@ SECTION("the job should handle distributeShardsLike") {
     auto preconditions = q->slice()[0][1];
     REQUIRE(std::string(preconditions.typeName()) == "object");
     REQUIRE(preconditions.get("/arango/Supervision/Health/free/Status").get("old").copyString() == "GOOD");
-    REQUIRE(preconditions.get("/arango/Plan/Collections/" + DATABASE + "/" + COLLECTION + "/shards/" + SHARD).get("old").typeName() == "array");
+    REQUIRE(std::string(preconditions.get("/arango/Plan/Collections/" + DATABASE + "/" + COLLECTION + "/shards/" + SHARD).get("old").typeName()) == "array");
     REQUIRE(preconditions.get("/arango/Plan/Collections/" + DATABASE + "/" + COLLECTION + "/shards/" + SHARD).get("old")[0].copyString() == "leader");
     REQUIRE(preconditions.get("/arango/Plan/Collections/" + DATABASE + "/" + COLLECTION + "/shards/" + SHARD).get("old")[1].copyString() == "follower1");
     REQUIRE(preconditions.get("/arango/Plan/Collections/" + DATABASE + "/" + COLLECTION + "/shards/" + SHARD).get("old")[2].copyString() == "follower2");
