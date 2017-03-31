@@ -54,7 +54,8 @@ Supervision::Supervision()
   _gracePeriod(5.),
   _jobId(0),
   _jobIdMax(0),
-  _selfShutdown(false) {}
+  _selfShutdown(false),
+  _ranOnceAfterLead(false) {}
 
 Supervision::~Supervision() { shutdown(); };
 
@@ -191,32 +192,6 @@ std::vector<check_t> Supervision::checkDBServers() {
             auto elapsed = std::chrono::duration<double>(
               std::chrono::system_clock::now() -
               stringToTimepoint(lastHeartbeatAcked));
-
-            if (elapsed.count() > 31557600) {
-              LOG_TOPIC(WARN, Logger::SUPERVISION) <<
-                shortName << " last seen: never";
-            } else if (elapsed.count() > 2592000) {
-              LOG_TOPIC(WARN, Logger::SUPERVISION) <<
-                shortName << " last seen: more than a month ago";
-            } else if (elapsed.count() > 86400) {
-              LOG_TOPIC(WARN, Logger::SUPERVISION) <<
-                shortName << " last seen: more than a day ago";
-            } else if (elapsed.count() > 3600) {
-              LOG_TOPIC(WARN, Logger::SUPERVISION) <<
-                shortName << " last seen: more than "
-                          << std::chrono::duration_cast<std::chrono::hours>(elapsed).count()
-                          << " hours ago.";
-            } else if (elapsed.count() > 60) {
-              LOG_TOPIC(WARN, Logger::SUPERVISION) <<
-                shortName << " last seen: more than "
-                          << std::chrono::duration_cast<std::chrono::minutes>(elapsed).count()
-                          << " minutes ago.";
-            } else {
-              LOG_TOPIC(WARN, Logger::SUPERVISION) <<
-                shortName << " last seen: more than "
-                          << std::chrono::duration_cast<std::chrono::seconds>(elapsed).count()
-                          << " seconds ago.";
-            }
             
             if (elapsed.count() > _gracePeriod) {
               if (lastStatus == Supervision::HEALTH_STATUS_BAD) {
@@ -488,6 +463,7 @@ void Supervision::run() {
 
         if (_agent->leading()) {
           upgradeAgency();
+          fixPrototypeChain();
           auto secondsSinceLeader = std::chrono::duration<double>(
             std::chrono::system_clock::now() - _agent->leaderSince()).count();
           if (secondsSinceLeader > _gracePeriod) {
@@ -679,6 +655,55 @@ void Supervision::enforceReplication() {
     }
   }
   
+}
+
+void Supervision::fixPrototypeChain() {
+
+  std::function<std::string (std::string const&, std::string const&)> resolve;
+  resolve = [&] (std::string const& db, std::string const& col) {
+    Node* n = nullptr;
+    try {
+      n = &_snapshot(planColPrefix + db + "/" + col);
+    } catch (...) {}
+    std::string s;
+    if (n != nullptr && n->has("distributeShardsLike")) {
+      s = (*n)("distributeShardsLike").getString();
+    }
+    return (s.empty()) ? col : resolve(db, s);
+  };
+  
+  VPackBuilder migrate;
+  { VPackArrayBuilder trxs(&migrate);
+    for (auto const& database : _snapshot(planColPrefix).children()) {
+      for (auto const& collection : database.second->children()) {
+        if (collection.second->has("distributeShardsLike")) {
+          auto prototype = (*collection.second)("distributeShardsLike").getString();
+          if (!prototype.empty()) {
+            std::string u = resolve(database.first, prototype);
+            if (u != prototype) {
+              { VPackArrayBuilder trx(&migrate);
+                { VPackObjectBuilder oper(&migrate);
+                  migrate.add(
+                    planColPrefix + database.first + "/" + collection.first + "/" +
+                    "distributeShardsLike", VPackValue(u)); }
+                { VPackObjectBuilder prec(&migrate);
+                  migrate.add(
+                    planColPrefix + database.first + "/" + collection.first + "/" +
+                    "distributeShardsLike", VPackValue(prototype)); }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+  
+  if (migrate.slice().length() > 0) {
+    LOG_TOPIC (INFO, Logger::SUPERVISION) << migrate.toJson();
+    trans_ret_t res = generalTransaction(_agent, migrate);
+    LOG_TOPIC (INFO, Logger::SUPERVISION) << res.result->toJson();
+  }
+
 }
 
 // Shrink cluster if applicable, guarded by caller
