@@ -2162,7 +2162,7 @@ ClusterMethods::persistCollectionInAgency(LogicalCollection* col) {
       } catch (...) {
       }
       if (chainOfDistributeShardsLike) {
-        THROW_ARANGO_EXCEPTION(TRI_CLUSTER_CHAIN_OF_DISTRIBUTESHARDSLIKE);
+        THROW_ARANGO_EXCEPTION(TRI_ERROR_CLUSTER_CHAIN_OF_DISTRIBUTESHARDSLIKE);
       }
       col->distributeShardsLike(otherCidString);
     }

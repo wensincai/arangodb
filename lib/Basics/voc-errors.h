@@ -378,6 +378,9 @@
 ///   Will be raised if one tries to create a collection with a
 ///   distributeShardsLike attribute which points to another collection that
 ///   also has one.
+/// - 1485: @LIT{must not drop collection while another has a distributeShardsLike attribute pointing to it}
+///   Will be raised if one tries to drop a collection to which another
+///   collection points with its distributeShardsLike attribute.
 /// - 1500: @LIT{query killed}
 ///   Will be raised when a running query is killed by an explicit admin
 ///   command.
@@ -2220,6 +2223,18 @@ void TRI_InitializeErrorMessages ();
 ////////////////////////////////////////////////////////////////////////////////
 
 #define TRI_ERROR_CLUSTER_CHAIN_OF_DISTRIBUTESHARDSLIKE                   (1484)
+
+////////////////////////////////////////////////////////////////////////////////
+/// @brief 1485: ERROR_CLUSTER_MUST_NOT_DROP_COLL_OTHER_DISTRIBUTESSHARDSLIKE
+///
+/// must not drop collection while another has a distributeShardsLike attribute
+/// pointing to it
+///
+/// Will be raised if one tries to drop a collection to which another
+/// collection points with its distributeShardsLike attribute.
+////////////////////////////////////////////////////////////////////////////////
+
+#define TRI_ERROR_CLUSTER_MUST_NOT_DROP_COLL_OTHER_DISTRIBUTESSHARDSLIKE  (1485)
 
 ////////////////////////////////////////////////////////////////////////////////
 /// @brief 1500: ERROR_QUERY_KILLED
