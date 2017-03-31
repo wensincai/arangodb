@@ -162,6 +162,9 @@ class Supervision : public arangodb::Thread {
   bool handleJobs();
   void handleShutdown();
 
+  /// @brief Migrate chains of distributeShardsLike to depth 1 
+  void fixPrototypeChain();
+  
   Mutex _lock; // guards snapshot, _jobId, jobIdMax, _selfShutdown
   Agent* _agent; /**< @brief My agent */
   Node _snapshot;
@@ -185,6 +188,8 @@ class Supervision : public arangodb::Thread {
   // at least once so this flag got set at some point
   bool _selfShutdown;
 
+  bool _ranOnceAfterLead;
+  
   std::string serverHealth(std::string const&);
 
   static std::string _agencyPrefix;  // initialized in AgencyFeature
