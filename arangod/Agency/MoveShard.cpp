@@ -89,7 +89,7 @@ bool MoveShard::create(std::shared_ptr<VPackBuilder> envelope) {
   
   // DBservers
   std::string planPath =
-      planColPrefix + _database + "/" + _collection + "/shards/" + _shard;
+    planColPrefix + _database + "/" + _collection + "/shards/" + _shard;
 
   Slice plan = _snapshot.get(planPath).slice();
   TRI_ASSERT(plan.isArray());
@@ -106,8 +106,8 @@ bool MoveShard::create(std::shared_ptr<VPackBuilder> envelope) {
     if (_from == _to) {
       _jb->add("timeFinished", VPackValue(now));
       _jb->add(
-          "result",
-          VPackValue("Source and destination of moveShard must be different"));
+        "result",
+        VPackValue("Source and destination of moveShard must be different"));
     }
     _jb->add("creator", VPackValue(_creator));
     _jb->add("type", VPackValue("moveShard"));
@@ -500,6 +500,7 @@ JOB_STATUS MoveShard::pendingLeader() {
                   trx.add(srv);
                 }
               }
+              trx.add(VPackValue(_from));
             }
             // Precondition: Plan still as it was
             pre.add(VPackValue(planPath));
