@@ -659,15 +659,14 @@ void Supervision::enforceReplication() {
 
 void Supervision::fixPrototypeChain() {
 
+  auto const& snap = _snapshot;
+
   std::function<std::string (std::string const&, std::string const&)> resolve;
   resolve = [&] (std::string const& db, std::string const& col) {
-    Node* n = nullptr;
-    try {
-      n = &_snapshot(planColPrefix + db + "/" + col);
-    } catch (...) {}
+    Node const& n = snap(planColPrefix + db + "/" + col);
     std::string s;
-    if (n != nullptr && n->has("distributeShardsLike")) {
-      s = (*n)("distributeShardsLike").getString();
+    if (n.has("distributeShardsLike")) {
+      s = n("distributeShardsLike").getString();
     }
     return (s.empty()) ? col : resolve(db, s);
   };
@@ -679,7 +678,10 @@ void Supervision::fixPrototypeChain() {
         if (collection.second->has("distributeShardsLike")) {
           auto prototype = (*collection.second)("distributeShardsLike").getString();
           if (!prototype.empty()) {
-            std::string u = resolve(database.first, prototype);
+            std::string u;
+            try {
+              u = resolve(database.first, prototype);
+            } catch (...) {}
             if (u != prototype) {
               { VPackArrayBuilder trx(&migrate);
                 { VPackObjectBuilder oper(&migrate);
