@@ -2165,6 +2165,8 @@ ClusterMethods::persistCollectionInAgency(LogicalCollection* col) {
         THROW_ARANGO_EXCEPTION(TRI_ERROR_CLUSTER_CHAIN_OF_DISTRIBUTESHARDSLIKE);
       }
       col->distributeShardsLike(otherCidString);
+    } else {
+      THROW_ARANGO_EXCEPTION(TRI_ERROR_CLUSTER_UNKNOWN_DISTRIBUTESHARDSLIKE);
     }
   } else if(!avoid.empty()) {
     
