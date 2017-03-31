@@ -1807,6 +1807,9 @@ function moveShard (info) {
     }
     collInfo = global.ArangoClusterInfo.getCollectionInfo(info.database,
       info.collection);
+    if (collInfo.distributeShardsLike !== undefined) {
+      return {error:true, errorMessage:'MoveShard only allowed for collections which have distributeShardsLike unset.'};
+    }
     var shards = collInfo.shards;
     var shard = shards[info.shard];
     var pos = shard.indexOf(info.fromServer);
@@ -1818,7 +1821,7 @@ function moveShard (info) {
       isLeader = false;
     }
   } catch (e2) {
-    return 'Combination of database, collection, shard and fromServer does not make sense.';
+    return {error:true, errorMessage:'Combination of database, collection, shard and fromServer does not make sense.'};
   }
 
   var id;
@@ -1869,19 +1872,24 @@ function rebalanceShards () {
         }
         var collInfo = global.ArangoClusterInfo.getCollectionInfo(
           databases[i], collName);
-        var shardNames = Object.keys(collInfo.shards);
-        for (k = 0; k < shardNames.length; k++) {
-          var shardName = shardNames[k];
-          shardMap[shardName] = { database: databases[i], collection: collName,
-            servers: collInfo.shards[shardName],
-          weight: 1 };
-          dbTab[collInfo.shards[shardName][0]].push(
-            { shard: shardName, leader: true,
-            weight: shardMap[shardName].weight });
-          for (l = 1; l < collInfo.shards[shardName].length; ++l) {
-            dbTab[collInfo.shards[shardName][l]].push(
-              { shard: shardName, leader: false,
+        if (collInfo.distributeShardsLike === undefined) {
+          // Only consider those collections that do not follow another one
+          // w.r.t. their shard distribution.
+          var shardNames = Object.keys(collInfo.shards);
+          for (k = 0; k < shardNames.length; k++) {
+            var shardName = shardNames[k];
+            shardMap[shardName] = { database: databases[i],
+              collection: collName,
+              servers: collInfo.shards[shardName],
+              weight: 1 };
+            dbTab[collInfo.shards[shardName][0]].push(
+              { shard: shardName, leader: true,
               weight: shardMap[shardName].weight });
+            for (l = 1; l < collInfo.shards[shardName].length; ++l) {
+              dbTab[collInfo.shards[shardName][l]].push(
+                { shard: shardName, leader: false,
+                weight: shardMap[shardName].weight });
+            }
           }
         }
       }
@@ -1927,8 +1935,8 @@ function rebalanceShards () {
         shard: shard,
         fromServer: fullest,
       toServer: emptiest };
-      var msg = moveShard(todo);
-      if (msg === '') {
+      var res = moveShard(todo);
+      if (!res.error) {
         console.info('rebalanceShards: moveShard(', todo, ')');
         totalWeight[last].weight -= shardInfo.weight;
         totalWeight[0].weight += shardInfo.weight;
@@ -1938,7 +1946,8 @@ function rebalanceShards () {
           break;
         }
       } else {
-        console.error('rebalanceShards: moveShard(', todo, ') produced:', msg);
+        console.error('rebalanceShards: moveShard(', todo, ') produced:',
+                      res.errorMessage);
       }
     }
   }
