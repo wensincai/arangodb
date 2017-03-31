@@ -625,6 +625,9 @@ SECTION("if everything is fine than the job should be written to pending, adding
   });
   When(Method(mockAgent, waitFor)).AlwaysReturn(AgentInterface::raft_commit_t::OK);
   AgentInterface &agent = mockAgent.get();
+
+  // new server will randomly be selected...so seed the random number generator
+  srand(1);
   auto failedLeader = FailedLeader(
     agency("arango"),
     &agent,
