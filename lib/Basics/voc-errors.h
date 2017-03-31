@@ -374,6 +374,10 @@
 /// - 1483: @LIT{could not drop index in plan}
 ///   Will be raised when a coordinator in a cluster cannot remove an index
 ///   from the Plan hierarchy in the agency.
+/// - 1484: @LIT{chain of distributeShardsLike references}
+///   Will be raised if one tries to create a collection with a
+///   distributeShardsLike attribute which points to another collection that
+///   also has one.
 /// - 1500: @LIT{query killed}
 ///   Will be raised when a running query is killed by an explicit admin
 ///   command.
@@ -2204,6 +2208,18 @@ void TRI_InitializeErrorMessages ();
 ////////////////////////////////////////////////////////////////////////////////
 
 #define TRI_ERROR_CLUSTER_COULD_NOT_DROP_INDEX_IN_PLAN                    (1483)
+
+////////////////////////////////////////////////////////////////////////////////
+/// @brief 1484: ERROR_CLUSTER_CHAIN_OF_DISTRIBUTESHARDSLIKE
+///
+/// chain of distributeShardsLike references
+///
+/// Will be raised if one tries to create a collection with a
+/// distributeShardsLike attribute which points to another collection that also
+/// has one.
+////////////////////////////////////////////////////////////////////////////////
+
+#define TRI_ERROR_CLUSTER_CHAIN_OF_DISTRIBUTESHARDSLIKE                   (1484)
 
 ////////////////////////////////////////////////////////////////////////////////
 /// @brief 1500: ERROR_QUERY_KILLED

@@ -2133,6 +2133,8 @@ ClusterMethods::persistCollectionInAgency(LogicalCollection* col) {
   std::vector<std::string> dbServers;
   std::vector<std::string> avoid = col->avoidServers();
 
+  bool chainOfDistributeShardsLike = false;
+
   ClusterInfo* ci = ClusterInfo::instance();
   if (!distributeShardsLike.empty()) {
     CollectionNameResolver resolver(col->vocbase());
@@ -2144,6 +2146,9 @@ ClusterMethods::persistCollectionInAgency(LogicalCollection* col) {
       try {
         std::shared_ptr<LogicalCollection> collInfo =
             ci->getCollection(col->dbName(), otherCidString);
+        if (!collInfo->distributeShardsLike().empty()) {
+          chainOfDistributeShardsLike = true;
+        }
         auto shards = collInfo->shardIds();
         auto shardList = ci->getShardList(otherCidString);
         for (auto const& s : *shardList) {
@@ -2155,6 +2160,9 @@ ClusterMethods::persistCollectionInAgency(LogicalCollection* col) {
           }
         }
       } catch (...) {
+      }
+      if (chainOfDistributeShardsLike) {
+        THROW_ARANGO_EXCEPTION(TRI_CLUSTER_CHAIN_OF_DISTRIBUTESHARDSLIKE);
       }
       col->distributeShardsLike(otherCidString);
     }
