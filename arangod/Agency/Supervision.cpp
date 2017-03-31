@@ -699,11 +699,17 @@ void Supervision::fixPrototypeChain() {
   }
   
   if (migrate.slice().length() > 0) {
-    LOG_TOPIC (INFO, Logger::SUPERVISION) << migrate.toJson();
+    LOG_TOPIC (DEBUG, Logger::SUPERVISION) << migrate.toJson();
     trans_ret_t res = generalTransaction(_agent, migrate);
-    LOG_TOPIC (INFO, Logger::SUPERVISION) << res.result->toJson();
+    for (const auto& failed : VPackArrayIterator(res.result->slice())) {
+      if (failed.isObject()) { // Precondition failed for this one
+        LOG_TOPIC(WARN, Logger::SUPERVISION)
+          << "Plan has changed since resolution of distributeShardsLike for " <<
+          failed.keyAt(0).copyString();
+      }
+    }
   }
-
+  
 }
 
 // Shrink cluster if applicable, guarded by caller
