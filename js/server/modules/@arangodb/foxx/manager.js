@@ -210,11 +210,6 @@ function reloadInstalledService (mount, runSetup) { // done
   return service;
 }
 
-function installedServices () {
-  ensureFoxxInitialized();
-  return Array.from(GLOBAL_SERVICE_MAP.get(db._name()).values());
-}
-
 function installSystemServiceFromDisk (mount) { // done
   const options = utils.getServiceDefinition(mount);
   const service = FoxxService.create(Object.assign({mount}, options));
@@ -373,19 +368,6 @@ function _buildServiceInPath (serviceInfo, destPath, options = {}) { // okay-ish
   }
   if (options.legacy) {
     patchManifestFile(destPath, {engines: {arangodb: '^2.8.0'}});
-  }
-}
-
-function _validateService (serviceInfo, mount) { // WTF?
-  const tempPath = fs.getTempFile('apps', false);
-  try {
-    _buildServiceInPath(serviceInfo, tempPath, {});
-    const tmp = FoxxService.create({mount, basePath: tempPath});
-    if (!tmp.needsConfiguration()) {
-      ensureServiceExecuted(tmp, true);
-    }
-  } finally {
-    fs.removeDirectoryRecursive(tempPath, true);
   }
 }
 
@@ -730,19 +712,19 @@ function uninstall (mount, options = {}) { // done
   return service;
 }
 
-function replace (serviceInfo, mount, options = {}) { // done
+function replace (serviceInfo, mount, options = {}) { // TODO
   utils.validateMount(mount);
   ensureFoxxInitialized();
-  _validateService(serviceInfo, mount);
+  // TODO download & validate (manifest) $serviceInfo before uninstalling old service!
   _uninstall(mount, Object.assign({teardown: true}, options, {force: true}));
   const service = _install(serviceInfo, mount, Object.assign({}, options, {force: true}));
   propagateServiceReplaced(service);
   return service;
 }
 
-function upgrade (serviceInfo, mount, options = {}) { // done
+function upgrade (serviceInfo, mount, options = {}) { // TODO
   ensureFoxxInitialized();
-  _validateService(serviceInfo, mount);
+  // TODO download & validate (manifest) $serviceInfo before uninstalling old service!
   const oldService = getServiceInstance(mount);
   const serviceOptions = oldService.toJSON().options;
   Object.assign(serviceOptions.configuration, options.configuration);
@@ -825,6 +807,11 @@ function ensureFoxxInitialized () { // done
 function getMountPoints () { // WTF?
   ensureFoxxInitialized();
   return Array.from(GLOBAL_SERVICE_MAP.get(db._name()).keys());
+}
+
+function installedServices () { // WTF?
+  ensureFoxxInitialized();
+  return Array.from(GLOBAL_SERVICE_MAP.get(db._name()).values());
 }
 
 function listJson () { // done
