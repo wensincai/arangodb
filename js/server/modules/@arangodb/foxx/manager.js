@@ -68,28 +68,28 @@ function warn (e) {
   }
 }
 
-function getAllCoordinatorIds () { // done
+function getAllCoordinatorIds () {
   if (!ArangoClusterControl.isCluster()) {
     return [];
   }
   return global.ArangoClusterInfo.getCoordinators();
 }
 
-function getMyCoordinatorId () { // done
+function getMyCoordinatorId () {
   if (!ArangoClusterControl.isCluster()) {
     return null;
   }
   return global.ArangoServerState.id();
 }
 
-function getFoxmasterCoordinatorId () { // done
+function getFoxmasterCoordinatorId () {
   if (!ArangoClusterControl.isCluster()) {
     return null;
   }
   return global.ArangoServerState.getFoxxmaster();
 }
 
-function getPeerCoordinatorIds () { // done
+function getPeerCoordinatorIds () {
   const myId = getMyCoordinatorId();
   return getAllCoordinatorIds().filter((id) => id !== myId);
 }
@@ -137,7 +137,7 @@ function propagateServiceReconfigured (service) { // okay-ish
   reloadRouting(); // FIXME :(
 }
 
-function getServiceInstance (mount) { // done
+function getServiceInstance (mount) {
   ensureFoxxInitialized();
   const localServiceMap = GLOBAL_SERVICE_MAP.get(db._name());
   if (localServiceMap.has(mount)) {
@@ -146,7 +146,7 @@ function getServiceInstance (mount) { // done
   return reloadInstalledService(mount);
 }
 
-function parallelClusterRequests (requests) { // done
+function parallelClusterRequests (requests) {
   const options = {coordTransactionID: global.ArangoClusterComm.getId()};
   let pending = 0;
   for (const [coordId, method, url, body, headers] of requests) {
@@ -170,7 +170,7 @@ function parallelClusterRequests (requests) { // done
   return ArangoClusterControl.wait(options, pending);
 }
 
-function initLocalServiceMap () { // done
+function initLocalServiceMap () {
   const localServiceMap = new Map();
 
   for (const serviceDefinition of utils.getStorage().all()) {
@@ -185,7 +185,7 @@ function initLocalServiceMap () { // done
   GLOBAL_SERVICE_MAP.set(db._name(), localServiceMap);
 }
 
-function reloadInstalledService (mount, runSetup) { // done
+function reloadInstalledService (mount, runSetup) {
   const serviceDefinition = utils.getServiceDefinition(mount);
   if (!serviceDefinition) {
     throw new ArangoError({
@@ -204,7 +204,7 @@ function reloadInstalledService (mount, runSetup) { // done
   return service;
 }
 
-function installSystemServiceFromDisk (mount) { // done
+function installSystemServiceFromDisk (mount) {
   const options = utils.getServiceDefinition(mount);
   const service = FoxxService.create(Object.assign({mount}, options));
   const serviceDefinition = service.toJSON();
@@ -218,7 +218,7 @@ function installSystemServiceFromDisk (mount) { // done
   return service;
 }
 
-function ensureServiceLoaded (mount) { // done
+function ensureServiceLoaded (mount) {
   const service = getServiceInstance(mount);
   return ensureServiceExecuted(service, false);
 }
@@ -274,7 +274,7 @@ function extractServiceToPath (archive, targetPath, isTemporaryFile) { // WTF?
   }
 }
 
-function downloadServiceBundleFromRemote (url) { // done
+function downloadServiceBundleFromRemote (url) {
   try {
     const res = request.get(url, {encoding: null});
     res.throw();
@@ -295,7 +295,7 @@ function downloadServiceBundleFromRemote (url) { // done
   }
 }
 
-function patchManifestFile (servicePath, patchData) { // done
+function patchManifestFile (servicePath, patchData) {
   const filename = path.join(servicePath, 'manifest.json');
   let manifest;
   try {
@@ -467,7 +467,7 @@ function _uninstall (mount, options = {}) { // WTF?
   return service;
 }
 
-function startup (fixMissingChecksums) { // done
+function startup (fixMissingChecksums) {
   const db = require('internal').db;
   const dbName = db._name();
   try {
@@ -494,7 +494,7 @@ function startup (fixMissingChecksums) { // done
   }
 }
 
-function rebuildAllServiceBundles (updateDatabase, fixMissingChecksums) { // done
+function rebuildAllServiceBundles (updateDatabase, fixMissingChecksums) {
   const servicesMissingChecksums = [];
   const collection = utils.getStorage();
   for (const serviceDefinition of collection.all()) {
@@ -521,7 +521,7 @@ function rebuildAllServiceBundles (updateDatabase, fixMissingChecksums) { // don
   `);
 }
 
-function selfHeal (healTheWorld) { // done
+function selfHeal (healTheWorld) {
   const db = require('internal').db;
   const dbName = db._name();
   try {
@@ -554,7 +554,7 @@ function selfHeal (healTheWorld) { // done
   reloadRouting(); // FIXME :(
 }
 
-function isFoxxmasterReady () { // done
+function isFoxxmasterReady () {
   if (!ArangoClusterControl.isCluster()) {
     return true;
   }
@@ -567,7 +567,7 @@ function isFoxxmasterReady () { // done
   return JSON.parse(response.body).ready;
 }
 
-function healMyself () { // done
+function healMyself () {
   const servicesINeedToFix = new Map();
 
   const collection = utils.getStorage();
@@ -595,7 +595,7 @@ function healMyself () { // done
   }
 }
 
-function downloadBundleFromCoordinator (coordId, mount, checksum) { // done
+function downloadBundleFromCoordinator (coordId, mount, checksum) {
   const response = parallelClusterRequests([[
     coordId,
     'GET',
@@ -609,7 +609,7 @@ function downloadBundleFromCoordinator (coordId, mount, checksum) { // done
   return filename;
 }
 
-function getChecksumsFromPeers (mounts) { // done
+function getChecksumsFromPeers (mounts) {
   const coordinatorIds = getPeerCoordinatorIds();
   const responses = parallelClusterRequests(function * () {
     for (const coordId of coordinatorIds) {
@@ -632,7 +632,7 @@ function getChecksumsFromPeers (mounts) { // done
   return peerChecksums;
 }
 
-function healMyselfAndCoords () { // done
+function healMyselfAndCoords () {
   const checksumsINeedToFixLocally = [];
   const actualChecksums = new Map();
   const coordsKnownToBeGoodSources = new Map();
@@ -752,7 +752,7 @@ function healMyselfAndCoords () { // done
   }());
 }
 
-function createServiceBundle (mount) { // done
+function createServiceBundle (mount) {
   const servicePath = FoxxService.basePath(mount);
   const bundlePath = FoxxService.bundlePath(mount);
   if (fs.exists(bundlePath)) {
@@ -762,7 +762,7 @@ function createServiceBundle (mount) { // done
   utils.zipDirectory(servicePath, bundlePath);
 }
 
-function replaceLocalServiceFromTempBundle (mount, tempFile) { // done
+function replaceLocalServiceFromTempBundle (mount, tempFile) {
   const bundlePath = FoxxService.bundlePath(mount);
   fs.move(tempFile, bundlePath);
   const servicePath = FoxxService.basePath(mount);
@@ -772,7 +772,7 @@ function replaceLocalServiceFromTempBundle (mount, tempFile) { // done
 
 // CRUD
 
-function install (serviceInfo, mount, options = {}) { // done
+function install (serviceInfo, mount, options = {}) {
   utils.validateMount(mount);
   ensureFoxxInitialized();
   const service = _install(serviceInfo, mount, options);
@@ -780,7 +780,7 @@ function install (serviceInfo, mount, options = {}) { // done
   return service;
 }
 
-function uninstall (mount, options = {}) { // done
+function uninstall (mount, options = {}) {
   ensureFoxxInitialized();
   const service = _uninstall(mount, options);
   propagateServiceDestroyed(service);
@@ -815,7 +815,7 @@ function upgrade (serviceInfo, mount, options = {}) { // TODO
 // Functions for manipulating services
 // -------------------------------------------------
 
-function runScript (scriptName, mount, options) { // done
+function runScript (scriptName, mount, options) {
   let service = getServiceInstance(mount);
   if (service.isDevelopment) {
     const runSetup = scriptName !== 'setup';
@@ -826,7 +826,7 @@ function runScript (scriptName, mount, options) { // done
   return result === undefined ? null : result;
 }
 
-function runTests (mount, options = {}) { // done
+function runTests (mount, options = {}) {
   let service = getServiceInstance(mount);
   if (service.isDevelopment) {
     service = reloadInstalledService(mount, true);
@@ -835,7 +835,7 @@ function runTests (mount, options = {}) { // done
   return require('@arangodb/foxx/mocha').run(service, options.reporter);
 }
 
-function setDevelopmentMode (mount, enabled = true) { // done
+function setDevelopmentMode (mount, enabled = true) {
   const service = getServiceInstance(mount);
   service.development(enabled);
   utils.updateService(mount, service.toJSON());
@@ -847,7 +847,7 @@ function setDevelopmentMode (mount, enabled = true) { // done
   return service;
 }
 
-function setConfiguration (mount, options = {}) { // done
+function setConfiguration (mount, options = {}) {
   const service = getServiceInstance(mount);
   const warnings = service.applyConfiguration(options.configuration, options.replace);
   utils.updateService(mount, service.toJSON());
@@ -855,7 +855,7 @@ function setConfiguration (mount, options = {}) { // done
   return warnings;
 }
 
-function setDependencies (mount, options = {}) { // done
+function setDependencies (mount, options = {}) {
   const service = getServiceInstance(mount);
   const warnings = service.applyDependencies(options.dependencies, options.replace);
   utils.updateService(mount, service.toJSON());
@@ -873,7 +873,7 @@ function requireService (mount) { // okay-ish
   return ensureServiceExecuted(service, true).exports;
 }
 
-function ensureFoxxInitialized () { // done
+function ensureFoxxInitialized () {
   if (!GLOBAL_SERVICE_MAP.has(db._name())) {
     initLocalServiceMap();
   }
@@ -889,7 +889,7 @@ function installedServices () { // WTF?
   return Array.from(GLOBAL_SERVICE_MAP.get(db._name()).values());
 }
 
-function listJson () { // done
+function listJson () {
   ensureFoxxInitialized();
   const json = [];
   for (const service of GLOBAL_SERVICE_MAP.get(db._name()).values()) {
