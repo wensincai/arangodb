@@ -71,7 +71,6 @@ module.exports =
       const basePath = definition.basePath || FoxxService.basePath(definition.mount);
 
       const manifestPath = path.resolve(basePath, 'manifest.json');
-      const options = definition.options || {};
       const manifest = Manifest.validate(
         manifestPath,
         definition.mount,
