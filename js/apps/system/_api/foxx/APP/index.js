@@ -439,24 +439,3 @@ instanceRouter.get('/swagger', (req, res) => {
   Fetches the Swagger API description for the service at the given mount path.
 `);
 
-router.put('/_clusterdist', prepareServiceRequestBody, (req, res) => {
-  FoxxManager._clusterInstall(
-    req.body.source,
-    req.queryParams.mount,
-    _.omit(req.queryParams, ['mount'])
-  );
-  res.status(204);
-})
-.body(schemas.service, ['multipart/form-data'], `Service to be installed/replaced.`)
-.queryParam('mount', schemas.mount, `Mount path of the installed service.`)
-.queryParam('chksum', joi.string().required(), `Adler-32 checksum of the service bundle.`)
-.response(204, null, 'Empty response');
-
-router.delete('/_clusterdist', (req, res) => {
-  FoxxManager._clusterUninstall(
-    req.queryParams.mount
-  );
-  res.status(204);
-})
-.queryParam('mount', schemas.mount, `Mount path of the installed service.`)
-.response(204, null, 'Empty response');
