@@ -395,20 +395,18 @@ instanceRouter.post('/tests', (req, res) => {
 
 instanceRouter.get('/bundle', (req, res) => {
   const service = req.service;
-  if (!fs.isFile(service.bundlePath)) {
+  if (!fs.isFile(service.bundlePath) || !service.checksum) {
     res.throw(404, 'Bundle not available');
   }
-  if (service.checksum) {
-    const checksum = `"${service.checksum}"`;
-    if (req.get('if-none-match') === checksum) {
-      res.status(304);
-      return;
-    }
-    if (req.get('if-match') && req.get('if-match') !== checksum) {
-      res.throw(404, 'No matching bundle available');
-    }
-    res.set('etag', checksum);
+  const checksum = `"${service.checksum}"`;
+  if (req.get('if-none-match') === checksum) {
+    res.status(304);
+    return;
   }
+  if (req.get('if-match') && req.get('if-match') !== checksum) {
+    res.throw(404, 'No matching bundle available');
+  }
+  res.set('etag', checksum);
   const name = service.mount.replace(/^\/|\/$/g, '').replace(/\//g, '_');
   res.download(service.bundlePath, `${name}.zip`);
 })
