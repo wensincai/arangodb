@@ -53,7 +53,7 @@
   // startup the foxx manager once
   if (internal.threadNumber === 0) {
     require('@arangodb/foxx/manager')._startup(true);
-    require('@arangodb/foxx/manager')._selfHeal();
+    require('@arangodb/foxx/manager')._selfHeal(true);
   }
 
   // start the queue manager once
