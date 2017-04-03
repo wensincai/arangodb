@@ -439,3 +439,8 @@ instanceRouter.get('/swagger', (req, res) => {
   Fetches the Swagger API description for the service at the given mount path.
 `);
 
+router.get('/_local/status', (req, res) => {
+  res.json({
+    ready: global.KEY_GET('foxx', 'ready')
+  });
+});
