@@ -760,7 +760,7 @@ function runTests (mount, options = {}) { // done
   return require('@arangodb/foxx/mocha').run(service, options.reporter);
 }
 
-function setDevelopmentMode (mount, enabled) { // done
+function setDevelopmentMode (mount, enabled = true) { // done
   const service = getServiceInstance(mount);
   service.development(enabled);
   utils.updateService(mount, service.toJSON());
