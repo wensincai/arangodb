@@ -53,6 +53,7 @@
       offset: 1,
       command: function () {
         require('@arangodb/foxx/manager')._selfHeal(isFoxxmaster);
+        global.KEY_SET('foxx', 'ready', true);
       }
     });
     // start the queue manager once
