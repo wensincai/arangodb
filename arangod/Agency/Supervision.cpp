@@ -55,7 +55,7 @@ Supervision::Supervision()
   _jobId(0),
   _jobIdMax(0),
   _selfShutdown(false),
-  _ranOnceAfterLead(false) {}
+  _upgraded(false) {}
 
 Supervision::~Supervision() { shutdown(); };
 
@@ -68,29 +68,77 @@ static std::string const currentServersRegisteredPrefix =
   "/Current/ServersRegistered";
 static std::string const foxxmaster = "/Current/Foxxmaster";
 
-// Upgrade agency, guarded by wakeUp
-void Supervision::upgradeAgency() {
-  Builder builder;
-  Slice fails;
-  { VPackArrayBuilder a(&builder);
-    { VPackObjectBuilder o(&builder);
-      builder.add(VPackValue(failedServersPrefix));
-      { VPackObjectBuilder oo(&builder);
-        try {
-          fails = _snapshot(failedServersPrefix).slice();
-          if (fails.isArray()) {
+
+void Supervision::upgradeOne(Builder& builder) {
+  // "/arango/Agency/Definition" not exists or is 0
+  if (!_snapshot.has("Agency/Definition")) {
+    { VPackArrayBuilder trx(&builder);
+      { VPackObjectBuilder oper(&builder);
+        builder.add("/Agency/Definition", VPackValue(1));
+        builder.add(VPackValue("/Target/ToDo"));
+        { VPackObjectBuilder empty(&builder); }
+        builder.add(VPackValue("/Target/Pending"));
+        { VPackObjectBuilder empty(&builder); }
+      }
+      { VPackObjectBuilder o(&builder);
+        builder.add(VPackValue("/Agency/Definition"));
+        { VPackObjectBuilder prec(&builder);
+          builder.add("oldEmpty", VPackValue(true));
+        }
+      }
+    }      
+  }
+}
+
+void Supervision::upgradeZero(Builder& builder) {
+  // "/arango/Target/FailedServers" is still an array
+  Slice fails = _snapshot(failedServersPrefix).slice();
+  if (_snapshot(failedServersPrefix).slice().isArray()) {
+    { VPackArrayBuilder trx(&builder);
+      { VPackObjectBuilder o(&builder);
+        builder.add(VPackValue(failedServersPrefix));
+        { VPackObjectBuilder oo(&builder);
+          try {
             for (auto const& fail : VPackArrayIterator(fails)) {
               builder.add(VPackValue(fail.copyString()));
               { VPackObjectBuilder ooo(&builder); }
             }
-          }
-        } catch (...) {}
+          } catch (...) {}
+        }
       }
     }
   }
-  if (!fails.isObject()) {
-    singleWriteTransaction(_agent, builder);
+}
+
+// Upgrade agency, guarded by wakeUp
+void Supervision::upgradeAgency() {
+
+  Builder builder;
+  {
+    VPackArrayBuilder trxs(&builder);
+    upgradeZero(builder);
+    fixPrototypeChain(builder);
+    upgradeOne(builder);
   }
+
+  if (builder.slice().length() > 0) {
+    generalTransaction(_agent, builder);
+  }
+
+  _upgraded = true;
+
+  /*if (builder.slice().length() > 0) {
+    LOG_TOPIC (DEBUG, Logger::SUPERVISION) << builder.toJson();
+    trans_ret_t res = generalTransaction(_agent, builder);
+    for (const auto& failed : VPackArrayIterator(res.result->slice())) {
+      if (failed.isObject()) { // Precondition failed for this one
+        LOG_TOPIC(WARN, Logger::SUPERVISION)
+          << "Plan has changed since resolution of distributeShardsLike for " <<
+          failed.keyAt(0).copyString();
+      }
+    }
+    }*/
+  
 }
 
 // Check all DB servers, guarded above doChecks
@@ -462,8 +510,11 @@ void Supervision::run() {
         updateSnapshot();
 
         if (_agent->leading()) {
-          upgradeAgency();
-          fixPrototypeChain();
+
+          if (!_upgraded) {
+            upgradeAgency();
+          }
+
           auto secondsSinceLeader = std::chrono::duration<double>(
             std::chrono::system_clock::now() - _agent->leaderSince()).count();
           if (secondsSinceLeader > _gracePeriod) {
@@ -657,7 +708,7 @@ void Supervision::enforceReplication() {
   
 }
 
-void Supervision::fixPrototypeChain() {
+void Supervision::fixPrototypeChain(Builder& migrate) {
 
   auto const& snap = _snapshot;
 
@@ -671,47 +722,31 @@ void Supervision::fixPrototypeChain() {
     return (s.empty()) ? col : resolve(db, s);
   };
   
-  VPackBuilder migrate;
-  { VPackArrayBuilder trxs(&migrate);
-    for (auto const& database : _snapshot(planColPrefix).children()) {
-      for (auto const& collection : database.second->children()) {
-        if (collection.second->has("distributeShardsLike")) {
-          auto prototype = (*collection.second)("distributeShardsLike").getString();
-          if (!prototype.empty()) {
-            std::string u;
-            try {
-              u = resolve(database.first, prototype);
-            } catch (...) {}
-            if (u != prototype) {
-              { VPackArrayBuilder trx(&migrate);
-                { VPackObjectBuilder oper(&migrate);
-                  migrate.add(
-                    planColPrefix + database.first + "/" + collection.first + "/" +
-                    "distributeShardsLike", VPackValue(u)); }
-                { VPackObjectBuilder prec(&migrate);
-                  migrate.add(
-                    planColPrefix + database.first + "/" + collection.first + "/" +
-                    "distributeShardsLike", VPackValue(prototype)); }
-              }
+  for (auto const& database : _snapshot(planColPrefix).children()) {
+    for (auto const& collection : database.second->children()) {
+      if (collection.second->has("distributeShardsLike")) {
+        auto prototype = (*collection.second)("distributeShardsLike").getString();
+        if (!prototype.empty()) {
+          std::string u;
+          try {
+            u = resolve(database.first, prototype);
+          } catch (...) {}
+          if (u != prototype) {
+            { VPackArrayBuilder trx(&migrate);
+              { VPackObjectBuilder oper(&migrate);
+                migrate.add(
+                  planColPrefix + database.first + "/" + collection.first + "/" +
+                  "distributeShardsLike", VPackValue(u)); }
+              { VPackObjectBuilder prec(&migrate);
+                migrate.add(
+                  planColPrefix + database.first + "/" + collection.first + "/" +
+                  "distributeShardsLike", VPackValue(prototype)); }
             }
           }
         }
       }
     }
   }
-  
-  if (migrate.slice().length() > 0) {
-    LOG_TOPIC (DEBUG, Logger::SUPERVISION) << migrate.toJson();
-    trans_ret_t res = generalTransaction(_agent, migrate);
-    for (const auto& failed : VPackArrayIterator(res.result->slice())) {
-      if (failed.isObject()) { // Precondition failed for this one
-        LOG_TOPIC(WARN, Logger::SUPERVISION)
-          << "Plan has changed since resolution of distributeShardsLike for " <<
-          failed.keyAt(0).copyString();
-      }
-    }
-  }
-  
 }
 
 // Shrink cluster if applicable, guarded by caller

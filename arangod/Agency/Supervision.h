@@ -124,6 +124,12 @@ class Supervision : public arangodb::Thread {
 
  private:
 
+  /// @brief Upgrade agency with FailedServers an object from array
+  void upgradeZero(VPackBuilder&);
+
+  /// @brief Upgrade agency to supervision overhaul jobs 
+  void upgradeOne(VPackBuilder&);
+
   /// @brief Check for inconsistencies in distributeShardsLike
   void missingPrototype();
 
@@ -163,7 +169,7 @@ class Supervision : public arangodb::Thread {
   void handleShutdown();
 
   /// @brief Migrate chains of distributeShardsLike to depth 1 
-  void fixPrototypeChain();
+  void fixPrototypeChain(VPackBuilder&);
   
   Mutex _lock; // guards snapshot, _jobId, jobIdMax, _selfShutdown
   Agent* _agent; /**< @brief My agent */
@@ -188,7 +194,7 @@ class Supervision : public arangodb::Thread {
   // at least once so this flag got set at some point
   bool _selfShutdown;
 
-  bool _ranOnceAfterLead;
+  std::atomic<bool> _upgraded;
   
   std::string serverHealth(std::string const&);
 

@@ -902,19 +902,17 @@ void Agent::persistConfiguration(term_t t) {
 
   // Agency configuration
   auto agency = std::make_shared<Builder>();
-  agency->openArray();
-  agency->openArray();
-  agency->openObject();
-  agency->add(".agency", VPackValue(VPackValueType::Object));
-  agency->add("term", VPackValue(t));
-  agency->add("id", VPackValue(id()));
-  agency->add("active", _config.activeToBuilder()->slice());
-  agency->add("pool", _config.poolToBuilder()->slice());
-  agency->add("size", VPackValue(size()));
-  agency->close();
-  agency->close();
-  agency->close();
-  agency->close();
+  { VPackArrayBuilder trxs(agency.get());
+    { VPackArrayBuilder trx(agency.get());
+      { VPackObjectBuilder oper(agency.get());
+        agency->add(VPackValue(".agency"));
+        { VPackObjectBuilder a(agency.get());
+          agency->add("term", VPackValue(t));
+          agency->add("id", VPackValue(id()));
+          agency->add("active", _config.activeToBuilder()->slice());
+          agency->add("pool", _config.poolToBuilder()->slice());
+          agency->add("size", VPackValue(size()));
+        }}}}
   
   // In case we've lost leadership, no harm will arise as the failed write
   // prevents bogus agency configuration to be replicated among agents. ***
