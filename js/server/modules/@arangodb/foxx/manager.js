@@ -402,8 +402,7 @@ function healMyselfAndCoords () {
           continue;
         }
         const goodCoordIds = coordsKnownToBeGoodSources.get(mount);
-        const goodCoordinatorId = goodCoordIds[random(0, goodCoordIds.length - 1)];
-        servicesYouNeedToUpdate[mount] = goodCoordinatorId;
+        servicesYouNeedToUpdate[mount] = shuffle(goodCoordIds);
       }
       if (!Object.keys(servicesYouNeedToUpdate).length) {
         continue;
@@ -445,7 +444,7 @@ function propagateServiceReplaced (service) { // okay-ish
         coordId,
         'POST',
         '/_api/foxx/_local',
-        JSON.stringify({[service.mount]: myId}),
+        JSON.stringify({[service.mount]: [myId]}),
         {'content-type': 'application/json'}
       ];
     }
