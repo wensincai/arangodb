@@ -98,6 +98,9 @@ function getPeerCoordinatorIds () {
 }
 
 function parallelClusterRequests (requests) {
+  if (!requests.length) {
+    return [];
+  }
   const options = {coordTransactionID: global.ArangoClusterComm.getId()};
   let pending = 0;
   for (const [coordId, method, url, body, headers] of requests) {
