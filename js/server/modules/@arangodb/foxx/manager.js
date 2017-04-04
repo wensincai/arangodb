@@ -265,7 +265,6 @@ function selfHeal (healTheWorld) {
   } finally {
     db._useDatabase(dbName);
   }
-  reloadRouting();
 }
 
 function healMyself () {
@@ -952,6 +951,7 @@ exports.initializeFoxx = initLocalServiceMap;
 exports.ensureFoxxInitialized = ensureFoxxInitialized;
 exports._startup = startup;
 exports._selfHeal = selfHeal;
+exports._createServiceBundle = createServiceBundle;
 exports._resetCache = () => GLOBAL_SERVICE_MAP.clear();
 exports._mountPoints = getMountPoints;
 exports.listJson = listJson;

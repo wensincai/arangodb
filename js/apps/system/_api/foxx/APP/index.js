@@ -395,8 +395,11 @@ instanceRouter.post('/tests', (req, res) => {
 
 instanceRouter.get('/bundle', (req, res) => {
   const service = req.service;
-  if (!fs.isFile(service.bundlePath) || !service.checksum) {
-    res.throw(404, 'Bundle not available');
+  if (!fs.isFile(service.bundlePath)) {
+    if (!service.mount.startsWith('/_')) {
+      res.throw(404, 'Bundle not available');
+    }
+    FoxxManager._createServiceBundle(service.mount);
   }
   const checksum = `"${service.checksum}"`;
   if (req.get('if-none-match') === checksum) {
@@ -439,8 +442,31 @@ instanceRouter.get('/swagger', (req, res) => {
   Fetches the Swagger API description for the service at the given mount path.
 `);
 
-router.get('/_local/status', (req, res) => {
+const localRouter = createRouter();
+router.use('/_local', localRouter);
+
+localRouter.post((req, res) => {
+  res.throw('not implemented');
+})
+.body(joi.object());
+
+localRouter.get('/status', (req, res) => {
   res.json({
     ready: global.KEY_GET('foxx', 'ready')
   });
 });
+
+localRouter.post('/checksums', (req, res) => {
+  res.throw('not implemented');
+})
+.queryParam('mounts', joi.array().items(schemas.mount));
+
+localRouter.post('/service', (req, res) => {
+  res.throw('not implemented');
+})
+.queryParam('mount', schemas.mount);
+
+localRouter.delete('/service', (req, res) => {
+  res.throw('not implemented');
+})
+.queryParam('mount', schemas.mount);

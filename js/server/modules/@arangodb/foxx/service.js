@@ -24,7 +24,6 @@
 
 const _ = require('lodash');
 const dd = require('dedent');
-const joi = require('joi');
 const InternalServerError = require('http-errors').InternalServerError;
 const internal = require('internal');
 const assert = require('assert');
