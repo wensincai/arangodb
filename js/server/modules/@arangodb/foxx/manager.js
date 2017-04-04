@@ -48,7 +48,7 @@ const actions = require('@arangodb/actions');
 const shuffle = require('lodash/shuffle');
 const zip = require('lodash/zip');
 
-const systemServiceMountPoints = [
+const SYSTEM_SERVICE_MOUNTS = [
   '/_admin/aardvark', // Admin interface.
   '/_api/foxx', // Foxx management API.
   '/_api/gharial' // General_Graph API.
@@ -158,7 +158,7 @@ function getChecksumsFromPeers (mounts) {
 
 // Startup and self-heal
 
-function startup (fixMissingChecksums) {
+function startup (writeToDatabase) {
   const db = require('internal').db;
   const dbName = db._name();
   try {
@@ -167,7 +167,10 @@ function startup (fixMissingChecksums) {
     for (const name of databases) {
       try {
         db._useDatabase(name);
-        rebuildAllServiceBundles(fixMissingChecksums);
+        rebuildAllServiceBundles(writeToDatabase);
+        if (writeToDatabase) {
+          upsertSystemServices();
+        }
       } catch (e) {
         let err = e;
         while (err) {
@@ -183,6 +186,22 @@ function startup (fixMissingChecksums) {
   } finally {
     db._useDatabase(dbName);
   }
+}
+
+function upsertSystemServices () {
+  const serviceDefinitions = new Map();
+  for (const mount of SYSTEM_SERVICE_MOUNTS) {
+    const serviceDefinition = utils.getServiceDefinition(mount) || {mount};
+    const service = FoxxService.create(serviceDefinition);
+    serviceDefinitions.set(mount, service.toJSON());
+  }
+  db._query(aql`
+    FOR item IN ${Array.from(serviceDefinitions)}
+    UPSERT {mount: item[0]}
+    INSERT item[1]
+    REPLACE item[1]
+    IN ${utils.getStorage()}
+  `);
 }
 
 function rebuildAllServiceBundles (updateDatabase, fixMissingChecksums) {
@@ -382,6 +401,9 @@ function healMyselfAndCoords () {
         const goodCoordinatorId = coordsKnownToBeGoodSources.get(mount)[0]; // FIXME random
         servicesYouNeedToUpdate[mount] = goodCoordinatorId;
       }
+      if (!Object.keys(servicesYouNeedToUpdate).length) {
+        continue;
+      }
       yield [
         coordId,
         'POST',
@@ -448,11 +470,6 @@ function initLocalServiceMap () { // TODO
     localServiceMap.set(service.mount, service);
   }
 
-  for (const mount of systemServiceMountPoints) {
-    localServiceMap.set(mount, installSystemServiceFromDisk(mount));
-    // FIXME this should probably happen in startup?
-  }
-
   GLOBAL_SERVICE_MAP.set(db._name(), localServiceMap);
 }
 
@@ -492,19 +509,6 @@ function reloadInstalledService (mount, runSetup) {
     service.executeScript('setup');
   }
   GLOBAL_SERVICE_MAP.get(db._name()).set(mount, service);
-  return service;
-}
-
-function installSystemServiceFromDisk (mount) {
-  const options = utils.getServiceDefinition(mount);
-  const service = FoxxService.create(Object.assign({mount}, options));
-  const serviceDefinition = service.toJSON();
-  db._query(aql`
-    UPSERT {mount: ${mount}}
-    INSERT ${serviceDefinition}
-    REPLACE ${serviceDefinition}
-    IN ${utils.getStorage()}
-  `);
   return service;
 }
 
@@ -592,11 +596,6 @@ function _install (serviceInfo, mount, options = {}) { // WTF?
     });
   }
   fs.makeDirectoryRecursive(path.dirname(servicePath));
-  // Remove the empty APP folder.
-  // Otherwise move will fail.
-  if (fs.exists(servicePath)) {
-    fs.removeDirectory(servicePath);
-  }
 
   ensureFoxxInitialized();
 
@@ -729,21 +728,23 @@ function downloadServiceBundleFromCoordinator (coordId, mount, checksum) {
   return filename;
 }
 
-function extractServiceBundle (archive, targetPath, isTemporaryFile) { // WTF?
+function extractServiceBundle (archive, targetPath, deleteArchive) {
   try {
     const tempFolder = fs.getTempFile('zip', false);
     fs.makeDirectory(tempFolder);
     fs.unzipFile(archive, tempFolder, false, true);
 
-    let found;
-    for (const filename of fs.listTree(tempFolder).sort((a, b) => a.length - b.length)) {
+    let manifestPath;
+    // find the manifest with the shortest path
+    const filenames = fs.listTree(tempFolder).sort((a, b) => a.length - b.length);
+    for (const filename of filenames) {
       if (filename === 'manifest.json' || filename.endsWith('/manifest.json')) {
-        found = filename;
+        manifestPath = filename;
         break;
       }
     }
 
-    if (!found) {
+    if (!manifestPath) {
       throw new ArangoError({
         errorNum: errors.ERROR_SERVICE_MANIFEST_NOT_FOUND.code,
         errorMessage: dd`
@@ -753,10 +754,15 @@ function extractServiceBundle (archive, targetPath, isTemporaryFile) { // WTF?
       });
     }
 
-    var basePath = path.dirname(path.resolve(tempFolder, found));
+    let basePath = path.dirname(path.resolve(tempFolder, manifestPath));
+    if (fs.exists(targetPath)) {
+      fs.removeDirectory(targetPath);
+    }
     fs.move(basePath, targetPath);
 
-    if (found !== 'manifest.json') { // WTF?
+    if (manifestPath.endsWith('/manifest.json')) {
+      // service basePath is a subfolder of tempFolder
+      // so tempFolder still exists and needs to be removed
       try {
         fs.removeDirectoryRecursive(tempFolder);
       } catch (e) {
@@ -767,7 +773,7 @@ function extractServiceBundle (archive, targetPath, isTemporaryFile) { // WTF?
       }
     }
   } finally {
-    if (isTemporaryFile) {
+    if (deleteArchive) {
       try {
         fs.remove(archive);
       } catch (e) {
@@ -782,10 +788,11 @@ function extractServiceBundle (archive, targetPath, isTemporaryFile) { // WTF?
 
 function replaceLocalServiceFromTempBundle (mount, tempFile) {
   const bundlePath = FoxxService.bundlePath(mount);
+  fs.makeDirectoryRecursive(path.dirname(bundlePath));
   fs.move(tempFile, bundlePath);
   const servicePath = FoxxService.basePath(mount);
   fs.makeDirectoryRecursive(path.dirname(servicePath));
-  extractServiceBundle(bundlePath, servicePath);
+  extractServiceBundle(bundlePath, servicePath, true);
 }
 
 // Exported functions for manipulating services
@@ -879,18 +886,18 @@ function setDependencies (mount, options = {}) {
 
 // Misc exported functions
 
-function requireService (mount) { // okay-ish
-  mount = '/' + mount.replace(/(^\/+|\/+$)/, '');
+function requireService (mount) {
+  mount = '/' + mount.replace(/^\/+|\/+$/g, '');
   const service = getServiceInstance(mount);
   return ensureServiceExecuted(service, true).exports;
 }
 
-function getMountPoints () { // WTF?
+function getMountPoints () {
   ensureFoxxInitialized();
   return Array.from(GLOBAL_SERVICE_MAP.get(db._name()).keys());
 }
 
-function installedServices () { // WTF?
+function installedServices () {
   ensureFoxxInitialized();
   return Array.from(GLOBAL_SERVICE_MAP.get(db._name()).values());
 }
