@@ -45,6 +45,7 @@ const db = arangodb.db;
 const ArangoClusterControl = require('@arangodb/cluster');
 const request = require('@arangodb/request');
 const actions = require('@arangodb/actions');
+const random = require('lodash/random');
 const shuffle = require('lodash/shuffle');
 const zip = require('lodash/zip');
 
@@ -261,7 +262,7 @@ function selfHeal (healTheWorld) {
   } finally {
     db._useDatabase(dbName);
   }
-  reloadRouting(); // FIXME :(
+  reloadRouting();
 }
 
 function healMyself () {
@@ -398,7 +399,8 @@ function healMyselfAndCoords () {
         if (!badCoordinatorIds.has(coordId)) {
           continue;
         }
-        const goodCoordinatorId = coordsKnownToBeGoodSources.get(mount)[0]; // FIXME random
+        const goodCoordIds = coordsKnownToBeGoodSources.get(mount);
+        const goodCoordinatorId = goodCoordIds[random(0, goodCoordIds.length - 1)];
         servicesYouNeedToUpdate[mount] = goodCoordinatorId;
       }
       if (!Object.keys(servicesYouNeedToUpdate).length) {
@@ -430,7 +432,7 @@ function propagateServiceDestroyed (service) { // okay-ish
       })}`];
     }
   }());
-  reloadRouting(); // FIXME :(
+  reloadRouting();
 }
 
 function propagateServiceReplaced (service) { // okay-ish
@@ -446,7 +448,7 @@ function propagateServiceReplaced (service) { // okay-ish
       ];
     }
   }());
-  reloadRouting(); // FIXME :(
+  reloadRouting();
 }
 
 function propagateServiceReconfigured (service) { // okay-ish
@@ -457,7 +459,7 @@ function propagateServiceReconfigured (service) { // okay-ish
       })}`];
     }
   }());
-  reloadRouting(); // FIXME :(
+  reloadRouting();
 }
 
 // GLOBAL_SERVICE_MAP manipulation
@@ -698,7 +700,9 @@ function downloadServiceBundleFromCoordinator (coordId, mount, checksum) {
     null,
     {'if-match': `"${checksum}"`}
   ]])[0];
-  // FIXME handle 404 with empty return
+  if (response.headers['x-arango-response-code'].startsWith('404')) {
+    return null;
+  }
   const filename = fs.getTempFile('foxx-manager', true);
   fs.writeFileSync(filename, response.rawBody);
   return filename;
