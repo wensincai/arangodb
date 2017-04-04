@@ -9,7 +9,6 @@ const arangodb = require('@arangodb');
 const ArangoError = arangodb.ArangoError;
 const errors = arangodb.errors;
 const il = require('@arangodb/util').inline;
-const utils = require('@arangodb/foxx/manager-utils');
 
 // Regular expressions for joi patterns
 const RE_EMPTY = /^$/;

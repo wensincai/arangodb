@@ -64,19 +64,20 @@ const LEGACY_ALIASES = [
 
 module.exports =
   class FoxxService {
-    static create (definition) {
+    static validatedManifest (definition) {
       assert(definition, 'must provide a service definition');
       assert(definition.mount, 'mount path required');
-
       const basePath = definition.basePath || FoxxService.basePath(definition.mount);
-
       const manifestPath = path.resolve(basePath, 'manifest.json');
-      const manifest = Manifest.validate(
+      return Manifest.validate(
         manifestPath,
         definition.mount,
         definition.noisy
       );
+    }
 
+    static create (definition) {
+      const manifest = FoxxService.validatedManifest(definition);
       return new FoxxService(definition, manifest);
     }
 
