@@ -2439,7 +2439,6 @@ SECTION("if the job timeouts while the new leader is trying to take over the job
   Verify(Method(spy, abort));
 }
 
-/* XXX
 SECTION("when promoting the new leader, the old one should become a resigned follower so we can fall back on it if the switch didn't work") {
   std::function<std::unique_ptr<VPackBuilder>(VPackSlice const&, std::string const&)> createTestStructure = [&](VPackSlice const& s, std::string const& path) {
     std::unique_ptr<VPackBuilder> builder;
@@ -2494,17 +2493,21 @@ SECTION("when promoting the new leader, the old one should become a resigned fol
   When(Method(mockAgent, waitFor)).AlwaysReturn();
   When(Method(mockAgent, write)).Do([&](query_t const& q) -> write_ret_t {
     INFO("WriteTransaction: " << q->slice().toJson());
+    REQUIRE(q->slice()[0].length() == 2);
+
     auto writes = q->slice()[0][0];
-    CHECK(writes.get("/arango/Target/Pending/1").get("op").copyString() == "delete");
-    REQUIRE(q->slice()[0].length() == 1); // we always simply override! no preconditions...
-    CHECK(writes.get("/arango/Supervision/DBServers/" + FREE_SERVER).get("op").copyString() == "delete");
-    CHECK(writes.get("/arango/Supervision/Shards/" + SHARD).get("op").copyString() == "delete");
-    CHECK(std::string(writes.get("/arango/Plan/Collections/" + DATABASE + "/" + COLLECTION + "/shards/" + SHARD).typeName()) == "array");
-    // apparently we are not cleaning up our mess. this is done somewhere else :S (>=2)
-    CHECK(writes.get("/arango/Plan/Collections/" + DATABASE + "/" + COLLECTION + "/shards/" + SHARD).length() >= 2);
-    CHECK(writes.get("/arango/Plan/Collections/" + DATABASE + "/" + COLLECTION + "/shards/" + SHARD)[0].copyString() == SHARD_LEADER);
+    REQUIRE(std::string(writes.get("/arango/Plan/Collections/" + DATABASE + "/" + COLLECTION + "/shards/" + SHARD).typeName()) == "array");
+    CHECK(writes.get("/arango/Plan/Collections/" + DATABASE + "/" + COLLECTION + "/shards/" + SHARD).length() == 3);
+    CHECK(writes.get("/arango/Plan/Collections/" + DATABASE + "/" + COLLECTION + "/shards/" + SHARD)[0].copyString() == FREE_SERVER);
     CHECK(writes.get("/arango/Plan/Collections/" + DATABASE + "/" + COLLECTION + "/shards/" + SHARD)[1].copyString() == SHARD_FOLLOWER1);
-    CHECK(std::string(writes.get("/arango/Target/Failed/1").typeName()) == "object");
+    CHECK(writes.get("/arango/Plan/Collections/" + DATABASE + "/" + COLLECTION + "/shards/" + SHARD)[2].copyString() == SHARD_LEADER);
+
+    auto preconditions = q->slice()[0][1];
+    REQUIRE(std::string(preconditions.get("/arango/Plan/Collections/" + DATABASE + "/" + COLLECTION + "/shards/" + SHARD).typeName()) == "object");
+    CHECK(std::string(preconditions.get("/arango/Plan/Collections/" + DATABASE + "/" + COLLECTION + "/shards/" + SHARD).get("old").typeName()) == "array");
+    CHECK(preconditions.get("/arango/Plan/Collections/" + DATABASE + "/" + COLLECTION + "/shards/" + SHARD).get("old")[0].copyString() == "_" + SHARD_LEADER);
+    CHECK(preconditions.get("/arango/Plan/Collections/" + DATABASE + "/" + COLLECTION + "/shards/" + SHARD).get("old")[1].copyString() == SHARD_FOLLOWER1);
+    CHECK(preconditions.get("/arango/Plan/Collections/" + DATABASE + "/" + COLLECTION + "/shards/" + SHARD).get("old")[2].copyString() == FREE_SERVER);
 
     return fakeWriteResult;
   });
@@ -2520,7 +2523,6 @@ SECTION("when promoting the new leader, the old one should become a resigned fol
   moveShard.run();
   Verify(Method(mockAgent, write));
 }
-*/
 
 }
 }
