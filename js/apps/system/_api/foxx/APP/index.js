@@ -456,7 +456,7 @@ localRouter.get('/status', (req, res) => {
   });
 });
 
-localRouter.post('/checksums', (req, res) => {
+localRouter.get('/checksums', (req, res) => {
   res.throw('not implemented');
 })
 .queryParam('mounts', joi.array().items(schemas.mount));
