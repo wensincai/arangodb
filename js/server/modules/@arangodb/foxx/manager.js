@@ -144,7 +144,7 @@ function getChecksumsFromPeers (mounts) {
       yield [
         coordId,
         'GET',
-        `/_api/foxx/_local/checksums?${querystringify({mounts})}`
+        `/_api/foxx/_local/checksums?${querystringify({mount: mounts})}`
       ];
     }
   }());

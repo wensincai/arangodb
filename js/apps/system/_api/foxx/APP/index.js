@@ -459,7 +459,7 @@ localRouter.get('/status', (req, res) => {
 localRouter.get('/checksums', (req, res) => {
   res.throw('not implemented');
 })
-.queryParam('mounts', joi.array().items(schemas.mount));
+.queryParam('mount', joi.array().items(schemas.mount));
 
 localRouter.post('/service', (req, res) => {
   res.throw('not implemented');
