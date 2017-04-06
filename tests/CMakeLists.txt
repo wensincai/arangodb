@@ -9,6 +9,7 @@ add_executable(
   Agency/AddFollowerTest.cpp
   Agency/FailedFollowerTest.cpp
   Agency/FailedLeaderTest.cpp
+  Agency/FailedServerTest.cpp
   Agency/MoveShardTest.cpp
   Agency/RemoveFollowerTest.cpp
   Basics/AttributeNameParserTest.cpp

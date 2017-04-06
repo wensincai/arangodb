@@ -1,3 +1,4 @@
+
 ////////////////////////////////////////////////////////////////////////////////
 /// DISCLAIMER
 ///
@@ -31,10 +32,10 @@
 
 using namespace arangodb::consensus;
 
-FailedServer::FailedServer(Node const& snapshot, AgentInterface* agent,
-                           std::string const& jobId, std::string const& creator,
-                           std::string const& server)
-    : Job(NOTFOUND, snapshot, agent, jobId, creator), _server(server) {}
+FailedServer::FailedServer(
+  Node const& snapshot, AgentInterface* agent, std::string const& jobId,
+  std::string const& creator, std::string const& server)
+  : Job(NOTFOUND, snapshot, agent, jobId, creator), _server(server) {}
 
 FailedServer::FailedServer(Node const& snapshot, AgentInterface* agent,
                            JOB_STATUS status, std::string const& jobId)
@@ -212,11 +213,11 @@ bool FailedServer::create(std::shared_ptr<VPackBuilder> envelope) {
     _jb = envelope;
   }
 
+
   { VPackArrayBuilder a(_jb.get());
 
     // Operations
     { VPackObjectBuilder operations (_jb.get());
-      
       // ToDo entry
       _jb->add(VPackValue(toDoPrefix + _jobId));
       { VPackObjectBuilder todo(_jb.get());
@@ -224,20 +225,18 @@ bool FailedServer::create(std::shared_ptr<VPackBuilder> envelope) {
         _jb->add("server", VPackValue(_server));
         _jb->add("jobId", VPackValue(_jobId));
         _jb->add("creator", VPackValue(_creator));
-        _jb->add("timeCreated", VPackValue(timepointToString(
-                                             system_clock::now()))); } 
+        _jb->add("timeCreated",
+                 VPackValue(timepointToString(system_clock::now()))); }
       // FailedServers entry []
       _jb->add(VPackValue(failedServersPrefix + "/" + _server));
       { VPackArrayBuilder failedServers(_jb.get()); }} // Operations
 
     //Preconditions
     { VPackObjectBuilder health(_jb.get());
-
       // Status should still be BAD
       _jb->add(VPackValue(healthPrefix + _server + "/Status"));
       { VPackObjectBuilder old(_jb.get());
         _jb->add("old", VPackValue("BAD")); }
-
       // Target/FailedServers is still as in the snapshot
       _jb->add(VPackValue(failedServersPrefix));
       { VPackObjectBuilder old(_jb.get());

@@ -112,13 +112,12 @@ void Constituent::termNoLock(term_t t) {
 
     if (!_votedFor.empty()) {
       Builder body;
-      body.add(VPackValue(VPackValueType::Object));
-      std::ostringstream i_str;
-      i_str << std::setw(20) << std::setfill('0') << t;
-      body.add("_key", Value(i_str.str()));
-      body.add("term", Value(t));
-      body.add("voted_for", Value(_votedFor));
-      body.close();
+      { VPackObjectBuilder b(&body);
+        std::ostringstream i_str;
+        i_str << std::setw(20) << std::setfill('0') << t;
+        body.add("_key", Value(i_str.str()));
+        body.add("term", Value(t));
+        body.add("voted_for", Value(_votedFor)); }
       
       TRI_ASSERT(_vocbase != nullptr);
       auto transactionContext =

@@ -115,6 +115,9 @@ Node createRootNode() {
   return createNode(agency);
 }
 
+inline std::string typeName(Slice const& slice) {
+  return std::string(slice.typeName());
+}
 
 TEST_CASE("FailedServer", "[agency][supervision]") {
 
@@ -123,7 +126,8 @@ TEST_CASE("FailedServer", "[agency][supervision]") {
     transBuilder->add(VPackValue((uint64_t)1)); }
     
   auto agency = createRootNode();
-  write_ret_t fakeWriteResult {true, "", std::vector<bool> {true}, std::vector<index_t> {1}};
+  write_ret_t fakeWriteResult {
+    true, "", std::vector<bool> {true}, std::vector<index_t> {1}};
   trans_ret_t fakeTransResult {true, "", 1, 0, transBuilder};
   
   SECTION("creating a job should create a job in todo") {
@@ -133,36 +137,35 @@ TEST_CASE("FailedServer", "[agency][supervision]") {
     When(Method(mockAgent, write)).AlwaysDo([&](query_t const& q) -> write_ret_t {
         INFO(q->slice().toJson());
         auto expectedJobKey = PREFIX + toDoPrefix + jobId;
-        REQUIRE(std::string(q->slice().typeName()) == "array" );
+        REQUIRE(typeName(q->slice()) == "array");
         REQUIRE(q->slice().length() == 1);
-        REQUIRE(std::string(q->slice()[0].typeName()) == "array");
-        REQUIRE(q->slice()[0].length() == 2); // we always simply override! no preconditions...
-        REQUIRE(std::string(q->slice()[0][0].typeName()) == "object");
-        REQUIRE(q->slice()[0][0].length() == 2); // should ONLY do an entry in todo
+        REQUIRE(typeName(q->slice()[0]) == "array");
+        REQUIRE(q->slice()[0].length() == 2); 
+        REQUIRE(typeName(q->slice()[0][0]) == "object");
+        REQUIRE(q->slice()[0][0].length() == 2); 
         std::cout << expectedJobKey << std::endl;
-        REQUIRE(std::string(q->slice()[0][0].get(expectedJobKey).typeName()) == "object");
+        REQUIRE(typeName(q->slice()[0][0].get(expectedJobKey)) == "object");
         
         auto job = q->slice()[0][0].get(expectedJobKey);
-        REQUIRE(std::string(job.get("creator").typeName()) == "string");
-        REQUIRE(std::string(job.get("type").typeName()) == "string");
+        REQUIRE(typeName(job.get("creator")) == "string");
+        REQUIRE(typeName(job.get("type")) == "string");
         CHECK(job.get("type").copyString() == "failedServer");
-        REQUIRE(std::string(job.get("server").typeName()) == "string");
+        REQUIRE(typeName(job.get("server")) == "string");
         CHECK(job.get("server").copyString() == SHARD_LEADER);
-        CHECK(std::string(job.get("jobId").typeName()) == "string");
-        CHECK(std::string(job.get("timeCreated").typeName()) == "string");
-
+        CHECK(typeName(job.get("jobId")) == "string");
+        CHECK(typeName(job.get("timeCreated")) == "string");
+        
         return fakeWriteResult;
       });
     When(Method(mockAgent, waitFor)).AlwaysReturn(AgentInterface::raft_commit_t::OK);
-    AgentInterface &agent = mockAgent.get();
-
-    Builder builder = agency.toBuilder();
-    std::cout << builder.toJson() << std::endl;
+    auto &agent = mockAgent.get();
+    
+    auto builder = agency.toBuilder();
     FailedServer(agency(PREFIX), &agent, jobId, "unittest",SHARD_LEADER).create();
     Verify(Method(mockAgent, write));
     
   } // SECTION
-
+  
 } // TEST_CASE
 
 }}} // namespaces 
