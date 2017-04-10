@@ -379,7 +379,7 @@ uint32_t TRI_Adler32(char const* filename) {
     return 0;
   }
 
-  struct stat statbuf;
+  struct TRI_STAT statbuf;
   TRI_FSTAT(fd, &statbuf);
 
   TRI_write_t nRead;
