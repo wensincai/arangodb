@@ -128,8 +128,11 @@ bool FailedServer::start() {
       // Check that toServer not blocked
       pending.add(VPackValue(blockedServersPrefix + _server));
       { VPackObjectBuilder block(&pending);
-        pending.add("oldEmpty", VPackValue(true));
-      }
+        pending.add("oldEmpty", VPackValue(true)); }
+      // Status should still be FAILED
+      _jb->add(VPackValue(healthPrefix + _server + "/Status"));
+      { VPackObjectBuilder old(&pending);
+        _jb->add("old", VPackValue("FAILED")); }
     } // <--------- Preconditions
   }
 
