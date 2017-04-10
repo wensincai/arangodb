@@ -130,7 +130,7 @@ bool FailedServer::start() {
       { VPackObjectBuilder block(&pending);
         pending.add("oldEmpty", VPackValue(true)); }
       // Status should still be FAILED
-      _jb->add(VPackValue(healthPrefix + _server + "/Status"));
+      pending.add(VPackValue(healthPrefix + _server + "/Status"));
       { VPackObjectBuilder old(&pending);
         _jb->add("old", VPackValue("FAILED")); }
     } // <--------- Preconditions
