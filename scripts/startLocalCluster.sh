@@ -261,7 +261,7 @@ start() {
         --log.level cluster=$LOG_LEVEL_CLUSTER \
         --log.level communication=$LOG_LEVEL_CLUSTER \
         --log.level heartbeat=$LOG_LEVEL_CLUSTER \
-        --log.level requests=$LOG_LEVE_CLUSTER \
+        --log.level requests=$LOG_LEVEL_CLUSTER \
         $AUTHENTICATION \
         $SSLKEYFILE \
         | tee cluster/$PORT.stdout 2>&1 &
