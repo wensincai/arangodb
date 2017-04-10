@@ -428,24 +428,49 @@ check_ret_t Store::check(VPackSlice const& slice, CheckMode mode) const {
         } else if (oper == "in") {  // in
           if (found) {
             if (node.slice().isArray()) {
-              bool found = false;
+              bool _found = false;
               for (auto const& i : VPackArrayIterator(node.slice())) {
                 if (i == op.value) {
-                  found = true;
+                  _found = true;
                   continue;
                 }
               }
-              if (found) {
+              if (_found) {
+                continue;
+              } else {
+                ret.push_back(precond.key);
+              }
+            }
+          } 
+          ret.push_back(precond.key);
+          if (mode == FIRST_FAIL) {
+            break;
+          }
+        } else if (oper == "notin") {  // in
+          if (!found) {
+            continue;
+          } else {
+            if (node.slice().isArray()) {
+              bool _found = false;
+              for (auto const& i : VPackArrayIterator(node.slice())) {
+                if (i == op.value) {
+                  _found = true;
+                  continue;
+                }
+              }
+              if (_found) {
+                ret.push_back(precond.key);
+              } else {
                 continue;
               }
             }
-          }
+          } 
           ret.push_back(precond.key);
           if (mode == FIRST_FAIL) {
             break;
           }
         }
-      }
+      } 
     } else {
       if (node != precond.value) {
         ret.push_back(precond.key);

@@ -67,8 +67,8 @@ const char *agency =
 
 VPackBuilder createJob() {
   VPackBuilder builder;
-  VPackObjectBuilder a(&builder);
   {
+    VPackObjectBuilder a(&builder);
     builder.add("creator", VPackValue("1"));
     builder.add("type", VPackValue("failedServer"));
     builder.add("database", VPackValue("database"));
@@ -121,6 +121,8 @@ inline std::string typeName(Slice const& slice) {
 
 TEST_CASE("FailedServer", "[agency][supervision]") {
 
+  std::string const jobId = "1";
+
   auto transBuilder = std::make_shared<Builder>();
   { VPackArrayBuilder a(transBuilder.get());
     transBuilder->add(VPackValue((uint64_t)1)); }
@@ -159,10 +161,72 @@ TEST_CASE("FailedServer", "[agency][supervision]") {
       });
     When(Method(mockAgent, waitFor)).AlwaysReturn(AgentInterface::raft_commit_t::OK);
     auto &agent = mockAgent.get();
-    
     auto builder = agency.toBuilder();
     FailedServer(agency(PREFIX), &agent, jobId, "unittest",SHARD_LEADER).create();
     Verify(Method(mockAgent, write));
+    
+  } // SECTION
+  
+  SECTION("<collection> still exists, if missing, job is finished, move to "
+          "Target/Finished") {
+
+    TestStructureType createTestStructure = [&](
+      Slice const& s, std::string const& path) {
+
+      std::unique_ptr<Builder> builder;
+      if (path == "/arango/Plan/Collections/" + DATABASE + "/" + COLLECTION) {
+        return builder;
+      }
+      builder = std::make_unique<Builder>();
+      
+      if (s.isObject()) {
+        VPackObjectBuilder b(builder.get());
+        for (auto const& it: VPackObjectIterator(s)) {
+          auto childBuilder = createTestStructure(it.value, path + "/" + it.key.copyString());
+          if (childBuilder) {
+            builder->add(it.key.copyString(), childBuilder->slice());
+          }
+        }
+        if (path == "/arango/Target/ToDo") {
+          char const* todo =
+            R"=({"creator":"1", "type":"failedLeader", "database":"database",
+             "collection":"collection", "shard":"shard", "fromServer":"leader",
+             "jobId":"1", "timeCreated":"2017-01-01 00:00:00"})=";
+          builder->add(jobId, createBuilder(todo).slice());
+        }
+        builder->close();
+      } else {
+        builder->add(s);
+      }
+      
+      return builder;
+    };
+    
+    auto builder = createTestStructure(agency.toBuilder().slice(), "");
+    REQUIRE(builder);
+    Node agency = createNodeFromBuilder(*builder);
+    
+    Mock<AgentInterface> mockAgent;
+    When(Method(mockAgent, write)).AlwaysDo([&](query_t const& q) -> write_ret_t {
+        INFO(q->slice().toJson());
+        REQUIRE(typeName(q->slice()) == "array" );
+        REQUIRE(q->slice().length() == 1);
+        REQUIRE(typeName(q->slice()[0]) == "array");
+        // we always simply override! no preconditions...
+        REQUIRE(q->slice()[0].length() == 1); 
+        REQUIRE(typeName(q->slice()[0][0]) == "object");
+        
+        auto writes = q->slice()[0][0];
+        REQUIRE(typeName(writes.get("/arango/Target/ToDo/1")) == "object");
+        REQUIRE(typeName(writes.get("/arango/Target/ToDo/1").get("op")) == "string");
+        CHECK(writes.get("/arango/Target/ToDo/1").get("op").copyString() == "delete");
+        CHECK(typeName(writes.get("/arango/Target/Finished/1")) == "object");
+        return fakeWriteResult;
+      });
+    
+    When(Method(mockAgent, waitFor)).AlwaysReturn(AgentInterface::raft_commit_t::OK);
+    auto& agent = mockAgent.get();
+    FailedServer(agency("arango"), &agent, JOB_STATUS::TODO, jobId).start();
     
   } // SECTION
   

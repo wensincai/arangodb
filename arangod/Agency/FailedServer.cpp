@@ -237,11 +237,15 @@ bool FailedServer::create(std::shared_ptr<VPackBuilder> envelope) {
       _jb->add(VPackValue(healthPrefix + _server + "/Status"));
       { VPackObjectBuilder old(_jb.get());
         _jb->add("old", VPackValue("BAD")); }
+      // Target/FailedServers does not already include _server
+      _jb->add(VPackValue(failedServersPrefix + "/" + _server));
+      { VPackObjectBuilder old(_jb.get());
+        _jb->add("oldEmpty", VPackValue(true)); }
       // Target/FailedServers is still as in the snapshot
       _jb->add(VPackValue(failedServersPrefix));
       { VPackObjectBuilder old(_jb.get());
-        _jb->add("old", _snapshot(failedServersPrefix).toBuilder().slice());
-      }} // Preconditions
+        _jb->add("old", _snapshot(failedServersPrefix).toBuilder().slice());}
+    } // Preconditions
   }
 
   if (selfCreate) {
