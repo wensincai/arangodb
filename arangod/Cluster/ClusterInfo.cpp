@@ -1171,17 +1171,15 @@ int ClusterInfo::createCollectionCoordinator(std::string const& databaseName,
       } else {
         LOG_TOPIC(ERR, Logger::CLUSTER) << "Could not get agency dump!";
       }
-    } else {
-      errorMsg += std::string("\nClientId ") + res._clientId;
-      errorMsg += std::string("\n") + __FILE__ + std::to_string(__LINE__);
-      errorMsg += std::string("\n") + res.errorMessage();
-      errorMsg += std::string("\n") + res.errorDetails();
-      errorMsg += std::string("\n") + res.body();
-      events::CreateCollection(
-        name, TRI_ERROR_CLUSTER_COULD_NOT_CREATE_COLLECTION_IN_PLAN);
-      return TRI_ERROR_CLUSTER_COULD_NOT_CREATE_COLLECTION_IN_PLAN;
     }
-    
+    errorMsg += std::string("\nClientId ") + res._clientId;
+    errorMsg += std::string("\n") + __FILE__ + std::to_string(__LINE__);
+    errorMsg += std::string("\n") + res.errorMessage();
+    errorMsg += std::string("\n") + res.errorDetails();
+    errorMsg += std::string("\n") + res.body();
+    events::CreateCollection(
+      name, TRI_ERROR_CLUSTER_COULD_NOT_CREATE_COLLECTION_IN_PLAN);
+    return TRI_ERROR_CLUSTER_COULD_NOT_CREATE_COLLECTION_IN_PLAN;
   }
 
   // Update our cache:
@@ -1210,6 +1208,8 @@ int ClusterInfo::createCollectionCoordinator(std::string const& databaseName,
             << ": database: " << databaseName << ", collId:" << collectionID
             << "\njson: " << json.toString()
             << "\ntransaction sent to agency: " << transaction.toJson();
+
+        // Put an agency dump into the log:
         AgencyCommResult ag = ac.getValues("");
         if (ag.successful()) {
           LOG_TOPIC(ERR, Logger::CLUSTER) << "Agency dump:\n"
@@ -1217,6 +1217,21 @@ int ClusterInfo::createCollectionCoordinator(std::string const& databaseName,
         } else {
           LOG_TOPIC(ERR, Logger::CLUSTER) << "Could not get agency dump!";
         }
+
+        // Now we ought to remove the collection again in the Plan:
+        AgencyOperation removeCollection(
+            "Plan/Collections/" + databaseName + "/" + collectionID,
+            AgencySimpleOperationType::DELETE_OP);
+        AgencyOperation increaseVersion("Plan/Version",
+                                        AgencySimpleOperationType::INCREMENT_OP);
+        AgencyWriteTransaction transaction;
+
+        transaction.operations.push_back(removeCollection);
+        transaction.operations.push_back(increaseVersion);
+
+        // This is a best effort, in the worst case the collection stays:
+        ac.sendTransactionWithFailover(transaction);
+
         events::CreateCollection(name, TRI_ERROR_CLUSTER_TIMEOUT);
         return setErrormsg(TRI_ERROR_CLUSTER_TIMEOUT, errorMsg);
       }
