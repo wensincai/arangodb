@@ -781,17 +781,6 @@ void Supervision::shrinkCluster() {
       return;
     }
 
-    // mop: any failed server is first considered useless and may be cleared
-    // from the list later on :O
-    std::vector<std::string> uselessFailedServers;
-    auto failedPivot = std::partition(
-        availServers.begin(), availServers.end(), [this](std::string server) {
-          return serverHealth(server) != HEALTH_STATUS_FAILED;
-        });
-    std::move(failedPivot, availServers.end(),
-              std::back_inserter(uselessFailedServers));
-    availServers.erase(failedPivot, availServers.end());
-
     /**
      * mop: TODO instead of using Plan/Collections we should watch out for
      * Plan/ReplicationFactor and Current...when the replicationFactor is not
@@ -820,48 +809,9 @@ void Supervision::shrinkCluster() {
             << collptr.first << ": " << e.what();
           return;
         }
-        if (uselessFailedServers.size() > 0) {
-          try {
-            auto const& shards =
-                (*collptr.second)("shards").children();
-            for (auto const& shard : shards) {
-              auto const& children = shard.second->children();
-              for (size_t i = 0; i < children.size(); i++) {
-                auto const& server =
-                    children.at(std::to_string(i))->getString();
-                auto found = std::find(uselessFailedServers.begin(),
-                                       uselessFailedServers.end(), server);
-
-                bool isLeader = i == 0;
-                if (found != uselessFailedServers.end() &&
-                    (isLeader || replFact >= availServers.size())) {
-                  // mop: apparently it has been a lie :O it is not useless
-                  uselessFailedServers.erase(found);
-                }
-              }
-            }
-          } catch (std::exception const& e) {
-            LOG_TOPIC(WARN, Logger::SUPERVISION)
-                << "Cannot retrieve shard information for " << collptr.first
-                << ": " << e.what();
-          } catch (...) {
-            LOG_TOPIC(WARN, Logger::SUPERVISION)
-                << "Cannot retrieve shard information for " << collptr.first;
-          }
-        }
       }
     }
 
-    if (uselessFailedServers.size() > 0) {
-      // Schedule last server for cleanout
-
-      LOG_TOPIC(INFO, Logger::SUPERVISION) << "not starting RemoveServer job "
-        "because it is deleted.";
-#warning Disabled because RemoveServer job is deleted.
-      //RemoveServer(_snapshot, _agent, std::to_string(_jobId++), "supervision",
-      //             uselessFailedServers.back()).run();
-      return;
-    }
     // mop: do not account any failedservers in this calculation..the ones
     // having
     // a state of failed still have data of interest to us! We wait indefinately
