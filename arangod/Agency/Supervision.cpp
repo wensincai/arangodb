@@ -289,13 +289,14 @@ std::vector<check_t> Supervision::checkDBServers() {
     
   if (!todelete.empty()) {
     query_t del = std::make_shared<Builder>();
-    { VPackArrayBuilder a(del.get());
+
       { VPackArrayBuilder aa(del.get());
         { VPackArrayBuilder aaa(del.get());
           for (auto const& srv : todelete) {
-            del->add(VPackValue(_agencyPrefix + healthPrefix + srv));
-            { VPackArrayBuilder aaaa(del.get());                     
-              del->add("op", VPackValue("delete")); }}}}}
+            { VPackObjectBuilder aaaa(del.get());
+              del->add(VPackValue(_agencyPrefix + healthPrefix + srv));
+              { VPackObjectBuilder aaaaa(del.get());            
+                del->add("op", VPackValue("delete")); }}}}}
     _agent->write(del);
   }
 
