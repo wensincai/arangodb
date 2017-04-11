@@ -805,6 +805,58 @@ describe('Cluster sync', function() {
       db._useDatabase('test');
       expect(db._collection('s100001').isLeader()).to.equal(true);
     });
+    it('should kill any unplanned server from current', function() {
+      let collection = db._create('s100001');
+      collection.assumeLeadership();
+      collection.addFollower('test');
+      collection.addFollower('test2');
+      let plan = {
+        test: {
+          "100001": {
+            "deleted": false,
+            "doCompact": true,
+            "id": "100001",
+            "indexBuckets": 8,
+            "indexes": [
+              {
+                "fields": [
+                  "_key"
+                ],
+                "id": "0",
+                "sparse": false,
+                "type": "primary",
+                "unique": true
+              }
+            ],
+            "isSystem": false,
+            "isVolatile": false,
+            "journalSize": 1048576,
+            "keyOptions": {
+              "allowUserKeys": true,
+              "type": "traditional"
+            },
+            "name": "testi",
+            "numberOfShards": 1,
+            "replicationFactor": 2,
+            "shardKeys": [
+              "_key"
+            ],
+            "shards": {
+              "s100001": [
+                "repltest",
+                "test2",
+              ]
+            },
+            "status": 2,
+            "type": 2,
+            "waitForSync": false
+          }
+        }
+      };
+      cluster.executePlanForCollections(plan);
+      db._useDatabase('test');
+      expect(collection.getFollowers()).to.deep.equal(['test2']);
+    });
   });
   describe('Update current database', function() {
     beforeEach(function() {
