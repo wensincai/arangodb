@@ -288,18 +288,49 @@ std::string Job::findNonblockedCommonHealthyInSyncFollower( // Which is in "GOOD
 
   std::map<std::string,size_t> currentServers;
   for (const auto& clone : cs) {
-    auto shardPath =
+    auto currentShardPath =
       curColPrefix + db + "/" + clone.collection + "/"
       + clone.shard + "/servers";
+    auto plannedShardPath =
+      planColPrefix + db + "/" + clone.collection + "/shards/"
+      + clone.shard;
     size_t i = 0;
-    for (const auto& server : VPackArrayIterator(snap(shardPath).getArray())) {
+    for (const auto& server : VPackArrayIterator(snap(currentShardPath).getArray())) {
       auto id = server.copyString();
-      if (i++ > 0) { // Skip leader
-        if (good[id] &&   // Good condition
-            !snap.has(blockedServersPrefix + id) && // Not blocked
-            ++currentServers[id] == nclones) { 
-          return server.copyString();
+      if (i++ == 0) {
+        // Skip leader
+        continue;
+      }
+
+      if (!good[id]) {
+        // Skip unhealthy servers
+        continue;
+      }
+
+      if (snap.has(blockedServersPrefix + id)) {
+        // server is blocked
+        continue;
+      }
+
+      // check if it is also part of the plan...because if not the soon to be leader
+      // will drop the collection
+      bool found = false;
+      for (const auto& plannedServer : VPackArrayIterator(snap(plannedShardPath).getArray())) {
+        if (plannedServer == server) {
+          found = true;
+          continue;
         }
+      }
+
+      if (!found) {
+        continue;
+      }
+
+      // increment a counter for this server
+      // and in case it is applicable for ALL our distributeLikeShards
+      // finally return it :)
+      if (++currentServers[id] == nclones) {
+        return id;
       }
     }
   }

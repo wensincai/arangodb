@@ -814,6 +814,26 @@ function executePlanForCollections(plannedCollections) {
                 // "_" + ourselves. See below under "Drop local shards"
                 // to see the proper handling of this case. Place is marked
                 // with *** in comments.
+
+                if (shouldBeLeader) {
+                  if (!localCollections[shardName].isLeader) {
+                    collection.assumeLeadership();
+                  } else {
+                    // would not harm in assumeLeadership situation but
+                    // in its current implementation assumeLeadership will reset all
+                    // followers...so we can save some work here :S
+                    let currentFollowers = collection.getFollowers();
+                    let plannedFollowers = plannedServers.slice(1);
+                    let removedFollowers = currentFollowers.filter(follower => {
+                      return plannedServers.indexOf(follower) === -1;
+                    });
+                    removedFollowers.forEach(removedFollower => {
+                      collection.removeFollower(removedFollower);
+                    });
+                  }
+                } else {
+
+                }
                 if (!shouldBeLeader && localCollections[shardName].isLeader) {
                   collection.leaderResign();
                 } else if (shouldBeLeader &&

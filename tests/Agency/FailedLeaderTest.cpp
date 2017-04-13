@@ -938,6 +938,65 @@ SECTION("when everything is finished there should be proper cleanup") {
   failedLeader.run();
   Verify(Method(mockAgent, write));
 }
+
+SECTION("a failedleader must not take a follower into account that is in sync but has been dropped out of the plan") {
+  std::string jobId = "1";
+
+  TestStructureType createTestStructure = [&](Slice const& s, std::string const& path) {
+    std::unique_ptr<Builder> builder(new Builder());
+    if (s.isObject()) {
+      VPackObjectBuilder b(builder.get());
+      for (auto const& it: VPackObjectIterator(s)) {
+        auto childBuilder = createTestStructure(it.value, path + "/" + it.key.copyString());
+        if (childBuilder) {
+          builder->add(it.key.copyString(), childBuilder->slice());
+        }
+      }
+      if (path == "/arango/Target/ToDo") {
+        builder->add("1", createBuilder(todo).slice());
+      }
+    } else {
+      if (path == "/arango/Current/Collections/" + DATABASE + "/" + COLLECTION + "/" + SHARD + "/servers") {
+        // follower2 in sync
+        VPackArrayBuilder a(builder.get());
+        builder->add(VPackValue(SHARD_LEADER));
+        builder->add(VPackValue(SHARD_FOLLOWER2));
+      } else if (path == "/arango/Plan/Collections/" + DATABASE + "/" + COLLECTION + "/shards/" + SHARD) {
+        // but not part of the plan => will drop collection on next occasion
+        VPackArrayBuilder a(builder.get());
+        builder->add(VPackValue(SHARD_LEADER));
+        builder->add(VPackValue(SHARD_FOLLOWER1));
+      } else {
+        builder->add(s);
+      }
+    }
+    return builder;
+  };
+  auto builder = createTestStructure(baseStructure.toBuilder().slice(), "");
+  REQUIRE(builder);
+  INFO("Teststructure: " << builder->toJson());
+  Node agency = createNodeFromBuilder(*builder);
+
+  Mock<AgentInterface> mockAgent;
+  When(Method(mockAgent, transact)).AlwaysDo([&](query_t const& q) -> trans_ret_t {
+    INFO("Transaction: " << q->slice().toJson());
+    // must NOT be called!
+    REQUIRE(false);
+    return fakeTransResult;
+  });
+  When(Method(mockAgent, waitFor)).AlwaysReturn(AgentInterface::raft_commit_t::OK);
+  AgentInterface &agent = mockAgent.get();
+
+  // new server will randomly be selected...so seed the random number generator
+  srand(1);
+  auto failedLeader = FailedLeader(
+    agency("arango"),
+    &agent,
+    JOB_STATUS::TODO,
+    jobId
+  );
+  failedLeader.start();
+}
 }
 }
 }
