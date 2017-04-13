@@ -2140,9 +2140,11 @@ ClusterMethods::persistCollectionInAgency(LogicalCollection* col) {
     CollectionNameResolver resolver(col->vocbase());
     TRI_voc_cid_t otherCid =
         resolver.getCollectionIdCluster(distributeShardsLike);
+
     if (otherCid != 0) {
       std::string otherCidString 
           = arangodb::basics::StringUtils::itoa(otherCid);
+
       try {
         std::shared_ptr<LogicalCollection> collInfo =
             ci->getCollection(col->dbName(), otherCidString);
@@ -2159,11 +2161,12 @@ ClusterMethods::persistCollectionInAgency(LogicalCollection* col) {
             }
           }
         }
-      } catch (...) {
-      }
+      } catch (...) {}
+      
       if (chainOfDistributeShardsLike) {
         THROW_ARANGO_EXCEPTION(TRI_ERROR_CLUSTER_CHAIN_OF_DISTRIBUTESHARDSLIKE);
       }
+
       col->distributeShardsLike(otherCidString);
     } else {
       THROW_ARANGO_EXCEPTION(TRI_ERROR_CLUSTER_UNKNOWN_DISTRIBUTESHARDSLIKE);

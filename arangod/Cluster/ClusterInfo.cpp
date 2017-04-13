@@ -1054,6 +1054,14 @@ int ClusterInfo::createCollectionCoordinator(std::string const& databaseName,
   std::string const name =
       arangodb::basics::VelocyPackHelper::getStringValue(json, "name", "");
 
+  std::shared_ptr<ShardMap> otherCidShardMap = nullptr;
+  if (json.hasKey("distributeShardsLike")) {
+    auto const otherCidString = json.get("distributeShardsLike").copyString();
+    if (!otherCidString.empty()) {
+      otherCidShardMap = getCollection(databaseName, otherCidString)->shardIds();
+    }
+  }
+
   {
     // check if a collection with the same name is already planned
     loadPlan();
@@ -1148,7 +1156,7 @@ int ClusterInfo::createCollectionCoordinator(std::string const& databaseName,
   AgencyOperation increaseVersion("Plan/Version",
                                   AgencySimpleOperationType::INCREMENT_OP);
 
-  AgencyPrecondition precondition = AgencyPrecondition(
+  AgencyPrecondition notexisting = AgencyPrecondition(
       "Plan/Collections/" + databaseName + "/" + collectionID,
       AgencyPrecondition::Type::EMPTY, true);
 
@@ -1156,7 +1164,16 @@ int ClusterInfo::createCollectionCoordinator(std::string const& databaseName,
 
   transaction.operations.push_back(createCollection);
   transaction.operations.push_back(increaseVersion);
-  transaction.preconditions.push_back(precondition);
+  transaction.preconditions.push_back(notexisting);
+
+  // Any of the shards locked?
+  if (otherCidShardMap != nullptr) {
+    for (auto const& shard : *otherCidShardMap) {
+      transaction.preconditions.push_back(
+        AgencyPrecondition("Supervision/Shards/" + shard.first,
+                           AgencyPrecondition::Type::EMPTY, true));
+    }
+  }
 
   AgencyCommResult res = ac.sendTransactionWithFailover(transaction);
 
