@@ -45,7 +45,6 @@ const db = arangodb.db;
 const ArangoClusterControl = require('@arangodb/cluster');
 const request = require('@arangodb/request');
 const actions = require('@arangodb/actions');
-const random = require('lodash/random');
 const shuffle = require('lodash/shuffle');
 const zip = require('lodash/zip');
 
@@ -712,7 +711,7 @@ function downloadServiceBundleFromCoordinator (coordId, mount, checksum) {
     'GET',
     `/_api/foxx/bundle${querystringify({mount})}`,
     null,
-    {'if-match': `"${checksum}"`}
+    checksum ? {'if-match': `"${checksum}"`} : undefined
   ]])[0];
   if (response.headers['x-arango-response-code'].startsWith('404')) {
     return null;
@@ -805,6 +804,18 @@ function install (serviceInfo, mount, options = {}) {
   const service = _install(tempServicePath, mount, options);
   propagateServiceReplaced(service);
   return service;
+}
+
+function installLocal (mount, coordIds) {
+  for (const coordId of coordIds) {
+    const filename = downloadServiceBundleFromCoordinator(coordId, mount);
+    if (filename) {
+      extractServiceBundle(filename, FoxxService.basePath(mount), true);
+      reloadRouting();
+      return true;
+    }
+  }
+  return false;
 }
 
 function uninstall (mount, options = {}) {
@@ -940,6 +951,7 @@ function listJson () {
 // Exports
 
 exports.install = install;
+exports._installLocal = installLocal;
 exports.uninstall = uninstall;
 exports.replace = replace;
 exports.upgrade = upgrade;
@@ -957,6 +969,7 @@ exports.installedServices = installedServices;
 // Exported internals
 // -------------------------------------------------
 
+exports._reloadRouting = reloadRouting;
 exports.reloadInstalledService = reloadInstalledService;
 exports.ensureRouted = ensureServiceLoaded;
 exports.initializeFoxx = initLocalServiceMap;

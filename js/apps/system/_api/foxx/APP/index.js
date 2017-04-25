@@ -10,6 +10,7 @@ const errors = require('@arangodb').errors;
 const jsonml2xml = require('@arangodb/util').jsonml2xml;
 const swaggerJson = require('@arangodb/foxx/legacy/swagger').swaggerJson;
 const FoxxManager = require('@arangodb/foxx/manager');
+const FoxxService = require('@arangodb/foxx/service');
 const createRouter = require('@arangodb/foxx/router');
 const reporters = Object.keys(require('@arangodb/mocha').reporters);
 const schemas = require('./schemas');
@@ -446,9 +447,25 @@ const localRouter = createRouter();
 router.use('/_local', localRouter);
 
 localRouter.post((req, res) => {
-  res.throw('not implemented');
+  const result = {};
+  for (const mount of Object.keys(req.body)) {
+    const coordIds = req.body[mount];
+    result[mount] = FoxxManager._installLocal(mount, coordIds);
+  }
+  res.json(result);
 })
 .body(joi.object());
+
+localRouter.post('/service', (req, res) => {
+  FoxxManager._reloadRouting();
+})
+.queryParam('mount', schemas.mount);
+
+localRouter.delete('/service', (req, res) => {
+  // TODO delete service bundle and files
+  FoxxManager._reloadRouting();
+})
+.queryParam('mount', schemas.mount);
 
 localRouter.get('/status', (req, res) => {
   res.json({
@@ -457,16 +474,14 @@ localRouter.get('/status', (req, res) => {
 });
 
 localRouter.get('/checksums', (req, res) => {
-  res.throw('not implemented');
+  const mounts = req.queryParams.mount;
+  const checksums = {};
+  for (const mount of mounts) {
+    try {
+      checksums[mount] = FoxxService.checksum(mount);
+    } catch (e) {
+    }
+  }
+  res.json(checksums);
 })
 .queryParam('mount', joi.array().items(schemas.mount));
-
-localRouter.post('/service', (req, res) => {
-  res.throw('not implemented');
-})
-.queryParam('mount', schemas.mount);
-
-localRouter.delete('/service', (req, res) => {
-  res.throw('not implemented');
-})
-.queryParam('mount', schemas.mount);
