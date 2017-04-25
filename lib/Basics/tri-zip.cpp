@@ -374,10 +374,11 @@ int TRI_ZipFile(char const* filename, char const* dir,
 uint32_t TRI_Adler32(char const* filename) {
   int fd;
 
-  fd = open(filename, O_RDONLY);
+  fd = TRI_OPEN(filename, O_RDONLY);
   if (fd < 0) {
     return 0;
   }
+  TRI_DEFER(TRI_CLOSE(fd));
 
   struct TRI_STAT statbuf;
   TRI_FSTAT(fd, &statbuf);
