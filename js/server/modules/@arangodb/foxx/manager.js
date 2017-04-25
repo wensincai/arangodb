@@ -97,7 +97,7 @@ function getPeerCoordinatorIds () {
 }
 
 function parallelClusterRequests (requests) {
-  if (!requests.length) {
+  if (requests.length === 0) {
     return [];
   }
   const options = {coordTransactionID: global.ArangoClusterComm.getId()};
