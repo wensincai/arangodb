@@ -50,9 +50,17 @@
     require('@arangodb/foxx/manager')._startup(isFoxxmaster);
     require('@arangodb/tasks').register({
       id: 'self-heal',
-      offset: 1,
+      isSystem: true,
+      period: 0.1, // secs
       command: function () {
-        require('@arangodb/foxx/manager')._selfHeal(isFoxxmaster);
+        const FoxxManager = require('@arangodb/foxx/manager');
+        const isReady = FoxxManager._isClusterReady();
+        if (!isReady) {
+          return;
+        }
+        require('@arangodb/tasks').unregister('self-heal');
+        const isFoxxmaster = global.ArangoServerState.isFoxxmaster();
+        FoxxManager._selfHeal(isFoxxmaster);
         global.KEY_SET('foxx', 'ready', true);
       }
     });

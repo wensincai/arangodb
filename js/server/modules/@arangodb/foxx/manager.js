@@ -96,6 +96,15 @@ function getPeerCoordinatorIds () {
   return getAllCoordinatorIds().filter((id) => id !== myId);
 }
 
+function isClusterReadyForBusiness () {
+  const coordIds = getPeerCoordinatorIds();
+  return parallelClusterRequests(function * () {
+    for (const coordId of coordIds) {
+      yield [coordId, 'GET', '/_api/foxx/_local/status'];
+    }
+  }()).every(response => response.statusCode === 200);
+}
+
 function parallelClusterRequests (requests) {
   if (requests.length === 0) {
     return [];
@@ -113,14 +122,14 @@ function parallelClusterRequests (requests) {
         typeof body === 'string'
         ? body
         : JSON.stringify(body)
-      ) : null,
+      ) : undefined,
       headers || {},
       options
     );
     pending++;
   }
   delete options.clientTransactionID;
-  return ArangoClusterControl.wait(options, pending);
+  return ArangoClusterControl.wait(options, pending, true);
 }
 
 function isFoxxmasterReady () {
@@ -133,6 +142,9 @@ function isFoxxmasterReady () {
     'GET',
     '/_api/foxx/_local/status'
   ]])[0];
+  if (response.statusCode >= 400) {
+    return false;
+  }
   return JSON.parse(response.body).ready;
 }
 
@@ -984,6 +996,7 @@ exports._selfHeal = selfHeal;
 exports._createServiceBundle = createServiceBundle;
 exports._resetCache = () => GLOBAL_SERVICE_MAP.clear();
 exports._mountPoints = getMountPoints;
+exports._isClusterReady = isClusterReadyForBusiness;
 exports.listJson = listJson;
 
 // -------------------------------------------------
