@@ -631,7 +631,7 @@ module.exports =
         mount = '/' + mount;
       }
       const bundleName = mount.substr(1).replace(/[-.:/]/g, '_');
-      return path.join(fs.getTempPath(), internal.db._name(), bundleName + '.zip');
+      return path.join(FoxxService.rootPath(mount), bundleName + '.zip');
     }
 
     static get _startupPath () {

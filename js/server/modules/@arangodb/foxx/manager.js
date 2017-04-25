@@ -656,7 +656,20 @@ function _uninstall (mount, options = {}) {
   `);
   GLOBAL_SERVICE_MAP.get(db._name()).delete(mount);
   const servicePath = FoxxService.basePath(mount);
-  fs.removeDirectoryRecursive(servicePath, options.force);
+  if (fs.exists(servicePath)) {
+    fs.removeDirectoryRecursive(servicePath, options.force);
+  }
+  const bundlePath = FoxxService.bundlePath(mount);
+  if (fs.exists(bundlePath)) {
+    try {
+      fs.remove(bundlePath);
+    } catch (e) {
+      if (!options.force) {
+        throw e;
+      }
+      warn(e);
+    }
+  }
   return service;
 }
 
