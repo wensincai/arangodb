@@ -466,6 +466,11 @@ function propagateServiceReconfigured (service) { // okay-ish
 
 function initLocalServiceMap () {
   const localServiceMap = new Map();
+  for (const mount of SYSTEM_SERVICE_MOUNTS) {
+    const serviceDefinition = utils.getServiceDefinition(mount) || {mount};
+    const service = FoxxService.create(serviceDefinition);
+    localServiceMap.set(service.mount, service);
+  }
   for (const serviceDefinition of utils.getStorage().all()) {
     const service = FoxxService.create(serviceDefinition);
     localServiceMap.set(service.mount, service);
