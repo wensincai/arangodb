@@ -696,7 +696,7 @@ function _uninstall (mount, options = {}) {
   GLOBAL_SERVICE_MAP.get(db._name()).delete(mount);
   const servicePath = FoxxService.basePath(mount);
   if (fs.exists(servicePath)) {
-    fs.removeDirectoryRecursive(servicePath, options.force);
+    fs.removeDirectoryRecursive(servicePath, true); // TODO catch exception if options.force
   }
   const bundlePath = FoxxService.bundlePath(mount);
   if (fs.exists(bundlePath)) {
