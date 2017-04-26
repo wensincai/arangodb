@@ -127,12 +127,12 @@ function isClusterReadyForBusiness () {
 }
 
 function parallelClusterRequests (requests) {
-  if (requests.length === 0) {
-    return [];
-  }
-  const options = {coordTransactionID: global.ArangoClusterComm.getId()};
   let pending = 0;
+  let options;
   for (const [coordId, method, url, body, headers] of requests) {
+    if (!options) {
+      options = {coordTransactionID: global.ArangoClusterComm.getId()};
+    }
     options.clientTransactionID = global.ArangoClusterInfo.uniqid();
     global.ArangoClusterComm.asyncRequest(
       method,
@@ -148,6 +148,9 @@ function parallelClusterRequests (requests) {
       options
     );
     pending++;
+  }
+  if (!pending) {
+    return [];
   }
   delete options.clientTransactionID;
   return ArangoClusterControl.wait(options, pending, true);
