@@ -105,35 +105,39 @@ router.get((req, res) => {
   Fetches a list of services installed in the current database.
 `);
 
-router.post(prepareServiceRequestBody, (req, res) => {
-  const mount = req.queryParams.mount;
-  FoxxManager.install(req.body.source, mount, _.omit(req.queryParams, ['mount', 'development']));
-  if (req.body.configuration) {
-    FoxxManager.setConfiguration(mount, {configuration: req.body.configuration, replace: true});
-  }
-  if (req.body.dependencies) {
-    FoxxManager.setDependencies(mount, {dependencies: req.body.dependencies, replace: true});
-  }
-  if (req.queryParams.development) {
-    FoxxManager.development(mount);
-  }
-  const service = FoxxManager.lookupService(mount);
-  res.json(serviceToJson(service));
-})
-.body(schemas.service, ['multipart/form-data', 'application/json'], `Service to be installed.`)
-.queryParam('mount', schemas.mount, `Mount path the service should be installed at.`)
-.queryParam('development', schemas.flag.default(false), `Enable development mode.`)
-.queryParam('setup', schemas.flag.default(true), `Run the service's setup script.`)
-.queryParam('legacy', schemas.flag.default(false), `Service should be installed in 2.8 legacy compatibility mode.`)
-.response(201, schemas.fullInfo, `Description of the installed service.`)
-.summary(`Install new service`)
-.description(dd`
-  Installs the given new service at the given mount path.
+if (FoxxManager.isFoxxmaster()) {
+  router.post(prepareServiceRequestBody, (req, res) => {
+    const mount = req.queryParams.mount;
+    FoxxManager.install(req.body.source, mount, _.omit(req.queryParams, ['mount', 'development']));
+    if (req.body.configuration) {
+      FoxxManager.setConfiguration(mount, {configuration: req.body.configuration, replace: true});
+    }
+    if (req.body.dependencies) {
+      FoxxManager.setDependencies(mount, {dependencies: req.body.dependencies, replace: true});
+    }
+    if (req.queryParams.development) {
+      FoxxManager.development(mount);
+    }
+    const service = FoxxManager.lookupService(mount);
+    res.json(serviceToJson(service));
+  })
+  .body(schemas.service, ['multipart/form-data', 'application/json'], `Service to be installed.`)
+  .queryParam('mount', schemas.mount, `Mount path the service should be installed at.`)
+  .queryParam('development', schemas.flag.default(false), `Enable development mode.`)
+  .queryParam('setup', schemas.flag.default(true), `Run the service's setup script.`)
+  .queryParam('legacy', schemas.flag.default(false), `Service should be installed in 2.8 legacy compatibility mode.`)
+  .response(201, schemas.fullInfo, `Description of the installed service.`)
+  .summary(`Install new service`)
+  .description(dd`
+    Installs the given new service at the given mount path.
 
-  The service source can be specified as either an absolute local file path,
-  a fully qualified URL reachable from the database server,
-  or as a binary zip file using multipart form upload.
-`);
+    The service source can be specified as either an absolute local file path,
+    a fully qualified URL reachable from the database server,
+    or as a binary zip file using multipart form upload.
+  `);
+} else {
+  router.post(FoxxManager.proxyToFoxxmaster);
+}
 
 const instanceRouter = createRouter();
 instanceRouter.use((req, res, next) => {
@@ -160,73 +164,79 @@ serviceRouter.get((req, res) => {
   Fetches detailed information for the service at the given mount path.
 `);
 
-serviceRouter.patch(prepareServiceRequestBody, (req, res) => {
-  const mount = req.queryParams.mount;
-  FoxxManager.upgrade(req.body.source, mount, _.omit(req.queryParams, ['mount']));
-  if (req.body.configuration) {
-    FoxxManager.setConfiguration(mount, {configuration: req.body.configuration, replace: false});
-  }
-  if (req.body.dependencies) {
-    FoxxManager.setDependencies(mount, {dependencies: req.body.dependencies, replace: false});
-  }
-  const service = FoxxManager.lookupService(mount);
-  res.json(serviceToJson(service));
-})
-.body(schemas.service, ['multipart/form-data', 'application/json'], `Service to be installed.`)
-.queryParam('teardown', schemas.flag.default(false), `Run the old service's teardown script.`)
-.queryParam('setup', schemas.flag.default(true), `Run the new service's setup script.`)
-.queryParam('legacy', schemas.flag.default(false), `Service should be installed in 2.8 legacy compatibility mode.`)
-.response(200, schemas.fullInfo, `Description of the new service.`)
-.summary(`Upgrade service`)
-.description(dd`
-  Installs the given new service on top of the service currently installed at the given mount path.
-  This is only recommended for switching between different versions of the same service.
+if (FoxxManager.isFoxxmaster()) {
+  serviceRouter.patch(prepareServiceRequestBody, (req, res) => {
+    const mount = req.queryParams.mount;
+    FoxxManager.upgrade(req.body.source, mount, _.omit(req.queryParams, ['mount']));
+    if (req.body.configuration) {
+      FoxxManager.setConfiguration(mount, {configuration: req.body.configuration, replace: false});
+    }
+    if (req.body.dependencies) {
+      FoxxManager.setDependencies(mount, {dependencies: req.body.dependencies, replace: false});
+    }
+    const service = FoxxManager.lookupService(mount);
+    res.json(serviceToJson(service));
+  })
+  .body(schemas.service, ['multipart/form-data', 'application/json'], `Service to be installed.`)
+  .queryParam('teardown', schemas.flag.default(false), `Run the old service's teardown script.`)
+  .queryParam('setup', schemas.flag.default(true), `Run the new service's setup script.`)
+  .queryParam('legacy', schemas.flag.default(false), `Service should be installed in 2.8 legacy compatibility mode.`)
+  .response(200, schemas.fullInfo, `Description of the new service.`)
+  .summary(`Upgrade service`)
+  .description(dd`
+    Installs the given new service on top of the service currently installed at the given mount path.
+    This is only recommended for switching between different versions of the same service.
 
-  The service source can be specified as either an absolute local file path,
-  a fully qualified URL reachable from the database server,
-  or as a binary zip file using multipart form upload.
-`);
+    The service source can be specified as either an absolute local file path,
+    a fully qualified URL reachable from the database server,
+    or as a binary zip file using multipart form upload.
+  `);
 
-serviceRouter.put(prepareServiceRequestBody, (req, res) => {
-  const mount = req.queryParams.mount;
-  FoxxManager.replace(req.body.source, mount, _.omit(req.queryParams, ['mount']));
-  if (req.body.configuration) {
-    FoxxManager.setConfiguration(mount, {configuration: req.body.configuration, replace: true});
-  }
-  if (req.body.dependencies) {
-    FoxxManager.setDependencies(mount, {dependencies: req.body.dependencies, replace: true});
-  }
-  const service = FoxxManager.lookupService(mount);
-  res.json(serviceToJson(service));
-})
-.body(schemas.service, ['multipart/form-data', 'application/json'], `Service to be installed.`)
-.queryParam('teardown', schemas.flag.default(true), `Run the old service's teardown script.`)
-.queryParam('setup', schemas.flag.default(true), `Run the new service's setup script.`)
-.queryParam('legacy', schemas.flag.default(false), `Service should be installed in 2.8 legacy compatibility mode.`)
-.response(200, schemas.fullInfo, `Description of the new service.`)
-.summary(`Replace service`)
-.description(dd`
-  Removes the service at the given mount path from the database and file system.
-  Then installs the given new service at the same mount path.
+  serviceRouter.put(prepareServiceRequestBody, (req, res) => {
+    const mount = req.queryParams.mount;
+    FoxxManager.replace(req.body.source, mount, _.omit(req.queryParams, ['mount']));
+    if (req.body.configuration) {
+      FoxxManager.setConfiguration(mount, {configuration: req.body.configuration, replace: true});
+    }
+    if (req.body.dependencies) {
+      FoxxManager.setDependencies(mount, {dependencies: req.body.dependencies, replace: true});
+    }
+    const service = FoxxManager.lookupService(mount);
+    res.json(serviceToJson(service));
+  })
+  .body(schemas.service, ['multipart/form-data', 'application/json'], `Service to be installed.`)
+  .queryParam('teardown', schemas.flag.default(true), `Run the old service's teardown script.`)
+  .queryParam('setup', schemas.flag.default(true), `Run the new service's setup script.`)
+  .queryParam('legacy', schemas.flag.default(false), `Service should be installed in 2.8 legacy compatibility mode.`)
+  .response(200, schemas.fullInfo, `Description of the new service.`)
+  .summary(`Replace service`)
+  .description(dd`
+    Removes the service at the given mount path from the database and file system.
+    Then installs the given new service at the same mount path.
 
-  The service source can be specified as either an absolute local file path,
-  a fully qualified URL reachable from the database server,
-  or as a binary zip file using multipart form upload.
-`);
+    The service source can be specified as either an absolute local file path,
+    a fully qualified URL reachable from the database server,
+    or as a binary zip file using multipart form upload.
+  `);
 
-serviceRouter.delete((req, res) => {
-  FoxxManager.uninstall(
-    req.queryParams.mount,
-    _.omit(req.queryParams, ['mount'])
-  );
-  res.status(204);
-})
-.queryParam('teardown', schemas.flag.default(true), `Run the service's teardown script.`)
-.response(204, null, `Empty response.`)
-.summary(`Uninstall service`)
-.description(dd`
-  Removes the service at the given mount path from the database and file system.
-`);
+  serviceRouter.delete((req, res) => {
+    FoxxManager.uninstall(
+      req.queryParams.mount,
+      _.omit(req.queryParams, ['mount'])
+    );
+    res.status(204);
+  })
+  .queryParam('teardown', schemas.flag.default(true), `Run the service's teardown script.`)
+  .response(204, null, `Empty response.`)
+  .summary(`Uninstall service`)
+  .description(dd`
+    Removes the service at the given mount path from the database and file system.
+  `);
+} else {
+  serviceRouter.patch(FoxxManager.proxyToFoxxmaster);
+  serviceRouter.put(FoxxManager.proxyToFoxxmaster);
+  serviceRouter.delete(FoxxManager.proxyToFoxxmaster);
+}
 
 const configRouter = createRouter();
 instanceRouter.use('/configuration', configRouter)
@@ -240,35 +250,40 @@ configRouter.get((req, res) => {
   Fetches the current configuration for the service at the given mount path.
 `);
 
-configRouter.patch((req, res) => {
-  const warnings = FoxxManager.setConfiguration(req.service.mount, {
-    configuration: req.body,
-    replace: false
-  });
-  const values = req.service.getConfiguration(true);
-  res.json({values, warnings});
-})
-.body(joi.object().required(), `Object mapping configuration names to values.`)
-.summary(`Update configuration options`)
-.description(dd`
-  Replaces the given service's configuration.
-  Any omitted options will be ignored.
-`);
+if (FoxxManager.isFoxxmaster()) {
+  configRouter.patch((req, res) => {
+    const warnings = FoxxManager.setConfiguration(req.service.mount, {
+      configuration: req.body,
+      replace: false
+    });
+    const values = req.service.getConfiguration(true);
+    res.json({values, warnings});
+  })
+  .body(joi.object().required(), `Object mapping configuration names to values.`)
+  .summary(`Update configuration options`)
+  .description(dd`
+    Replaces the given service's configuration.
+    Any omitted options will be ignored.
+  `);
 
-configRouter.put((req, res) => {
-  const warnings = FoxxManager.setConfiguration(req.service.mount, {
-    configuration: req.body,
-    replace: true
-  });
-  const values = req.service.getConfiguration(true);
-  res.json({values, warnings});
-})
-.body(joi.object().required(), `Object mapping configuration names to values.`)
-.summary(`Replace configuration options`)
-.description(dd`
-  Replaces the given service's configuration completely.
-  Any omitted options will be reset to their default values or marked as unconfigured.
-`);
+  configRouter.put((req, res) => {
+    const warnings = FoxxManager.setConfiguration(req.service.mount, {
+      configuration: req.body,
+      replace: true
+    });
+    const values = req.service.getConfiguration(true);
+    res.json({values, warnings});
+  })
+  .body(joi.object().required(), `Object mapping configuration names to values.`)
+  .summary(`Replace configuration options`)
+  .description(dd`
+    Replaces the given service's configuration completely.
+    Any omitted options will be reset to their default values or marked as unconfigured.
+  `);
+} else {
+  configRouter.patch(FoxxManager.proxyToFoxxmaster);
+  configRouter.put(FoxxManager.proxyToFoxxmaster);
+}
 
 const depsRouter = createRouter();
 instanceRouter.use('/dependencies', depsRouter)
@@ -282,35 +297,40 @@ depsRouter.get((req, res) => {
   Fetches the current dependencies for service at the given mount path.
 `);
 
-depsRouter.patch((req, res) => {
-  const warnings = FoxxManager.setDependencies(req.service.mount, {
-    dependencies: req.body,
-    replace: true
-  });
-  const values = req.service.getDependencies(true);
-  res.json({values, warnings});
-})
-.body(joi.object().required(), `Object mapping dependency aliases to mount paths.`)
-.summary(`Update dependency options`)
-.description(dd`
-  Replaces the given service's dependencies.
-  Any omitted dependencies will be ignored.
-`);
+if (FoxxManager.isFoxxmaster()) {
+  depsRouter.patch((req, res) => {
+    const warnings = FoxxManager.setDependencies(req.service.mount, {
+      dependencies: req.body,
+      replace: true
+    });
+    const values = req.service.getDependencies(true);
+    res.json({values, warnings});
+  })
+  .body(joi.object().required(), `Object mapping dependency aliases to mount paths.`)
+  .summary(`Update dependency options`)
+  .description(dd`
+    Replaces the given service's dependencies.
+    Any omitted dependencies will be ignored.
+  `);
 
-depsRouter.put((req, res) => {
-  const warnings = FoxxManager.setDependencies(req.service.mount, {
-    dependencies: req.body,
-    replace: true
-  });
-  const values = req.service.getDependencies(true);
-  res.json({values, warnings});
-})
-.body(joi.object().required(), `Object mapping dependency aliases to mount paths.`)
-.summary(`Replace dependency options`)
-.description(dd`
-  Replaces the given service's dependencies completely.
-  Any omitted dependencies will be disabled.
-`);
+  depsRouter.put((req, res) => {
+    const warnings = FoxxManager.setDependencies(req.service.mount, {
+      dependencies: req.body,
+      replace: true
+    });
+    const values = req.service.getDependencies(true);
+    res.json({values, warnings});
+  })
+  .body(joi.object().required(), `Object mapping dependency aliases to mount paths.`)
+  .summary(`Replace dependency options`)
+  .description(dd`
+    Replaces the given service's dependencies completely.
+    Any omitted dependencies will be disabled.
+  `);
+} else {
+  depsRouter.patch(FoxxManager.proxyToFoxxmaster);
+  depsRouter.put(FoxxManager.proxyToFoxxmaster);
+}
 
 const devRouter = createRouter();
 instanceRouter.use('/development', devRouter)

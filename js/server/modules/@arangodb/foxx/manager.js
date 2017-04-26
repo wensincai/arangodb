@@ -96,6 +96,27 @@ function getPeerCoordinatorIds () {
   return getAllCoordinatorIds().filter((id) => id !== myId);
 }
 
+function isFoxxmaster () {
+  if (!ArangoClusterControl.isCluster()) {
+    return true;
+  }
+  return global.ArangoServerState.isFoxxmaster();
+}
+
+function proxyToFoxxmaster (req, res) {
+  const coordId = getFoxmasterCoordinatorId();
+  const response = parallelClusterRequests([[
+    coordId,
+    req.method,
+    req.url,
+    req.rawBody,
+    req.headers
+  ]])[0];
+  res.statusCode = response.statusCode;
+  res.headers = response.headers;
+  res.body = response.rawBody;
+}
+
 function isClusterReadyForBusiness () {
   const coordIds = getPeerCoordinatorIds();
   return parallelClusterRequests(function * () {
@@ -986,6 +1007,8 @@ exports.installedServices = installedServices;
 // Exported internals
 // -------------------------------------------------
 
+exports.isFoxxmaster = isFoxxmaster;
+exports.proxyToFoxxmaster = proxyToFoxxmaster;
 exports._reloadRouting = reloadRouting;
 exports.reloadInstalledService = reloadInstalledService;
 exports.ensureRouted = ensureServiceLoaded;
