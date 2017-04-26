@@ -676,7 +676,6 @@ function _uninstall (mount, options = {}) {
     if (!options.force) {
       throw e;
     }
-    warn(e);
   }
   if (service && options.teardown !== false) {
     try {
