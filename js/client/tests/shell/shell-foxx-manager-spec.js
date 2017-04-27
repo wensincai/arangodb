@@ -18,7 +18,6 @@ describe('Foxx Manager', function () {
   describe('(CRUD operation) ', function () {
     const setupTeardownApp = fs.join(basePath, 'minimal-working-setup-teardown');
     const mount = '/testmount';
-    const checksum = '9d43c26';
     const prefix = mount.substr(1).replace(/[-.:/]/, '_');
     const setupCol = `${prefix}_setup_teardown`;
 
@@ -52,7 +51,7 @@ describe('Foxx Manager', function () {
           FILTER service.mount == ${mount}
           RETURN service
         `).next();
-        expect(s.checksum).to.equal(checksum);
+        expect(s.checksum).to.have.lengthOf(7);
       });
 
       it('should provide a bundle', function () {
@@ -60,7 +59,7 @@ describe('Foxx Manager', function () {
         const url = `${arango.getEndpoint().replace('tcp://', 'http://')}/_api/foxx/bundle?mount=${encodeURIComponent(mount)}`;
         const res = download(url);
         expect(res.code).to.equal(200);
-        expect(res.headers.etag).to.equal(`"${checksum}"`);
+        expect(res.headers.etag).to.have.lengthOf(7 + 2);// +2 because format = "checksum"
       });
 
       it('should run the setup script', function () {
