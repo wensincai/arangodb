@@ -494,7 +494,8 @@ localRouter.get('/status', (req, res) => {
 });
 
 localRouter.get('/checksums', (req, res) => {
-  const mounts = req.queryParams.mount;
+  const mountParam = req.queryParams.mount || [];
+  const mounts = Array.isArray(mountParam) ? mountParam : [mountParam];
   const checksums = {};
   for (const mount of mounts) {
     try {
@@ -504,4 +505,7 @@ localRouter.get('/checksums', (req, res) => {
   }
   res.json(checksums);
 })
-.queryParam('mount', joi.array().items(schemas.mount));
+.queryParam('mount', joi.alternatives(
+  joi.array().items(schemas.mount),
+  schemas.mount
+));

@@ -108,7 +108,7 @@ function proxyToFoxxmaster (req, res) {
   const response = parallelClusterRequests([[
     coordId,
     req.method,
-    req.url,
+    req._url.pathname + (req._url.search || ''),
     req.rawBody,
     req.headers
   ]])[0];
@@ -140,7 +140,7 @@ function parallelClusterRequests (requests) {
       db._name(),
       url,
       body ? (
-        typeof body === 'string'
+        typeof body === 'string' || body instanceof Buffer
         ? body
         : JSON.stringify(body)
       ) : undefined,
@@ -473,8 +473,9 @@ function propagateServiceDestroyed (service) { // okay-ish
 
 function propagateServiceReplaced (service) { // okay-ish
   const myId = getMyCoordinatorId();
-  parallelClusterRequests(function * () {
-    for (const coordId of getPeerCoordinatorIds()) {
+  const coordIds = getPeerCoordinatorIds();
+  const results = parallelClusterRequests(function * () {
+    for (const coordId of coordIds) {
       yield [
         coordId,
         'POST',
@@ -484,6 +485,11 @@ function propagateServiceReplaced (service) { // okay-ish
       ];
     }
   }());
+  for (const [coordId, result] of zip(coordIds, results)) {
+    if (result.statusCode >= 400) {
+      console.error(`Failed to propagate service ${service.mount} to coord ${coordId}`);
+    }
+  }
   reloadRouting();
 }
 
@@ -749,7 +755,7 @@ function downloadServiceBundleFromCoordinator (coordId, mount, checksum) {
   const response = parallelClusterRequests([[
     coordId,
     'GET',
-    `/_api/foxx/bundle${querystringify({mount})}`,
+    `/_api/foxx/bundle?${querystringify({mount})}`,
     null,
     checksum ? {'if-match': `"${checksum}"`} : undefined
   ]])[0];
@@ -815,10 +821,13 @@ function extractServiceBundle (archive, targetPath, deleteArchive) {
 function replaceLocalServiceFromTempBundle (mount, tempFile) {
   const bundlePath = FoxxService.bundlePath(mount);
   fs.makeDirectoryRecursive(path.dirname(bundlePath));
+  if (fs.exists(bundlePath)) {
+    fs.remove(bundlePath);
+  }
   fs.move(tempFile, bundlePath);
   const servicePath = FoxxService.basePath(mount);
   fs.makeDirectoryRecursive(path.dirname(servicePath));
-  extractServiceBundle(bundlePath, servicePath, true);
+  extractServiceBundle(bundlePath, servicePath);
 }
 
 // Exported functions for manipulating services
@@ -850,7 +859,7 @@ function installLocal (mount, coordIds) {
   for (const coordId of coordIds) {
     const filename = downloadServiceBundleFromCoordinator(coordId, mount);
     if (filename) {
-      extractServiceBundle(filename, FoxxService.basePath(mount), true);
+      replaceLocalServiceFromTempBundle(mount, filename);
       reloadRouting();
       return true;
     }

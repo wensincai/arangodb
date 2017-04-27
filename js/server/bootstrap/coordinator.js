@@ -44,7 +44,7 @@
   internal.loadStartup('server/bootstrap/routing.js').startup();
 
   if (internal.threadNumber === 0) {
-    global.KEYSPACE_CREATE('foxx');
+    global.KEYSPACE_CREATE('foxx', 1, true);
     global.KEY_SET('foxx', 'ready', false);
     const isFoxxmaster = global.ArangoServerState.isFoxxmaster();
     require('@arangodb/foxx/manager')._startup(isFoxxmaster);
