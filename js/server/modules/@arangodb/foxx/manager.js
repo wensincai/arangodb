@@ -129,11 +129,13 @@ function isClusterReadyForBusiness () {
 function parallelClusterRequests (requests) {
   let pending = 0;
   let options;
+  const order = [];
   for (const [coordId, method, url, body, headers] of requests) {
     if (!options) {
       options = {coordTransactionID: global.ArangoClusterComm.getId()};
     }
     options.clientTransactionID = global.ArangoClusterInfo.uniqid();
+    order.push(options.clientTransactionID);
     global.ArangoClusterComm.asyncRequest(
       method,
       `server:${coordId}`,
@@ -153,7 +155,10 @@ function parallelClusterRequests (requests) {
     return [];
   }
   delete options.clientTransactionID;
-  return ArangoClusterControl.wait(options, pending, true);
+  const results = ArangoClusterControl.wait(options, pending, true);
+  return results.sort(
+    (a, b) => order.indexOf(a.clientTransactionID) - order.indexOf(b.clientTransactionID)
+  );
 }
 
 function isFoxxmasterReady () {
