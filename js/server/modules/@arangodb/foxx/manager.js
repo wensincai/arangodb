@@ -317,7 +317,7 @@ function healMyself () {
     if (mount.startsWith('/_')) {
       continue;
     }
-    if (!checksum || checksum !== FoxxService.checksum(mount)) {
+    if (!checksum || checksum !== safeChecksum(mount)) {
       servicesINeedToFix.set(mount, checksum);
     }
   }
@@ -353,7 +353,7 @@ function healMyselfAndCoords () {
     actualChecksums.set(mount, checksum);
     coordsKnownToBeGoodSources.set(mount, []);
     coordsKnownToBeBadSources.set(mount, new Map());
-    if (!checksum || checksum !== FoxxService.checksum(mount)) {
+    if (!checksum || checksum !== safeChecksum(mount)) {
       checksumsINeedToFixLocally.push(mount);
     }
   }
@@ -380,7 +380,7 @@ function healMyselfAndCoords () {
   for (const mount of checksumsINeedToFixLocally) {
     const possibleSources = coordsKnownToBeGoodSources.get(mount);
     if (!possibleSources.length) {
-      const myChecksum = FoxxService.checksum(mount);
+      const myChecksum = checksum(mount);
       if (myChecksum) {
         serviceChecksumsToUpdateInCollection.set(mount, myChecksum);
         possibleSources.push(myId);
@@ -1000,6 +1000,14 @@ function listJson () {
     });
   }
   return json;
+}
+
+function safeChecksum (mount) {
+  try {
+    return FoxxService.checksum(mount);
+  } catch (e) {
+    return null;
+  }
 }
 
 // Exports
