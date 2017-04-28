@@ -521,8 +521,25 @@ function initLocalServiceMap () {
     localServiceMap.set(service.mount, service);
   }
   for (const serviceDefinition of utils.getStorage().all()) {
-    const service = FoxxService.create(serviceDefinition);
-    localServiceMap.set(service.mount, service);
+    try {
+      const service = FoxxService.create(serviceDefinition);
+      localServiceMap.set(service.mount, service);
+    } catch (e) {
+      console.warn(`Failed to load service ${serviceDefinition.mount}`);
+      if (fs.exists(FoxxService.servicePath(serviceDefinition.mount))) {
+        let err = e;
+        while (err) {
+          if (err.stack) {
+            console.errorLines(
+              err === e
+              ? err.stack
+              : `via ${err.stack}`
+            );
+          }
+          err = err.cause;
+        }
+      }
+    }
   }
   GLOBAL_SERVICE_MAP.set(db._name(), localServiceMap);
 }
@@ -842,7 +859,6 @@ function replaceLocalServiceFromTempBundle (mount, tempBundlePath) {
   extractServiceBundle(tempBundlePath, tempServicePath);
   _buildServiceInPath(mount, tempServicePath, tempBundlePath);
 }
-
 
 // Exported functions for manipulating services
 
