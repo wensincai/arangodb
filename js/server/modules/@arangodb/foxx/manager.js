@@ -893,6 +893,25 @@ function installLocal (mount, coordIds) {
   return false;
 }
 
+function uninstallLocal (mount) {
+  const servicePath = FoxxService.basePath(mount);
+  if (fs.exists(servicePath)) {
+    try {
+      fs.removeDirectoryRecursive(servicePath, true);
+    } catch (e) {
+      warn(e);
+    }
+  }
+  const bundlePath = FoxxService.bundlePath(mount);
+  if (fs.exists(bundlePath)) {
+    try {
+      fs.remove(bundlePath);
+    } catch (e) {
+      warn(e);
+    }
+  }
+}
+
 function uninstall (mount, options = {}) {
   ensureFoxxInitialized();
   const service = _uninstall(mount, options);
@@ -1037,6 +1056,7 @@ function safeChecksum (mount) {
 
 exports.install = install;
 exports._installLocal = installLocal;
+exports._uninstallLocal = uninstallLocal;
 exports.uninstall = uninstall;
 exports.replace = replace;
 exports.upgrade = upgrade;

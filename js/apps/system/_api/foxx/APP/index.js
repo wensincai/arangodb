@@ -482,7 +482,7 @@ localRouter.post('/service', (req, res) => {
 .queryParam('mount', schemas.mount);
 
 localRouter.delete('/service', (req, res) => {
-  // TODO delete service bundle and files
+  FoxxManager._uninstallLocal(req.queryParams.mount);
   FoxxManager._reloadRouting();
 })
 .queryParam('mount', schemas.mount);
