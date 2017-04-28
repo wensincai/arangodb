@@ -526,7 +526,7 @@ function initLocalServiceMap () {
       localServiceMap.set(service.mount, service);
     } catch (e) {
       console.warn(`Failed to load service ${serviceDefinition.mount}`);
-      if (fs.exists(FoxxService.servicePath(serviceDefinition.mount))) {
+      if (fs.exists(FoxxService.basePath(serviceDefinition.mount))) {
         let err = e;
         while (err) {
           if (err.stack) {
