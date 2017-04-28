@@ -256,7 +256,9 @@ function rebuildAllServiceBundles (updateDatabase, fixMissingChecksums) {
     if (mount.startsWith('/_')) {
       continue;
     }
-    createServiceBundle(mount);
+    if (!fs.exists(FoxxService.bundlePath(mount))) {
+      createServiceBundle(mount);
+    }
     if (fixMissingChecksums && !serviceDefinition.checksum) {
       servicesMissingChecksums.push({
         checksum: FoxxService.checksum(mount),
@@ -380,7 +382,7 @@ function healMyselfAndCoords () {
   for (const mount of checksumsINeedToFixLocally) {
     const possibleSources = coordsKnownToBeGoodSources.get(mount);
     if (!possibleSources.length) {
-      const myChecksum = checksum(mount);
+      const myChecksum = safeChecksum(mount);
       if (myChecksum) {
         serviceChecksumsToUpdateInCollection.set(mount, myChecksum);
         possibleSources.push(myId);
@@ -587,12 +589,14 @@ function patchManifestFile (servicePath, patchData) {
   fs.writeFileSync(filename, JSON.stringify(manifest, null, 2));
 }
 
-function _buildServiceInPath (serviceInfo, options = {}) { // okay-ish
-  const destPath = fs.getTempFile('services', false);
+function _prepareService (serviceInfo, options = {}) { // okay-ish
+  const tempServicePath = fs.getTempFile('services', false);
+  const tempBundlePath = fs.getTempFile('bundles', false);
   try {
     if (serviceInfo === 'EMPTY') {
       const generated = generator.generate(options);
-      generator.write(destPath, generated.files, generated.folders);
+      generator.write(tempServicePath, generated.files, generated.folders);
+      utils.zipDirectory(tempServicePath, tempBundlePath);
     } else {
       if (/^GIT:/i.test(serviceInfo)) {
         const splitted = serviceInfo.split(':');
@@ -603,11 +607,12 @@ function _buildServiceInPath (serviceInfo, options = {}) { // okay-ish
       }
       if (/^https?:/i.test(serviceInfo)) {
         const tempFile = downloadServiceBundleFromRemote(serviceInfo);
-        extractServiceBundle(tempFile, destPath, true);
+        extractServiceBundle(tempFile, tempServicePath);
+        fs.move(tempFile, tempBundlePath);
       } else if (utils.pathRegex.test(serviceInfo)) {
         if (fs.isDirectory(serviceInfo)) {
-          const tempFile = utils.zipDirectory(serviceInfo);
-          extractServiceBundle(tempFile, destPath, true);
+          utils.zipDirectory(serviceInfo, tempBundlePath);
+          extractServiceBundle(tempBundlePath, tempServicePath);
         } else if (!fs.exists(serviceInfo)) {
           throw new ArangoError({
             errorNum: errors.ERROR_SERVICE_SOURCE_NOT_FOUND.code,
@@ -617,7 +622,8 @@ function _buildServiceInPath (serviceInfo, options = {}) { // okay-ish
             `
           });
         } else {
-          extractServiceBundle(serviceInfo, destPath, false);
+          extractServiceBundle(serviceInfo, tempServicePath);
+          fs.copyFile(serviceInfo, tempBundlePath);
         }
       } else {
         if (options.refresh) {
@@ -629,54 +635,64 @@ function _buildServiceInPath (serviceInfo, options = {}) { // okay-ish
         }
         const info = store.installationInfo(serviceInfo);
         const tempFile = downloadServiceBundleFromRemote(info.url);
-        extractServiceBundle(tempFile, destPath, true);
-        patchManifestFile(destPath, info.manifest);
+        extractServiceBundle(tempFile, tempServicePath, true);
+        patchManifestFile(tempServicePath, info.manifest);
+        utils.zipDirectory(tempServicePath, tempBundlePath);
       }
     }
     if (options.legacy) {
-      patchManifestFile(destPath, {engines: {arangodb: '^2.8.0'}});
+      patchManifestFile(tempServicePath, {engines: {arangodb: '^2.8.0'}});
+      if (fs.exists(tempBundlePath)) {
+        fs.remove(tempBundlePath);
+      }
+      utils.zipDirectory(tempServicePath, tempBundlePath);
     }
-    return destPath;
+    return {
+      tempServicePath,
+      tempBundlePath
+    };
   } catch (e) {
-    fs.removeDirectoryRecursive(destPath, true);
+    fs.removeDirectoryRecursive(tempServicePath, true);
     throw e;
   }
 }
 
-function _install (tempServicePath, mount, options = {}) {
+function _buildServiceInPath (mount, tempServicePath, tempBundlePath) {
   const servicePath = FoxxService.basePath(mount);
-  fs.move(tempServicePath, servicePath);
-  const collection = utils.getStorage();
-  try {
-    const service = FoxxService.create({
-      mount,
-      options,
-      noisy: true
-    });
-    GLOBAL_SERVICE_MAP.get(db._name()).set(mount, service);
-    if (options.setup !== false) {
-      service.executeScript('setup');
-    }
-    createServiceBundle(mount);
-    service.updateChecksum();
-    const serviceDefinition = service.toJSON();
-    db._query(aql`
-      UPSERT {mount: ${mount}}
-      INSERT ${serviceDefinition}
-      REPLACE ${serviceDefinition}
-      IN ${collection}
-    `);
-    ensureServiceExecuted(service, true);
-    return service;
-  } catch (e) {
+  if (fs.exists(servicePath)) {
     fs.removeDirectoryRecursive(servicePath, true);
-    db._query(aql`
-      FOR service IN ${collection}
-      FILTER service.mount == ${mount}
-      REMOVE service IN ${collection}
-    `);
-    throw e;
   }
+  fs.makeDirectoryRecursive(path.dirname(servicePath));
+  fs.move(tempServicePath, servicePath);
+  const bundlePath = FoxxService.bundlePath(mount);
+  if (fs.exists(bundlePath)) {
+    fs.removeDirectoryRecursive(bundlePath, true);
+  }
+  fs.makeDirectoryRecursive(path.dirname(bundlePath));
+  fs.move(tempBundlePath, bundlePath);
+}
+
+function _install (mount, options = {}) {
+  const collection = utils.getStorage();
+  const service = FoxxService.create({
+    mount,
+    options,
+    noisy: true
+  });
+  GLOBAL_SERVICE_MAP.get(db._name()).set(mount, service);
+  if (options.setup !== false) {
+    service.executeScript('setup');
+  }
+  service.updateChecksum();
+  const serviceDefinition = service.toJSON();
+  db._query(aql`
+    UPSERT {mount: ${mount}}
+    INSERT ${serviceDefinition}
+    REPLACE ${serviceDefinition}
+    IN ${collection}
+  `);
+  ensureServiceExecuted(service, true);
+  return service;
 }
 
 function _uninstall (mount, options = {}) {
@@ -849,13 +865,9 @@ function install (serviceInfo, mount, options = {}) {
       `
     });
   }
-  const servicePath = FoxxService.basePath(mount);
-  if (fs.exists(servicePath)) {
-    fs.removeDirectoryRecursive(servicePath, true);
-  }
-  fs.makeDirectoryRecursive(path.dirname(servicePath));
-  const tempServicePath = _buildServiceInPath(serviceInfo, options);
-  const service = _install(tempServicePath, mount, options);
+  const tempPaths = _prepareService(serviceInfo, options);
+  _buildServiceInPath(mount, tempPaths.tempServicePath, tempPaths.tempBundlePath);
+  const service = _install(mount, options);
   propagateServiceReplaced(service);
   return service;
 }
@@ -882,14 +894,15 @@ function uninstall (mount, options = {}) {
 function replace (serviceInfo, mount, options = {}) {
   utils.validateMount(mount);
   ensureFoxxInitialized();
-  const tempServicePath = _buildServiceInPath(serviceInfo, options);
+  const tempPaths = _prepareService(serviceInfo, options);
   FoxxService.validatedManifest({
     mount,
-    basePath: tempServicePath,
+    basePath: tempPaths.tempServicePath,
     noisy: true
   });
   _uninstall(mount, Object.assign({teardown: true}, options, {force: true}));
-  const service = _install(tempServicePath, mount, Object.assign({}, options, {force: true}));
+  _buildServiceInPath(mount, tempPaths.tempServicePath, tempPaths.tempBundlePath);
+  const service = _install(mount, Object.assign({}, options, {force: true}));
   propagateServiceReplaced(service);
   return service;
 }
@@ -901,14 +914,15 @@ function upgrade (serviceInfo, mount, options = {}) {
   Object.assign(serviceOptions.configuration, options.configuration);
   Object.assign(serviceOptions.dependencies, options.dependencies);
   serviceOptions.development = options.development;
-  const tempServicePath = _buildServiceInPath(serviceInfo, options);
+  const tempPaths = _prepareService(serviceInfo, options);
   FoxxService.validatedManifest({
     mount,
-    basePath: tempServicePath,
+    basePath: tempPaths.tempServicePath,
     noisy: true
   });
   _uninstall(mount, Object.assign({teardown: false}, options, {force: true}));
-  const service = _install(tempServicePath, mount, Object.assign({}, options, serviceOptions, {force: true}));
+  _buildServiceInPath(mount, tempPaths.tempServicePath, tempPaths.tempBundlePath);
+  const service = _install(mount, Object.assign({}, options, serviceOptions, {force: true}));
   propagateServiceReplaced(service);
   return service;
 }
