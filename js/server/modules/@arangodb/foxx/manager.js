@@ -634,8 +634,19 @@ function _prepareService (serviceInfo, options = {}) { // okay-ish
           }
         }
         const info = store.installationInfo(serviceInfo);
-        const tempFile = downloadServiceBundleFromRemote(info.url);
-        extractServiceBundle(tempFile, tempServicePath, true);
+        const storeBundle = downloadServiceBundleFromRemote(info.url);
+        try {
+          extractServiceBundle(storeBundle, tempServicePath, true);
+        } finally {
+          try {
+            fs.remove(storeBundle);
+          } catch (e) {
+            warn(Object.assign(
+              new Error(`Cannot remove temporary file "${storeBundle}"`),
+              {cause: e}
+            ));
+          }
+        }
         patchManifestFile(tempServicePath, info.manifest);
         utils.zipDirectory(tempServicePath, tempBundlePath);
       }
@@ -666,7 +677,7 @@ function _buildServiceInPath (mount, tempServicePath, tempBundlePath) {
   fs.move(tempServicePath, servicePath);
   const bundlePath = FoxxService.bundlePath(mount);
   if (fs.exists(bundlePath)) {
-    fs.removeDirectoryRecursive(bundlePath, true);
+    fs.remove(bundlePath);
   }
   fs.makeDirectoryRecursive(path.dirname(bundlePath));
   fs.move(tempBundlePath, bundlePath);
@@ -788,68 +799,50 @@ function downloadServiceBundleFromCoordinator (coordId, mount, checksum) {
   return filename;
 }
 
-function extractServiceBundle (archive, targetPath, deleteArchive) {
-  try {
-    const tempFolder = fs.getTempFile('zip', false);
-    fs.makeDirectory(tempFolder);
-    fs.unzipFile(archive, tempFolder, false, true);
+function extractServiceBundle (archive, targetPath) {
+  const tempFolder = fs.getTempFile('zip', false);
+  fs.makeDirectory(tempFolder);
+  fs.unzipFile(archive, tempFolder, false, true);
 
-    let manifestPath;
-    // find the manifest with the shortest path
-    const filenames = fs.listTree(tempFolder).sort((a, b) => a.length - b.length);
-    for (const filename of filenames) {
-      if (filename === 'manifest.json' || filename.endsWith('/manifest.json')) {
-        manifestPath = filename;
-        break;
-      }
+  let manifestPath;
+  // find the manifest with the shortest path
+  const filenames = fs.listTree(tempFolder).sort((a, b) => a.length - b.length);
+  for (const filename of filenames) {
+    if (filename === 'manifest.json' || filename.endsWith('/manifest.json')) {
+      manifestPath = filename;
+      break;
     }
+  }
 
-    if (!manifestPath) {
-      throw new ArangoError({
-        errorNum: errors.ERROR_SERVICE_MANIFEST_NOT_FOUND.code,
-        errorMessage: dd`
-          ${errors.ERROR_SERVICE_MANIFEST_NOT_FOUND.message}
-          Source: ${tempFolder}
-        `
-      });
-    }
+  if (!manifestPath) {
+    throw new ArangoError({
+      errorNum: errors.ERROR_SERVICE_MANIFEST_NOT_FOUND.code,
+      errorMessage: dd`
+        ${errors.ERROR_SERVICE_MANIFEST_NOT_FOUND.message}
+        Source: ${tempFolder}
+      `
+    });
+  }
 
-    let basePath = path.dirname(path.resolve(tempFolder, manifestPath));
-    if (fs.exists(targetPath)) {
-      fs.removeDirectory(targetPath);
-    }
-    fs.move(basePath, targetPath);
+  let basePath = path.dirname(path.resolve(tempFolder, manifestPath));
+  if (fs.exists(targetPath)) {
+    fs.removeDirectoryRecursive(targetPath, true);
+  }
+  fs.move(basePath, targetPath);
 
-    if (manifestPath.endsWith('/manifest.json')) {
-      // service basePath is a subfolder of tempFolder
-      // so tempFolder still exists and needs to be removed
-      fs.removeDirectoryRecursive(tempFolder, true);
-    }
-  } finally {
-    if (deleteArchive) {
-      try {
-        fs.remove(archive);
-      } catch (e) {
-        warn(Object.assign(
-          new Error(`Cannot remove temporary file "${archive}"`),
-          {cause: e}
-        ));
-      }
-    }
+  if (manifestPath.endsWith('/manifest.json')) {
+    // service basePath is a subfolder of tempFolder
+    // so tempFolder still exists and needs to be removed
+    fs.removeDirectoryRecursive(tempFolder, true);
   }
 }
 
-function replaceLocalServiceFromTempBundle (mount, tempFile) {
-  const bundlePath = FoxxService.bundlePath(mount);
-  fs.makeDirectoryRecursive(path.dirname(bundlePath));
-  if (fs.exists(bundlePath)) {
-    fs.remove(bundlePath);
-  }
-  fs.move(tempFile, bundlePath);
-  const servicePath = FoxxService.basePath(mount);
-  fs.makeDirectoryRecursive(path.dirname(servicePath));
-  extractServiceBundle(bundlePath, servicePath);
+function replaceLocalServiceFromTempBundle (mount, tempBundlePath) {
+  const tempServicePath = fs.getTempFile('services', false);
+  extractServiceBundle(tempBundlePath, tempServicePath);
+  _buildServiceInPath(mount, tempServicePath, tempBundlePath);
 }
+
 
 // Exported functions for manipulating services
 
