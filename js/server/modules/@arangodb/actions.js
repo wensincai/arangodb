@@ -1079,16 +1079,6 @@ function buildRouting (dbname) {
     });
   }
 
-  routes.push({
-    name: 'blah',
-    url: {match: '/*'},
-    action: {callback: function (req, res, opts, next) {
-      console.trace();
-      console.infoLines(require('util').inspect(req));
-      next();
-    }}
-  });
-
   // build the routing tree
   RoutingTree[dbname] = buildRoutingTree(routes);
 
@@ -1542,7 +1532,7 @@ function resultOk (req, res, httpReturnCode, result, headers) {
     result = {};
   }
 
-  // check the type of the result. 
+  // check the type of the result.
   if (typeof result !== 'string' &&
     typeof result !== 'number' &&
     typeof result !== 'boolean') {
